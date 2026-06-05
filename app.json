@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "ReseApp",
+    "slug": "reseapp",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "reseapp",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "app.rese.private"
+    },
+    "android": {
+      "package": "app.rese.private",
+      "adaptiveIcon": {
+        "backgroundColor": "#000000"
+      }
+    },
+    "plugins": [
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsDownloadToken": ""
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow ReseApp to use location for navigation and trip alerts."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "local-reseapp"
+      }
+    }
+  }
+}
