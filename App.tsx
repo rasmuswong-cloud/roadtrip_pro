@@ -433,18 +433,14 @@ export default function App() {
     <SafeAreaProvider>
       <SafeAreaView style={[styles.screen, isDark && styles.screenDark]}>
         <StatusBar style={isDark ? 'light' : 'dark'} />
-        <View style={styles.header}>
+        <View style={[styles.header, isDark && styles.headerDark]}>
           <View>
             <Text style={[styles.kicker, isDark && styles.textMutedDark]}>ReseApp</Text>
             <Text style={[styles.title, isDark && styles.textDark]}>{demoTrip.name}</Text>
           </View>
-          <Pressable style={styles.syncButton} onPress={connectSupabaseTrip} disabled={isLoading}>
+          <Pressable style={[styles.syncButton, isLoading && styles.disabledButton]} onPress={connectSupabaseTrip} disabled={isLoading}>
             <Text style={styles.syncButtonText}>{isLoading ? 'Wait' : activeTripId ? 'Synced' : 'Connect'}</Text>
           </Pressable>
-        </View>
-
-        <View style={styles.mapShell}>
-          <NavigationMap nodes={displayedNodes} activeRoute={routeSummary.geometry ? routeSummary : demoRoute} followUser={false} />
         </View>
 
         <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
@@ -452,163 +448,141 @@ export default function App() {
             <Text style={[styles.statusText, isDark && styles.textMutedDark]}>{statusMessage}</Text>
           </View>
 
-          <SectionTitle title="Account" dark={isDark} />
-          <View style={[styles.commandPanel, isDark && styles.panelDark]}>
-            <TextInput
-              value={email}
-              onChangeText={setEmail}
-              placeholder="you@example.com"
-              placeholderTextColor={isDark ? '#737373' : '#78716c'}
-              style={[styles.singleLineInput, isDark && styles.textDark]}
-              autoCapitalize="none"
-              inputMode="email"
-            />
-            <View style={styles.actionRow}>
-              <Pressable style={styles.commandButton} onPress={sendLoginLink} disabled={isLoading}>
-                <Text style={styles.commandButtonText}>Send link</Text>
-              </Pressable>
-              <Pressable style={styles.secondaryButton} onPress={disconnect} disabled={isLoading}>
-                <Text style={styles.secondaryButtonText}>Sign out</Text>
-              </Pressable>
-            </View>
-          </View>
-
-          <SectionTitle title="Share" dark={isDark} />
-          <View style={[styles.commandPanel, isDark && styles.panelDark]}>
-            <View style={styles.actionRow}>
-              <Pressable style={styles.commandButton} onPress={createShareCode} disabled={isLoading}>
-                <Text style={styles.commandButtonText}>Create code</Text>
-              </Pressable>
-              <Text style={[styles.codeText, isDark && styles.textDark]}>{generatedShareCode || 'No code yet'}</Text>
-            </View>
-            <TextInput
-              value={shareCode}
-              onChangeText={setShareCode}
-              placeholder="Paste partner code"
-              placeholderTextColor={isDark ? '#737373' : '#78716c'}
-              style={[styles.singleLineInput, isDark && styles.textDark]}
-              autoCapitalize="characters"
-            />
-            <Pressable style={styles.commandButton} onPress={joinSharedTrip} disabled={isLoading}>
-              <Text style={styles.commandButtonText}>Join trip</Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.statsRow}>
-            <Metric label="Stops" value={`${displayedNodes.length}`} accent="#0f766e" dark={isDark} />
-            <Metric label="Route" value={formatDistance(routeSummary.distanceMeters)} accent="#2563eb" dark={isDark} />
-            <Metric label="Drive" value={formatDuration(routeSummary.durationSeconds)} accent="#d97706" dark={isDark} />
-          </View>
-          <View style={styles.statsRow}>
-            <Metric label="Spend" value={`${totalSpend} SEK`} accent="#d97706" dark={isDark} />
-          </View>
-
-          <SectionTitle title="Places" dark={isDark} />
-          <View style={[styles.commandPanel, isDark && styles.panelDark]}>
-            <TextInput
-              value={placeQuery}
-              onChangeText={setPlaceQuery}
-              placeholder="Search campsites, restaurants, activities..."
-              placeholderTextColor={isDark ? '#737373' : '#78716c'}
-              style={[styles.singleLineInput, isDark && styles.textDark]}
-            />
-            <Pressable style={styles.commandButton} onPress={searchPlaces} disabled={isLoading}>
-              <Text style={styles.commandButtonText}>Search places</Text>
-            </Pressable>
-          </View>
-
-          {placeResults.map((place) => (
-            <View key={place.id} style={[styles.placeItem, isDark && styles.panelDark]}>
-              <View style={styles.timelineCopy}>
-                <Text style={[styles.itemTitle, isDark && styles.textDark]}>{place.displayName?.text ?? 'Unnamed place'}</Text>
-                <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
-                  {place.formattedAddress ?? place.primaryType ?? 'Google Places'}
-                </Text>
+          <View style={styles.dashboardGrid}>
+            <View style={styles.sidebarColumn}>
+              <View style={[styles.panelSection, isDark && styles.panelDark]}>
+                <SectionTitle title="Account" dark={isDark} />
+                <TextInput
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="you@example.com"
+                  placeholderTextColor={isDark ? '#737373' : '#78716c'}
+                  style={[styles.singleLineInput, isDark && styles.inputDark]}
+                  autoCapitalize="none"
+                  inputMode="email"
+                />
+                <View style={styles.actionRow}>
+                  <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={sendLoginLink} disabled={isLoading}>
+                    <Text style={styles.commandButtonText}>Send link</Text>
+                  </Pressable>
+                  <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={disconnect} disabled={isLoading}>
+                    <Text style={styles.secondaryButtonText}>Sign out</Text>
+                  </Pressable>
+                </View>
               </View>
-              <Pressable style={styles.smallButton} onPress={() => void savePlace(place)} disabled={isLoading}>
-                <Text style={styles.smallButtonText}>Save</Text>
-              </Pressable>
-            </View>
-          ))}
 
-          <SectionTitle title="Manual Stop" dark={isDark} />
-          <View style={[styles.commandPanel, isDark && styles.panelDark]}>
-            <TextInput
-              value={stopName}
-              onChangeText={setStopName}
-              placeholder="Stop name"
-              placeholderTextColor={isDark ? '#737373' : '#78716c'}
-              style={[styles.singleLineInput, isDark && styles.textDark]}
-            />
-            <TextInput
-              value={stopAddress}
-              onChangeText={setStopAddress}
-              placeholder="Address or short description"
-              placeholderTextColor={isDark ? '#737373' : '#78716c'}
-              style={[styles.singleLineInput, isDark && styles.textDark]}
-            />
-            <View style={styles.actionRow}>
-              <TextInput
-                value={stopLatitude}
-                onChangeText={setStopLatitude}
-                placeholder="Latitude"
-                placeholderTextColor={isDark ? '#737373' : '#78716c'}
-                style={[styles.coordinateInput, isDark && styles.textDark]}
-                inputMode="decimal"
-              />
-              <TextInput
-                value={stopLongitude}
-                onChangeText={setStopLongitude}
-                placeholder="Longitude"
-                placeholderTextColor={isDark ? '#737373' : '#78716c'}
-                style={[styles.coordinateInput, isDark && styles.textDark]}
-                inputMode="decimal"
-              />
-            </View>
-            <TextInput
-              value={stopNotes}
-              onChangeText={setStopNotes}
-              placeholder="Notes"
-              placeholderTextColor={isDark ? '#737373' : '#78716c'}
-              style={[styles.commandInput, isDark && styles.textDark]}
-              multiline
-            />
-            <Pressable style={styles.commandButton} onPress={createManualStop} disabled={isLoading}>
-              <Text style={styles.commandButtonText}>Add stop</Text>
-            </Pressable>
-          </View>
-
-          <SectionTitle title="Timeline" dark={isDark} />
-          {displayedNodes.map((node, index) => (
-            <View key={node.id} style={[styles.timelineItem, isDark && styles.panelDark]}>
-              <View style={[styles.nodeDot, { backgroundColor: nodeColor(node.type) }]} />
-              <View style={styles.timelineCopy}>
-                <Text style={[styles.itemTitle, isDark && styles.textDark]}>{index + 1}. {node.title}</Text>
-                <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
-                  {node.type.toUpperCase()} / {node.notes ?? node.timezone ?? 'local time'}
-                </Text>
-              </View>
-              {itineraryNodes.length > 0 ? (
-                <Pressable style={styles.dangerButton} onPress={() => void removeStop(node.id)} disabled={isLoading}>
-                  <Text style={styles.smallButtonText}>Delete</Text>
+              <View style={[styles.panelSection, isDark && styles.panelDark]}>
+                <SectionTitle title="Share" dark={isDark} />
+                <View style={styles.actionRow}>
+                  <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={createShareCode} disabled={isLoading}>
+                    <Text style={styles.commandButtonText}>Create code</Text>
+                  </Pressable>
+                  <Text style={[styles.codeText, isDark && styles.textDark]}>{generatedShareCode || 'No code yet'}</Text>
+                </View>
+                <TextInput
+                  value={shareCode}
+                  onChangeText={setShareCode}
+                  placeholder="Paste partner code"
+                  placeholderTextColor={isDark ? '#737373' : '#78716c'}
+                  style={[styles.singleLineInput, isDark && styles.inputDark]}
+                  autoCapitalize="characters"
+                />
+                <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={joinSharedTrip} disabled={isLoading}>
+                  <Text style={styles.commandButtonText}>Join trip</Text>
                 </Pressable>
-              ) : null}
-            </View>
-          ))}
+              </View>
 
-          <SectionTitle title="AI Co-Pilot" dark={isDark} />
-          <View style={[styles.commandPanel, isDark && styles.panelDark]}>
-            <TextInput
-              value={command}
-              onChangeText={setCommand}
-              placeholder="Ask for a campsite, route change, budget warning..."
-              placeholderTextColor={isDark ? '#737373' : '#78716c'}
-              style={[styles.commandInput, isDark && styles.textDark]}
-              multiline
-            />
-            <Pressable style={styles.commandButton}>
-              <Text style={styles.commandButtonText}>Parse command</Text>
-            </Pressable>
+              <View style={[styles.panelSection, isDark && styles.panelDark]}>
+                <SectionTitle title="AI Co-Pilot" dark={isDark} />
+                <TextInput
+                  value={command}
+                  onChangeText={setCommand}
+                  placeholder="Ask for a campsite, route change, budget warning..."
+                  placeholderTextColor={isDark ? '#737373' : '#78716c'}
+                  style={[styles.commandInput, isDark && styles.inputDark]}
+                  multiline
+                />
+                <Pressable style={styles.commandButton}>
+                  <Text style={styles.commandButtonText}>Parse command</Text>
+                </Pressable>
+              </View>
+            </View>
+
+            <View style={styles.mainColumn}>
+              <View style={styles.mapShell}>
+                <NavigationMap nodes={displayedNodes} activeRoute={routeSummary.geometry ? routeSummary : demoRoute} followUser={false} />
+              </View>
+
+              <View style={styles.statsRow}>
+                <Metric label="Stops" value={`${displayedNodes.length}`} accent="#0f766e" dark={isDark} />
+                <Metric label="Route" value={formatDistance(routeSummary.distanceMeters)} accent="#2563eb" dark={isDark} />
+                <Metric label="Drive" value={formatDuration(routeSummary.durationSeconds)} accent="#d97706" dark={isDark} />
+                <Metric label="Spend" value={`${totalSpend} SEK`} accent="#7c3aed" dark={isDark} />
+              </View>
+
+              <View style={styles.twoColumnGrid}>
+                <View style={[styles.panelSection, isDark && styles.panelDark]}>
+                  <SectionTitle title="Places" dark={isDark} />
+                  <TextInput
+                    value={placeQuery}
+                    onChangeText={setPlaceQuery}
+                    placeholder="Search campsites, restaurants, activities..."
+                    placeholderTextColor={isDark ? '#737373' : '#78716c'}
+                    style={[styles.singleLineInput, isDark && styles.inputDark]}
+                  />
+                  <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={searchPlaces} disabled={isLoading}>
+                    <Text style={styles.commandButtonText}>Search places</Text>
+                  </Pressable>
+                  {placeResults.map((place) => (
+                    <View key={place.id} style={[styles.placeItem, isDark && styles.innerPanelDark]}>
+                      <View style={styles.timelineCopy}>
+                        <Text style={[styles.itemTitle, isDark && styles.textDark]}>{place.displayName?.text ?? 'Unnamed place'}</Text>
+                        <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
+                          {place.formattedAddress ?? place.primaryType ?? 'Google Places'}
+                        </Text>
+                      </View>
+                      <Pressable style={styles.smallButton} onPress={() => void savePlace(place)} disabled={isLoading}>
+                        <Text style={styles.smallButtonText}>Save</Text>
+                      </Pressable>
+                    </View>
+                  ))}
+                </View>
+
+                <View style={[styles.panelSection, isDark && styles.panelDark]}>
+                  <SectionTitle title="Manual Stop" dark={isDark} />
+                  <TextInput value={stopName} onChangeText={setStopName} placeholder="Stop name" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.singleLineInput, isDark && styles.inputDark]} />
+                  <TextInput value={stopAddress} onChangeText={setStopAddress} placeholder="Address or short description" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.singleLineInput, isDark && styles.inputDark]} />
+                  <View style={styles.actionRow}>
+                    <TextInput value={stopLatitude} onChangeText={setStopLatitude} placeholder="Latitude" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} inputMode="decimal" />
+                    <TextInput value={stopLongitude} onChangeText={setStopLongitude} placeholder="Longitude" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} inputMode="decimal" />
+                  </View>
+                  <TextInput value={stopNotes} onChangeText={setStopNotes} placeholder="Notes" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.commandInput, isDark && styles.inputDark]} multiline />
+                  <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={createManualStop} disabled={isLoading}>
+                    <Text style={styles.commandButtonText}>Add stop</Text>
+                  </Pressable>
+                </View>
+              </View>
+
+              <View style={[styles.panelSection, isDark && styles.panelDark]}>
+                <SectionTitle title="Timeline" dark={isDark} />
+                {displayedNodes.map((node, index) => (
+                  <View key={node.id} style={[styles.timelineItem, isDark && styles.innerPanelDark]}>
+                    <View style={[styles.nodeDot, { backgroundColor: nodeColor(node.type) }]} />
+                    <View style={styles.timelineCopy}>
+                      <Text style={[styles.itemTitle, isDark && styles.textDark]}>{index + 1}. {node.title}</Text>
+                      <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
+                        {node.type.toUpperCase()} / {node.notes ?? node.timezone ?? 'local time'}
+                      </Text>
+                    </View>
+                    {itineraryNodes.length > 0 ? (
+                      <Pressable style={styles.dangerButton} onPress={() => void removeStop(node.id)} disabled={isLoading}>
+                        <Text style={styles.smallButtonText}>Delete</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                ))}
+              </View>
+            </View>
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -661,33 +635,42 @@ function cryptoRandomId(): string {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#f7f7f4',
+    backgroundColor: '#eef2f3',
   },
   screenDark: {
-    backgroundColor: '#000000',
+    backgroundColor: '#050505',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 18,
-    paddingVertical: 12,
+    paddingHorizontal: 28,
+    paddingVertical: 18,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#d6d3d1',
+  },
+  headerDark: {
+    backgroundColor: '#0b0b0b',
+    borderBottomColor: '#242424',
   },
   kicker: {
-    color: '#57534e',
+    color: '#0f766e',
     fontSize: 12,
     fontWeight: '700',
     textTransform: 'uppercase',
   },
   title: {
     color: '#1c1917',
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: '800',
   },
   syncButton: {
     backgroundColor: '#0f766e',
     borderRadius: 6,
-    paddingHorizontal: 14,
+    minHeight: 42,
+    justifyContent: 'center',
+    paddingHorizontal: 18,
     paddingVertical: 10,
   },
   syncButtonText: {
@@ -696,29 +679,69 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   mapShell: {
-    height: 300,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    height: 390,
+    overflow: 'hidden',
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#d6d3d1',
+    backgroundColor: '#101820',
   },
   content: {
     flex: 1,
   },
   contentInner: {
-    padding: 16,
+    width: '100%',
+    maxWidth: 1440,
+    alignSelf: 'center',
+    padding: 24,
+    gap: 18,
+  },
+  dashboardGrid: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 18,
+    flexWrap: 'wrap',
+  },
+  sidebarColumn: {
+    width: 330,
     gap: 14,
+  },
+  mainColumn: {
+    flex: 1,
+    minWidth: 620,
+    gap: 16,
+  },
+  twoColumnGrid: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 16,
+    flexWrap: 'wrap',
+  },
+  panelSection: {
+    flex: 1,
+    minWidth: 300,
+    gap: 12,
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#dedbd6',
+    padding: 16,
   },
   statsRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
+    flexWrap: 'wrap',
   },
   metric: {
     flex: 1,
-    minHeight: 82,
+    minWidth: 150,
+    minHeight: 88,
     backgroundColor: '#ffffff',
     borderRadius: 8,
     borderTopWidth: 4,
-    padding: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#dedbd6',
+    padding: 14,
     justifyContent: 'space-between',
   },
   metricLabel: {
@@ -734,17 +757,18 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: '#1c1917',
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
-    marginTop: 4,
   },
   timelineItem: {
-    minHeight: 72,
+    minHeight: 74,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#f8faf9',
     borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e7e5e4',
     padding: 14,
   },
   nodeDot: {
@@ -766,42 +790,56 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 4,
   },
-  commandPanel: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    padding: 12,
-    gap: 10,
-  },
   commandInput: {
-    minHeight: 78,
+    minHeight: 94,
     color: '#1c1917',
     fontSize: 15,
     lineHeight: 21,
     textAlignVertical: 'top',
+    backgroundColor: '#f8faf9',
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d6d3d1',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   singleLineInput: {
-    minHeight: 42,
+    minHeight: 44,
     color: '#1c1917',
     fontSize: 15,
+    backgroundColor: '#f8faf9',
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d6d3d1',
+    paddingHorizontal: 12,
   },
   coordinateInput: {
-    minHeight: 42,
+    minHeight: 44,
     minWidth: 140,
     flex: 1,
     color: '#1c1917',
     fontSize: 15,
+    backgroundColor: '#f8faf9',
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d6d3d1',
+    paddingHorizontal: 12,
   },
   commandButton: {
     alignSelf: 'flex-end',
     backgroundColor: '#2563eb',
     borderRadius: 6,
-    paddingHorizontal: 14,
+    minHeight: 42,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
     paddingVertical: 10,
   },
   secondaryButton: {
     backgroundColor: '#44403c',
     borderRadius: 6,
-    paddingHorizontal: 14,
+    minHeight: 42,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
     paddingVertical: 10,
   },
   secondaryButtonText: {
@@ -827,11 +865,13 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   statusPanel: {
-    minHeight: 42,
+    minHeight: 46,
     justifyContent: 'center',
     backgroundColor: '#ffffff',
     borderRadius: 8,
-    paddingHorizontal: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#dedbd6',
+    paddingHorizontal: 16,
   },
   statusText: {
     color: '#57534e',
@@ -839,12 +879,14 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   placeItem: {
-    minHeight: 74,
+    minHeight: 76,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#f8faf9',
     borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e7e5e4',
     padding: 14,
   },
   smallButton: {
@@ -866,11 +908,24 @@ const styles = StyleSheet.create({
   },
   panelDark: {
     backgroundColor: '#111111',
+    borderColor: '#2a2a2a',
+  },
+  innerPanelDark: {
+    backgroundColor: '#171717',
+    borderColor: '#2f2f2f',
+  },
+  inputDark: {
+    backgroundColor: '#171717',
+    borderColor: '#333333',
+    color: '#f5f5f4',
   },
   textDark: {
     color: '#f5f5f4',
   },
   textMutedDark: {
     color: '#a8a29e',
+  },
+  disabledButton: {
+    opacity: 0.62,
   },
 });
