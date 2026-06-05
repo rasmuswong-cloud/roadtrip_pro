@@ -146,6 +146,17 @@ export async function upsertItineraryNode(node: ItineraryNode): Promise<Itinerar
   return itineraryNodeFromRow(data as ItineraryNodeRow);
 }
 
+export async function deleteItineraryNode(nodeId: string): Promise<void> {
+  const { error } = await supabase
+    .from('itinerary_nodes')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', nodeId);
+
+  if (error) {
+    throw error;
+  }
+}
+
 export async function listExpenses(tripId: string): Promise<Expense[]> {
   const { data, error } = await supabase
     .from('expenses')

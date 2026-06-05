@@ -15,9 +15,18 @@ import type { Expense, ItineraryNode, Poi, RouteSummary, Trip } from '@/models';
 import { getCurrentUser, sendMagicLink, signOut } from '@/services/auth/authService';
 import { upsertPoi } from '@/services/database/poiRepository';
 import { ensureUserProfile } from '@/services/database/profileRepository';
-import { createTripShareCode, ensureFirstTrip, joinTripByShareCode } from '@/services/database/tripRepository';
+import {
+  createTripShareCode,
+  deleteItineraryNode,
+  ensureFirstTrip,
+  joinTripByShareCode,
+  listItineraryNodes,
+  upsertItineraryNode,
+} from '@/services/database/tripRepository';
 import { googlePlaceToPoi, searchGooglePlaces, type GooglePlace } from '@/services/google/googlePlaces';
+import { estimateRouteSummary } from '@/services/routing/routeEstimate';
 import { useTripStore } from '@/store/tripStore';
+import { formatDistance, formatDuration } from '@/utils/formatters';
 
 const demoTrip: Trip = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -134,7 +143,16 @@ export default function App() {
   const [placeQuery, setPlaceQuery] = useState('campsite near Cortina');
   const [placeResults, setPlaceResults] = useState<GooglePlace[]>([]);
   const [savedPois, setSavedPois] = useState<Poi[]>([]);
+  const [itineraryNodes, setItineraryNodes] = useState<ItineraryNode[]>([]);
+  const [stopName, setStopName] = useState('');
+  const [stopAddress, setStopAddress] = useState('');
+  const [stopLatitude, setStopLatitude] = useState('');
+  const [stopLongitude, setStopLongitude] = useState('');
+  const [stopNotes, setStopNotes] = useState('');
   const { activeTripId, setActiveTrip, upsertTrip, upsertPoi: upsertPoiInStore } = useTripStore();
+
+  const displayedNodes = itineraryNodes.length > 0 ? itineraryNodes : demoNodes;
+  const routeSummary = useMemo(() => estimateRouteSummary(displayedNodes), [displayedNodes]);
 
   const totalSpend = useMemo(
     () => demoExpenses.reduce((sum, expense) => sum + (expense.baseAmount ?? expense.amount), 0),
@@ -155,9 +173,11 @@ export default function App() {
       setUserId(user.id);
       await ensureUserProfile(user.id, user.email ?? 'Roadtrip Planner');
       const trip = await ensureFirstTrip(user.id);
+      const nodes = await listItineraryNodes(trip.id);
 
       upsertTrip(trip);
       setActiveTrip(trip.id);
+      setItineraryNodes(nodes);
       setStatusMessage(`Connected: ${trip.name}`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
@@ -239,9 +259,11 @@ export default function App() {
 
       await ensureUserProfile(user.id, user.email ?? 'Roadtrip Planner');
       const trip = await joinTripByShareCode(shareCode);
+      const nodes = await listItineraryNodes(trip.id);
       setUserId(user.id);
       upsertTrip(trip);
       setActiveTrip(trip.id);
+      setItineraryNodes(nodes);
       setStatusMessage(`Joined: ${trip.name}`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
@@ -292,14 +314,119 @@ export default function App() {
 
     try {
       const savedPoi = await upsertPoi(poi);
+      const node = await createNodeFromPoi(savedPoi);
       upsertPoiInStore(savedPoi);
+      setItineraryNodes((current) => sortNodes([...current.filter((candidate) => candidate.id !== node.id), node]));
       setSavedPois((current) => [savedPoi, ...current.filter((candidate) => candidate.id !== savedPoi.id)]);
-      setStatusMessage(`Saved POI: ${savedPoi.name}`);
+      setStatusMessage(`Saved stop: ${savedPoi.name}`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
     } finally {
       setIsLoading(false);
     }
+  }
+
+  async function createManualStop() {
+    if (!activeTripId || !userId) {
+      setStatusMessage('Connect before adding a stop.');
+      return;
+    }
+
+    const latitude = Number(stopLatitude.replace(',', '.'));
+    const longitude = Number(stopLongitude.replace(',', '.'));
+
+    if (!stopName.trim() || Number.isNaN(latitude) || Number.isNaN(longitude)) {
+      setStatusMessage('Stop needs a name plus valid latitude and longitude.');
+      return;
+    }
+
+    setIsLoading(true);
+    setStatusMessage('Saving stop...');
+
+    try {
+      const now = new Date().toISOString();
+      const node = await upsertItineraryNode({
+        id: cryptoRandomId(),
+        tripId: activeTripId,
+        createdBy: userId,
+        type: 'custom',
+        title: stopName.trim(),
+        notes: [stopAddress.trim(), stopNotes.trim()].filter(Boolean).join('\n') || null,
+        startsAt: null,
+        endsAt: null,
+        timezone: null,
+        location: { latitude, longitude },
+        sortOrder: Date.now(),
+        transportMode: 'driving',
+        reservation: {},
+        equipment: [],
+        facilities: {},
+        metadata: { source: 'manual' },
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+        version: 1,
+      });
+
+      setItineraryNodes((current) => sortNodes([...current, node]));
+      setStopName('');
+      setStopAddress('');
+      setStopLatitude('');
+      setStopLongitude('');
+      setStopNotes('');
+      setStatusMessage(`Added stop: ${node.title}`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function removeStop(nodeId: string) {
+    setIsLoading(true);
+    setStatusMessage('Removing stop...');
+
+    try {
+      await deleteItineraryNode(nodeId);
+      setItineraryNodes((current) => current.filter((node) => node.id !== nodeId));
+      setStatusMessage('Stop removed.');
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function createNodeFromPoi(poi: Poi): Promise<ItineraryNode> {
+    if (!activeTripId || !userId) {
+      throw new Error('Connect before saving a stop.');
+    }
+
+    const now = new Date().toISOString();
+
+    return upsertItineraryNode({
+      id: cryptoRandomId(),
+      tripId: activeTripId,
+      poiId: poi.id,
+      createdBy: userId,
+      type: poi.category.includes('camp') ? 'camping' : 'custom',
+      title: poi.name,
+      notes: poi.address ?? null,
+      startsAt: null,
+      endsAt: null,
+      timezone: null,
+      location: poi.location,
+      sortOrder: Date.now(),
+      transportMode: 'driving',
+      reservation: {},
+      equipment: [],
+      facilities: {},
+      metadata: { source: 'google_places', externalRef: poi.externalRef },
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+      version: 1,
+    });
   }
 
   return (
@@ -317,7 +444,7 @@ export default function App() {
         </View>
 
         <View style={styles.mapShell}>
-          <NavigationMap nodes={[...demoNodes, ...poisToNodes(savedPois)]} activeRoute={demoRoute} followUser={false} />
+          <NavigationMap nodes={displayedNodes} activeRoute={routeSummary.geometry ? routeSummary : demoRoute} followUser={false} />
         </View>
 
         <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
@@ -368,8 +495,11 @@ export default function App() {
           </View>
 
           <View style={styles.statsRow}>
-            <Metric label="Route" value="304 km" accent="#0f766e" dark={isDark} />
-            <Metric label="Drive" value="3h 30m" accent="#2563eb" dark={isDark} />
+            <Metric label="Stops" value={`${displayedNodes.length}`} accent="#0f766e" dark={isDark} />
+            <Metric label="Route" value={formatDistance(routeSummary.distanceMeters)} accent="#2563eb" dark={isDark} />
+            <Metric label="Drive" value={formatDuration(routeSummary.durationSeconds)} accent="#d97706" dark={isDark} />
+          </View>
+          <View style={styles.statsRow}>
             <Metric label="Spend" value={`${totalSpend} SEK`} accent="#d97706" dark={isDark} />
           </View>
 
@@ -401,16 +531,68 @@ export default function App() {
             </View>
           ))}
 
+          <SectionTitle title="Manual Stop" dark={isDark} />
+          <View style={[styles.commandPanel, isDark && styles.panelDark]}>
+            <TextInput
+              value={stopName}
+              onChangeText={setStopName}
+              placeholder="Stop name"
+              placeholderTextColor={isDark ? '#737373' : '#78716c'}
+              style={[styles.singleLineInput, isDark && styles.textDark]}
+            />
+            <TextInput
+              value={stopAddress}
+              onChangeText={setStopAddress}
+              placeholder="Address or short description"
+              placeholderTextColor={isDark ? '#737373' : '#78716c'}
+              style={[styles.singleLineInput, isDark && styles.textDark]}
+            />
+            <View style={styles.actionRow}>
+              <TextInput
+                value={stopLatitude}
+                onChangeText={setStopLatitude}
+                placeholder="Latitude"
+                placeholderTextColor={isDark ? '#737373' : '#78716c'}
+                style={[styles.coordinateInput, isDark && styles.textDark]}
+                inputMode="decimal"
+              />
+              <TextInput
+                value={stopLongitude}
+                onChangeText={setStopLongitude}
+                placeholder="Longitude"
+                placeholderTextColor={isDark ? '#737373' : '#78716c'}
+                style={[styles.coordinateInput, isDark && styles.textDark]}
+                inputMode="decimal"
+              />
+            </View>
+            <TextInput
+              value={stopNotes}
+              onChangeText={setStopNotes}
+              placeholder="Notes"
+              placeholderTextColor={isDark ? '#737373' : '#78716c'}
+              style={[styles.commandInput, isDark && styles.textDark]}
+              multiline
+            />
+            <Pressable style={styles.commandButton} onPress={createManualStop} disabled={isLoading}>
+              <Text style={styles.commandButtonText}>Add stop</Text>
+            </Pressable>
+          </View>
+
           <SectionTitle title="Timeline" dark={isDark} />
-          {demoNodes.map((node) => (
+          {displayedNodes.map((node, index) => (
             <View key={node.id} style={[styles.timelineItem, isDark && styles.panelDark]}>
               <View style={[styles.nodeDot, { backgroundColor: nodeColor(node.type) }]} />
               <View style={styles.timelineCopy}>
-                <Text style={[styles.itemTitle, isDark && styles.textDark]}>{node.title}</Text>
+                <Text style={[styles.itemTitle, isDark && styles.textDark]}>{index + 1}. {node.title}</Text>
                 <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
-                  {node.type.toUpperCase()} / {node.timezone ?? 'local time'}
+                  {node.type.toUpperCase()} / {node.notes ?? node.timezone ?? 'local time'}
                 </Text>
               </View>
+              {itineraryNodes.length > 0 ? (
+                <Pressable style={styles.dangerButton} onPress={() => void removeStop(node.id)} disabled={isLoading}>
+                  <Text style={styles.smallButtonText}>Delete</Text>
+                </Pressable>
+              ) : null}
             </View>
           ))}
 
@@ -460,33 +642,19 @@ function nodeColor(type: ItineraryNode['type']) {
   }
 }
 
-function poisToNodes(pois: Poi[]): ItineraryNode[] {
-  return pois.map((poi, index) => {
-    const now = new Date().toISOString();
+function sortNodes(nodes: ItineraryNode[]): ItineraryNode[] {
+  return [...nodes].sort((a, b) => a.sortOrder - b.sortOrder);
+}
 
-    return {
-      id: `poi-node-${poi.id}`,
-      tripId: poi.tripId ?? 'poi',
-      poiId: poi.id,
-      createdBy: poi.createdBy,
-      type: 'custom',
-      title: poi.name,
-      notes: poi.address ?? null,
-      startsAt: null,
-      endsAt: null,
-      timezone: null,
-      location: poi.location,
-      sortOrder: 1000 + index,
-      transportMode: null,
-      reservation: {},
-      equipment: [],
-      facilities: {},
-      metadata: poi.metadata,
-      createdAt: now,
-      updatedAt: now,
-      deletedAt: null,
-      version: poi.version,
-    };
+function cryptoRandomId(): string {
+  if ('crypto' in globalThis && 'randomUUID' in globalThis.crypto) {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+    const random = Math.floor(Math.random() * 16);
+    const value = char === 'x' ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
   });
 }
 
@@ -616,6 +784,13 @@ const styles = StyleSheet.create({
     color: '#1c1917',
     fontSize: 15,
   },
+  coordinateInput: {
+    minHeight: 42,
+    minWidth: 140,
+    flex: 1,
+    color: '#1c1917',
+    fontSize: 15,
+  },
   commandButton: {
     alignSelf: 'flex-end',
     backgroundColor: '#2563eb',
@@ -674,6 +849,12 @@ const styles = StyleSheet.create({
   },
   smallButton: {
     backgroundColor: '#0f766e',
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  dangerButton: {
+    backgroundColor: '#b91c1c',
     borderRadius: 6,
     paddingHorizontal: 12,
     paddingVertical: 9,
