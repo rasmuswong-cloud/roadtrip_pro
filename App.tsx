@@ -34,8 +34,8 @@ import { formatDistance, formatDuration } from '@/utils/formatters';
 const demoTrip: Trip = {
   id: '11111111-1111-4111-8111-111111111111',
   ownerId: '22222222-2222-4222-8222-222222222222',
-  name: 'Alpine Roadtrip',
-  description: 'Munich to Dolomites with hiking, camping, and MTB stops.',
+  name: 'Alp-roadtrip',
+  description: 'München till Dolomiterna med vandring, camping och MTB-stopp.',
   baseCurrency: 'SEK',
   startsAt: new Date().toISOString(),
   endsAt: null,
@@ -57,7 +57,7 @@ const demoNodes: ItineraryNode[] = [
     tripId: demoTrip.id,
     createdBy: demoTrip.ownerId,
     type: 'lodging',
-    title: 'Munich overnight',
+    title: 'Natt i München',
     startsAt: new Date().toISOString(),
     endsAt: null,
     timezone: 'Europe/Berlin',
@@ -78,15 +78,15 @@ const demoNodes: ItineraryNode[] = [
     tripId: demoTrip.id,
     createdBy: demoTrip.ownerId,
     type: 'camping',
-    title: 'Cortina campsite',
+    title: 'Camping i Cortina',
     startsAt: new Date(Date.now() + 86_400_000).toISOString(),
     endsAt: null,
     timezone: 'Europe/Rome',
     location: { latitude: 46.5405, longitude: 12.1357 },
     sortOrder: 20,
     transportMode: 'driving',
-    reservation: { siteNumber: 'TBD', accessDetails: 'Confirm arrival window before departure.' },
-    equipment: [{ name: 'E-MTB rental', quantity: 2 }],
+    reservation: { siteNumber: 'Ej klart', accessDetails: 'Bekräfta ankomsttid före avresa.' },
+    equipment: [{ name: 'E-MTB-hyra', quantity: 2 }],
     facilities: { showers: true, electricity: true, water: true },
     metadata: {},
     createdAt: new Date().toISOString(),
@@ -117,8 +117,8 @@ const demoExpenses: Expense[] = [
     id: '55555555-5555-4555-8555-555555555555',
     tripId: demoTrip.id,
     paidBy: demoTrip.ownerId,
-    category: 'Lodging',
-    description: 'Munich hotel deposit',
+    category: 'Boende',
+    description: 'Hotellförskott München',
     amount: 1800,
     currency: 'SEK',
     baseAmount: 1800,
@@ -811,7 +811,7 @@ export default function App() {
 
   async function createNodeFromPoi(poi: Poi): Promise<ItineraryNode> {
     if (!activeTripId || !userId) {
-      throw new Error('Connect before saving a stop.');
+      throw new Error('Anslut innan du sparar ett stopp.');
     }
 
     const now = new Date().toISOString();
