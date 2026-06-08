@@ -9,36 +9,35 @@ export type AgentContext = {
 };
 
 export async function parseItineraryCommand(input: string, context: AgentContext): Promise<ItineraryMutationPlan> {
-  const { data, error } = await supabase.functions.invoke('parse-itinerary-command', {
-    body: { input, context },
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession();
+
+  if (sessionError) {
+    throw sessionError;
+  }
+
+  if (!session?.access_token) {
+    throw new Error('Connect before using the AI co-pilot.');
+  }
+
+  const response = await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/parse-itinerary-command`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+      apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ input, context }),
   });
 
-  if (error) {
-    throw new Error(await getFunctionErrorMessage(error));
+  const responseText = await response.text();
+  const data = responseText ? JSON.parse(responseText) : null;
+
+  if (!response.ok) {
+    throw new Error(typeof data?.error === 'string' ? data.error : responseText || `AI function failed with ${response.status}.`);
   }
 
   return itineraryMutationSchema.parse(data);
-}
-
-async function getFunctionErrorMessage(error: unknown): Promise<string> {
-  const fallbackMessage = error instanceof Error ? error.message : String(error);
-  const context = (error as { context?: unknown }).context;
-
-  if (context instanceof Response) {
-    try {
-      const payload = await context.clone().json();
-      if (typeof payload?.error === 'string') {
-        return payload.error;
-      }
-
-      return JSON.stringify(payload);
-    } catch {
-      const text = await context.clone().text();
-      if (text) {
-        return text;
-      }
-    }
-  }
-
-  return fallbackMessage;
 }
