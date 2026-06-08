@@ -158,6 +158,7 @@ export default function App() {
   const displayedNodes = itineraryNodes.length > 0 ? itineraryNodes : demoNodes;
   const routeSummary = useMemo(() => estimateRouteSummary(displayedNodes), [displayedNodes]);
   const dayPlans = useMemo(() => buildDayPlans(displayedNodes), [displayedNodes]);
+  const plannerRows = useMemo(() => buildPlannerRows(displayedNodes), [displayedNodes]);
 
   const totalSpend = useMemo(
     () => demoExpenses.reduce((sum, expense) => sum + (expense.baseAmount ?? expense.amount), 0),
@@ -659,6 +660,29 @@ export default function App() {
                 <Metric label="Spend" value={`${totalSpend} SEK`} accent="#7c3aed" dark={isDark} />
               </View>
 
+              <View style={[styles.panelSection, isDark && styles.panelDark]}>
+                <SectionTitle title="Planner Sheet" dark={isDark} />
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={styles.sheetTable}>
+                    <View style={[styles.sheetRow, styles.sheetHeaderRow]}>
+                      {['Date', 'Place', 'Lodging', 'Activity', 'Cost', 'Hotel / note'].map((header) => (
+                        <Text key={header} style={[styles.sheetHeaderCell, isDark && styles.textDark]}>{header}</Text>
+                      ))}
+                    </View>
+                    {plannerRows.map((row) => (
+                      <View key={row.id} style={[styles.sheetRow, isDark && styles.innerPanelDark]}>
+                        <Text style={[styles.sheetCell, isDark && styles.textDark]}>{row.date}</Text>
+                        <Text style={[styles.sheetCell, isDark && styles.textDark]}>{row.place}</Text>
+                        <Text style={[styles.sheetCell, isDark && styles.textDark]}>{row.lodging}</Text>
+                        <Text style={[styles.sheetCell, isDark && styles.textDark]}>{row.activity}</Text>
+                        <Text style={[styles.sheetCell, isDark && styles.textDark]}>{row.cost}</Text>
+                        <Text style={[styles.sheetWideCell, isDark && styles.textDark]}>{row.hotel}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </ScrollView>
+              </View>
+
               <View style={styles.twoColumnGrid}>
                 <View style={[styles.panelSection, isDark && styles.panelDark]}>
                   <SectionTitle title="Places" dark={isDark} />
@@ -798,6 +822,16 @@ type DayPlan = {
   route: RouteSummary;
 };
 
+type PlannerRow = {
+  id: string;
+  date: string;
+  place: string;
+  lodging: string;
+  activity: string;
+  cost: string;
+  hotel: string;
+};
+
 function buildDayPlans(nodes: ItineraryNode[]): DayPlan[] {
   const sortedNodes = sortNodes(nodes);
   const groups = new Map<string, ItineraryNode[]>();
@@ -813,6 +847,46 @@ function buildDayPlans(nodes: ItineraryNode[]): DayPlan[] {
     nodes: groupNodes,
     route: estimateRouteSummary(groupNodes),
   }));
+}
+
+function buildPlannerRows(nodes: ItineraryNode[]): PlannerRow[] {
+  return sortNodes(nodes).map((node) => {
+    const isStay = node.type === 'lodging' || node.type === 'camping';
+    return {
+      id: node.id,
+      date: node.startsAt ? formatDateLabel(node.startsAt.slice(0, 10)) : '',
+      place: node.location ? `${node.location.latitude.toFixed(2)}, ${node.location.longitude.toFixed(2)}` : node.timezone ?? '',
+      lodging: isStay ? node.title : '',
+      activity: isStay ? '' : node.title,
+      cost: formatNodeCost(node),
+      hotel: formatReservation(node),
+    };
+  });
+}
+
+function formatNodeCost(node: ItineraryNode): string {
+  const cost = node.metadata.costSek ?? node.metadata.cost ?? node.metadata.price;
+  if (typeof cost === 'number') {
+    return `${cost} SEK`;
+  }
+
+  if (typeof cost === 'string') {
+    return cost;
+  }
+
+  return '';
+}
+
+function formatReservation(node: ItineraryNode): string {
+  const details = [
+    node.reservation.provider,
+    node.reservation.reference,
+    node.reservation.siteNumber ? `Site ${node.reservation.siteNumber}` : null,
+    node.reservation.accessDetails,
+    node.notes,
+  ].filter(Boolean);
+
+  return details.join(' / ');
 }
 
 function formatDateLabel(dateKey: string): string {
@@ -968,6 +1042,45 @@ const styles = StyleSheet.create({
     color: '#1c1917',
     fontSize: 18,
     fontWeight: '800',
+  },
+  sheetTable: {
+    minWidth: 860,
+    gap: 6,
+  },
+  sheetRow: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#f8faf9',
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e7e5e4',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  sheetHeaderRow: {
+    minHeight: 38,
+    backgroundColor: '#e7f0ed',
+  },
+  sheetHeaderCell: {
+    width: 120,
+    color: '#1c1917',
+    fontSize: 12,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  sheetCell: {
+    width: 120,
+    color: '#1c1917',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  sheetWideCell: {
+    width: 220,
+    color: '#1c1917',
+    fontSize: 13,
+    fontWeight: '700',
   },
   sectionTitle: {
     color: '#1c1917',
