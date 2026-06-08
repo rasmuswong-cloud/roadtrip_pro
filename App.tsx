@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { NavigationMap } from '@/components/map/NavigationMap';
+import { reseplanrareIdeaPlaces, reseplanrareSeedRows, type ReseplanrareSeedRow } from '@/data/reseplanrareSeed';
 import type { Expense, ItineraryNode, Poi, RouteSummary, Trip } from '@/models';
 import { getCurrentUser, getOrCreateAnonymousUser, sendMagicLink, signOut } from '@/services/auth/authService';
 import { applyConfirmedMutationPlan } from '@/services/ai/applyMutationPlan';
@@ -615,6 +616,42 @@ export default function App() {
     }
   }
 
+  async function importReseplanrarePlan() {
+    if (!activeTripId || !userId) {
+      setStatusMessage('Connect before importing the Excel plan.');
+      return;
+    }
+
+    setIsLoading(true);
+    setStatusMessage('Importing Excel plan...');
+
+    try {
+      const existingRows = new Set(
+        itineraryNodes
+          .map((node) => (typeof node.metadata.sourceRow === 'number' ? node.metadata.sourceRow : null))
+          .filter((sourceRow): sourceRow is number => sourceRow !== null),
+      );
+      const rowsToImport = reseplanrareSeedRows.filter((row) => !existingRows.has(row.sourceRow));
+
+      if (rowsToImport.length === 0) {
+        setStatusMessage('Excel plan is already imported.');
+        return;
+      }
+
+      const importedNodes: ItineraryNode[] = [];
+      for (const row of rowsToImport) {
+        importedNodes.push(await upsertItineraryNode(buildNodeFromSeedRow(row, activeTripId, userId)));
+      }
+
+      setItineraryNodes((current) => sortNodes([...current, ...importedNodes]));
+      setStatusMessage(`Imported ${importedNodes.length} rows from Reseplanrare.xlsx. Ideas captured: ${reseplanrareIdeaPlaces.length}.`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   async function createNodeFromPoi(poi: Poi): Promise<ItineraryNode> {
     if (!activeTripId || !userId) {
       throw new Error('Connect before saving a stop.');
@@ -826,7 +863,12 @@ export default function App() {
               </View>
 
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
-                <SectionTitle title="Planner Sheet" dark={isDark} />
+                <View style={styles.sectionHeaderRow}>
+                  <SectionTitle title="Planner Sheet" dark={isDark} />
+                  <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={importReseplanrarePlan} disabled={isLoading || !activeTripId}>
+                    <Text style={styles.secondaryButtonText}>Import Excel plan</Text>
+                  </Pressable>
+                </View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   <View style={styles.sheetTable}>
                     <View style={[styles.sheetRow, styles.sheetHeaderRow]}>
@@ -1040,10 +1082,11 @@ function buildDayPlans(nodes: ItineraryNode[]): DayPlan[] {
 function buildPlannerRows(nodes: ItineraryNode[]): PlannerRow[] {
   return sortNodes(nodes).map((node) => {
     const isStay = node.type === 'lodging' || node.type === 'camping';
+    const placeName = typeof node.metadata.place === 'string' ? node.metadata.place : null;
     return {
       id: node.id,
       date: node.startsAt ? formatDateLabel(node.startsAt.slice(0, 10)) : '',
-      place: node.location ? `${node.location.latitude.toFixed(2)}, ${node.location.longitude.toFixed(2)}` : node.timezone ?? '',
+      place: placeName ?? (node.location ? `${node.location.latitude.toFixed(2)}, ${node.location.longitude.toFixed(2)}` : node.timezone ?? ''),
       lodging: isStay ? node.title : '',
       activity: isStay ? '' : node.title,
       cost: formatNodeCost(node),
@@ -1084,6 +1127,49 @@ function formatReservation(node: ItineraryNode): string {
 function formatDateLabel(dateKey: string): string {
   const date = new Date(`${dateKey}T12:00:00`);
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date);
+}
+
+function buildNodeFromSeedRow(row: ReseplanrareSeedRow, tripId: string, userId: string): ItineraryNode {
+  const now = new Date().toISOString();
+  const title = row.activity ? row.activity : row.hotel ? row.hotel : row.place;
+  const startsAt = row.date ? new Date(`${row.date}T09:00:00`).toISOString() : null;
+  const costParts = [row.lodgingCost, row.activityCost].filter(Boolean);
+  const notes = [
+    row.activity && row.place !== row.activity ? `Place: ${row.place}` : null,
+    row.hotel ? `Hotel/note: ${row.hotel}` : null,
+    costParts.length ? `Cost from Excel: ${costParts.join(' + ')} SEK` : null,
+    `Imported from Reseplanrare.xlsx row ${row.sourceRow}`,
+  ].filter(Boolean).join('\n');
+
+  return {
+    id: cryptoRandomId(),
+    tripId,
+    createdBy: userId,
+    type: row.type,
+    title,
+    notes,
+    startsAt,
+    endsAt: null,
+    timezone: row.date ? 'Europe/Rome' : null,
+    location: row.location ?? null,
+    sortOrder: row.sourceRow * 100,
+    transportMode: 'driving',
+    reservation: row.hotel ? { provider: row.hotel } : {},
+    equipment: [],
+    facilities: {},
+    metadata: {
+      source: 'reseplanrare.xlsx',
+      sourceRow: row.sourceRow,
+      place: row.place,
+      lodgingCostSek: row.lodgingCost ?? null,
+      activityCostSek: row.activityCost ?? null,
+      cost: costParts.join(' + '),
+    },
+    createdAt: now,
+    updatedAt: now,
+    deletedAt: null,
+    version: 1,
+  };
 }
 
 function formatTime(value?: string | null): string {
@@ -1609,6 +1695,14 @@ const styles = StyleSheet.create({
     color: '#0a2540',
     fontSize: 18,
     fontWeight: '900',
+  },
+  sectionHeaderRow: {
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    flexWrap: 'wrap',
   },
   dayGroup: {
     gap: 10,
