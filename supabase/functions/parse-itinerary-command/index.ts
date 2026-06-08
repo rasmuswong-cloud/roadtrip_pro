@@ -21,9 +21,9 @@ Deno.serve(async (request) => {
   }
 
   try {
-    const apiKey = Deno.env.get('OPENAI_API_KEY');
+    const apiKey = Deno.env.get('GEMINI_API_KEY');
     if (!apiKey) {
-      return jsonResponse({ error: 'Missing OPENAI_API_KEY secret.' }, 500);
+      return jsonResponse({ error: 'Missing GEMINI_API_KEY secret.' }, 500);
     }
 
     const authorization = request.headers.get('Authorization');
@@ -53,42 +53,49 @@ Deno.serve(async (request) => {
       return jsonResponse({ error: 'Command text is required.' }, 400);
     }
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: systemPrompt },
+        systemInstruction: {
+          parts: [{ text: systemPrompt }],
+        },
+        contents: [
           {
             role: 'user',
-            content: JSON.stringify({
-              command: input.trim(),
-              context,
-              outputSchemaHint: {
-                reasoningSummary: 'short explanation',
-                confidence: '0..1',
-                mutations: 'array of typed app mutations',
-                warnings: 'array of proactive warnings',
-                requiresConfirmation: 'boolean',
+            parts: [
+              {
+                text: JSON.stringify({
+                  command: input.trim(),
+                  context,
+                  outputSchemaHint: {
+                    reasoningSummary: 'short explanation',
+                    confidence: '0..1',
+                    mutations: 'array of typed app mutations',
+                    warnings: 'array of proactive warnings',
+                    requiresConfirmation: 'boolean',
+                  },
+                }),
               },
-            }),
+            ],
           },
         ],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 0.2,
+        },
       }),
     });
 
     if (!response.ok) {
       const detail = await response.text();
-      return jsonResponse({ error: `OpenAI request failed: ${detail}` }, response.status);
+      return jsonResponse({ error: `Gemini request failed: ${detail}` }, response.status);
     }
 
     const payload = await response.json();
-    const content = payload.choices?.[0]?.message?.content;
+    const content = payload.candidates?.[0]?.content?.parts?.[0]?.text;
     if (typeof content !== 'string' || content.length === 0) {
       return jsonResponse({ error: 'AI agent returned an empty response.' }, 502);
     }

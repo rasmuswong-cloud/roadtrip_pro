@@ -71,4 +71,4 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=
 EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN=
 ```
 
-Set `OPENAI_API_KEY` as a Supabase Edge Function secret for `supabase/functions/parse-itinerary-command`; do not expose it through Expo or Vercel client environment variables.
+Set `GEMINI_API_KEY` as a Supabase Edge Function secret for `supabase/functions/parse-itinerary-command`; do not expose AI provider keys through Expo or Vercel client environment variables.
