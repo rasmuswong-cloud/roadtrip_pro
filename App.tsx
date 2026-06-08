@@ -652,9 +652,14 @@ export default function App() {
       <SafeAreaView style={[styles.screen, isDark && styles.screenDark]}>
         <StatusBar style={isDark ? 'light' : 'dark'} />
         <View style={[styles.header, isDark && styles.headerDark]}>
-          <View>
+          <View style={styles.brandLockup}>
             <Text style={[styles.kicker, isDark && styles.textMutedDark]}>ReseApp</Text>
             <Text style={[styles.title, isDark && styles.textDark]}>{demoTrip.name}</Text>
+          </View>
+          <View style={styles.navLinks}>
+            {['Plan', 'Route', 'Budget', 'Share'].map((item) => (
+              <Text key={item} style={styles.navLink}>{item}</Text>
+            ))}
           </View>
           <View style={styles.headerActions}>
             <View style={[styles.tripStatePill, activeTripId ? styles.tripStatePillActive : null]}>
@@ -668,12 +673,23 @@ export default function App() {
 
         <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
           <View style={styles.tripHero}>
+            <View style={styles.heroPlaneOne} />
+            <View style={styles.heroPlaneTwo} />
+            <View style={styles.heroPlaneThree} />
             <View style={styles.tripHeroCopy}>
-              <Text style={styles.heroEyebrow}>Shared roadtrip planner</Text>
-              <Text style={styles.heroTitle}>Munich to Cortina, planned together.</Text>
+              <Text style={styles.heroEyebrow}>Route OS for roadtrips</Text>
+              <Text style={styles.heroTitle}>Plan the trip, route, budget, and campsite flow in one place.</Text>
               <Text style={styles.heroBody}>
-                Keep stops, campsites, budget, notes, and route changes in one clean travel board.
+                A collaborative workspace for stops, lodging, activities, AI changes, and spreadsheet-style planning.
               </Text>
+              <View style={styles.heroCtas}>
+                <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={connectSupabaseTrip} disabled={isLoading}>
+                  <Text style={styles.commandButtonText}>{activeTripId ? 'Sync trip' : 'Connect trip'}</Text>
+                </Pressable>
+                <Pressable style={styles.heroSecondaryButton} onPress={parseAiCommand} disabled={isLoading}>
+                  <Text style={styles.heroSecondaryText}>Ask AI</Text>
+                </Pressable>
+              </View>
             </View>
             <View style={styles.heroStats}>
               <View style={styles.heroStat}>
@@ -764,8 +780,24 @@ export default function App() {
             </View>
 
             <View style={styles.mainColumn}>
-              <View style={styles.mapShell}>
-                <NavigationMap nodes={displayedNodes} activeRoute={routeSummary.geometry ? routeSummary : demoRoute} followUser={false} />
+              <View style={styles.routeStage}>
+                <View style={styles.routeStageHeader}>
+                  <View>
+                    <Text style={styles.routeStageKicker}>Live route preview</Text>
+                    <Text style={styles.routeStageTitle}>Övnings Google Maps</Text>
+                  </View>
+                  <View style={styles.routeBadge}>
+                    <Text style={styles.routeBadgeText}>{displayedNodes.length} stops</Text>
+                  </View>
+                </View>
+                <View style={styles.mapShell}>
+                  <NavigationMap nodes={displayedNodes} activeRoute={routeSummary.geometry ? routeSummary : demoRoute} followUser={false} />
+                </View>
+                <View style={styles.routeStageFooter}>
+                  <Text style={styles.routeStageMeta}>{formatDistance(routeSummary.distanceMeters)} route</Text>
+                  <Text style={styles.routeStageMeta}>{formatDuration(routeSummary.durationSeconds)} drive</Text>
+                  <Text style={styles.routeStageMeta}>{totalSpend} SEK spend</Text>
+                </View>
               </View>
 
               <View style={styles.statsRow}>
@@ -1086,7 +1118,7 @@ function cryptoRandomId(): string {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#f4f1ec',
+    backgroundColor: '#f6f9fc',
   },
   screenDark: {
     backgroundColor: '#050505',
@@ -1095,26 +1127,43 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 34,
-    paddingVertical: 18,
-    backgroundColor: '#fffaf1',
+    gap: 24,
+    paddingHorizontal: 36,
+    paddingVertical: 16,
+    backgroundColor: '#ffffff',
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e8ddcc',
+    borderBottomColor: '#e6edf5',
   },
   headerDark: {
     backgroundColor: '#0b0b0b',
     borderBottomColor: '#242424',
   },
   kicker: {
-    color: '#3f7f72',
+    color: '#635bff',
     fontSize: 12,
     fontWeight: '900',
     textTransform: 'uppercase',
   },
   title: {
-    color: '#22201c',
-    fontSize: 28,
+    color: '#0a2540',
+    fontSize: 25,
     fontWeight: '900',
+  },
+  brandLockup: {
+    minWidth: 230,
+  },
+  navLinks: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 26,
+    flexWrap: 'wrap',
+  },
+  navLink: {
+    color: '#425466',
+    fontSize: 14,
+    fontWeight: '800',
   },
   headerActions: {
     flexDirection: 'row',
@@ -1126,28 +1175,28 @@ const styles = StyleSheet.create({
   tripStatePill: {
     minHeight: 34,
     justifyContent: 'center',
-    borderRadius: 6,
+    borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d8d0c4',
-    backgroundColor: '#f4f1ec',
-    paddingHorizontal: 12,
+    borderColor: '#d7e1ea',
+    backgroundColor: '#f6f9fc',
+    paddingHorizontal: 14,
   },
   tripStatePillActive: {
-    borderColor: '#8bbdb2',
-    backgroundColor: '#e3f1ec',
+    borderColor: '#00d4ff',
+    backgroundColor: '#e7f8ff',
   },
   tripStateText: {
-    color: '#5c554c',
+    color: '#425466',
     fontSize: 12,
     fontWeight: '900',
     textTransform: 'uppercase',
   },
   tripStateTextActive: {
-    color: '#0d6b5f',
+    color: '#0073e6',
   },
   syncButton: {
-    backgroundColor: '#0d6b5f',
-    borderRadius: 6,
+    backgroundColor: '#0a2540',
+    borderRadius: 999,
     minHeight: 40,
     justifyContent: 'center',
     paddingHorizontal: 20,
@@ -1159,11 +1208,11 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   mapShell: {
-    height: 430,
+    height: 390,
     overflow: 'hidden',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#b7d4cd',
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d7e1ea',
     backgroundColor: '#101820',
   },
   content: {
@@ -1173,69 +1222,119 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 1500,
     alignSelf: 'center',
-    padding: 24,
-    gap: 16,
+    padding: 28,
+    gap: 20,
   },
   tripHero: {
-    minHeight: 176,
+    minHeight: 280,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'stretch',
     justifyContent: 'space-between',
-    gap: 18,
-    borderRadius: 10,
-    backgroundColor: '#efe6d8',
+    gap: 24,
+    overflow: 'hidden',
+    borderRadius: 22,
+    backgroundColor: '#ffffff',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#dacbb7',
-    padding: 22,
+    borderColor: '#e6edf5',
+    padding: 30,
+  },
+  heroPlaneOne: {
+    position: 'absolute',
+    right: -160,
+    top: -94,
+    width: 560,
+    height: 190,
+    backgroundColor: '#7a73ff',
+    transform: [{ rotate: '-12deg' }],
+  },
+  heroPlaneTwo: {
+    position: 'absolute',
+    right: 10,
+    bottom: -86,
+    width: 520,
+    height: 180,
+    backgroundColor: '#00d4ff',
+    transform: [{ rotate: '-12deg' }],
+  },
+  heroPlaneThree: {
+    position: 'absolute',
+    right: 210,
+    bottom: -110,
+    width: 380,
+    height: 160,
+    backgroundColor: '#ffcf5c',
+    transform: [{ rotate: '-12deg' }],
   },
   tripHeroCopy: {
     flex: 1,
     minWidth: 320,
     justifyContent: 'center',
-    gap: 8,
+    gap: 12,
   },
   heroEyebrow: {
-    color: '#0d6b5f',
+    color: '#635bff',
     fontSize: 12,
     fontWeight: '900',
     textTransform: 'uppercase',
   },
   heroTitle: {
-    color: '#201b16',
-    fontSize: 34,
-    lineHeight: 40,
+    maxWidth: 760,
+    color: '#0a2540',
+    fontSize: 46,
+    lineHeight: 52,
     fontWeight: '900',
   },
   heroBody: {
-    maxWidth: 680,
-    color: '#5c554c',
-    fontSize: 15,
-    lineHeight: 22,
+    maxWidth: 660,
+    color: '#425466',
+    fontSize: 17,
+    lineHeight: 26,
     fontWeight: '700',
   },
-  heroStats: {
-    width: 360,
+  heroCtas: {
     flexDirection: 'row',
-    gap: 10,
+    alignItems: 'center',
+    gap: 12,
+    flexWrap: 'wrap',
+    marginTop: 6,
+  },
+  heroSecondaryButton: {
+    minHeight: 40,
+    justifyContent: 'center',
+    borderRadius: 999,
+    backgroundColor: '#e7ecff',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  heroSecondaryText: {
+    color: '#635bff',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  heroStats: {
+    width: 380,
+    maxWidth: '100%',
+    gap: 12,
     alignItems: 'stretch',
+    justifyContent: 'center',
   },
   heroStat: {
-    flex: 1,
     justifyContent: 'center',
     gap: 6,
-    borderRadius: 8,
-    backgroundColor: '#fffaf1',
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.92)',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#dfd3c1',
-    padding: 14,
+    borderColor: '#d7e1ea',
+    padding: 16,
   },
   heroStatValue: {
-    color: '#201b16',
+    color: '#0a2540',
     fontSize: 19,
     fontWeight: '900',
   },
   heroStatLabel: {
-    color: '#6b6258',
+    color: '#425466',
     fontSize: 11,
     fontWeight: '900',
     textTransform: 'uppercase',
@@ -1248,12 +1347,63 @@ const styles = StyleSheet.create({
   },
   sidebarColumn: {
     width: 300,
-    gap: 12,
+    gap: 14,
   },
   mainColumn: {
     flex: 1,
     minWidth: 620,
     gap: 16,
+  },
+  routeStage: {
+    gap: 14,
+    borderRadius: 22,
+    backgroundColor: '#ffffff',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e6edf5',
+    padding: 16,
+  },
+  routeStageHeader: {
+    minHeight: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  routeStageKicker: {
+    color: '#635bff',
+    fontSize: 12,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  routeStageTitle: {
+    color: '#0a2540',
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  routeBadge: {
+    minHeight: 34,
+    justifyContent: 'center',
+    borderRadius: 999,
+    backgroundColor: '#00d4ff',
+    paddingHorizontal: 14,
+  },
+  routeBadgeText: {
+    color: '#04243a',
+    fontSize: 12,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  routeStageFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  routeStageMeta: {
+    color: '#425466',
+    fontSize: 13,
+    fontWeight: '800',
   },
   twoColumnGrid: {
     flexDirection: 'row',
@@ -1265,11 +1415,11 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 300,
     gap: 10,
-    backgroundColor: '#fffaf1',
-    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#e0d4c1',
-    padding: 16,
+    borderColor: '#e6edf5',
+    padding: 18,
   },
   statsRow: {
     flexDirection: 'row',
@@ -1280,22 +1430,22 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 150,
     minHeight: 78,
-    backgroundColor: '#fbfaf7',
-    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
     borderTopWidth: 3,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#ddd5ca',
-    padding: 12,
+    borderColor: '#e6edf5',
+    padding: 14,
     justifyContent: 'space-between',
   },
   metricLabel: {
-    color: '#57534e',
+    color: '#425466',
     fontSize: 12,
     fontWeight: '700',
     textTransform: 'uppercase',
   },
   metricValue: {
-    color: '#1c1917',
+    color: '#0a2540',
     fontSize: 18,
     fontWeight: '800',
   },
@@ -1308,60 +1458,60 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#fffdf9',
-    borderRadius: 4,
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#e4ddd2',
+    borderColor: '#e6edf5',
     paddingHorizontal: 10,
     paddingVertical: 7,
   },
   sheetRowSelected: {
-    borderColor: '#2f6fed',
+    borderColor: '#635bff',
     borderWidth: 2,
-    backgroundColor: '#eef4ff',
+    backgroundColor: '#f2f4ff',
   },
   sheetHeaderRow: {
     minHeight: 36,
-    backgroundColor: '#e7eee9',
+    backgroundColor: '#f6f9fc',
   },
   sheetHeaderCell: {
     width: 120,
-    color: '#1c1917',
+    color: '#0a2540',
     fontSize: 12,
     fontWeight: '900',
     textTransform: 'uppercase',
   },
   sheetCell: {
     width: 120,
-    color: '#1c1917',
+    color: '#0a2540',
     fontSize: 13,
     fontWeight: '700',
   },
   sheetWideCell: {
     width: 220,
-    color: '#1c1917',
+    color: '#0a2540',
     fontSize: 13,
     fontWeight: '700',
   },
   plannerEditor: {
     gap: 10,
-    backgroundColor: '#f7f4ee',
-    borderRadius: 8,
+    backgroundColor: '#f6f9fc',
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#ded6ca',
+    borderColor: '#e6edf5',
     padding: 12,
   },
   sectionTitle: {
-    color: '#1c1917',
-    fontSize: 17,
-    fontWeight: '800',
+    color: '#0a2540',
+    fontSize: 18,
+    fontWeight: '900',
   },
   dayGroup: {
     gap: 10,
-    backgroundColor: '#f7f4ee',
-    borderRadius: 8,
+    backgroundColor: '#f6f9fc',
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#ded6ca',
+    borderColor: '#e6edf5',
     padding: 12,
   },
   dayHeader: {
@@ -1372,7 +1522,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   dayTitle: {
-    color: '#1c1917',
+    color: '#0a2540',
     fontSize: 15,
     fontWeight: '900',
   },
@@ -1381,10 +1531,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: '#fffdf9',
-    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#e4ddd2',
+    borderColor: '#e6edf5',
     padding: 12,
   },
   timeRail: {
@@ -1393,7 +1543,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   timeText: {
-    color: '#1c1917',
+    color: '#0a2540',
     fontSize: 12,
     fontWeight: '900',
   },
@@ -1413,63 +1563,63 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   itemTitle: {
-    color: '#1c1917',
+    color: '#0a2540',
     fontSize: 16,
     fontWeight: '800',
   },
   itemMeta: {
-    color: '#57534e',
+    color: '#425466',
     fontSize: 12,
     fontWeight: '700',
     marginTop: 4,
   },
   commandInput: {
     minHeight: 88,
-    color: '#22201c',
+    color: '#0a2540',
     fontSize: 14,
     lineHeight: 20,
     textAlignVertical: 'top',
-    backgroundColor: '#fffdf9',
-    borderRadius: 8,
+    backgroundColor: '#f6f9fc',
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d8d0c4',
+    borderColor: '#d7e1ea',
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
   singleLineInput: {
     minHeight: 42,
-    color: '#22201c',
+    color: '#0a2540',
     fontSize: 14,
-    backgroundColor: '#fffdf9',
-    borderRadius: 8,
+    backgroundColor: '#f6f9fc',
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d8d0c4',
+    borderColor: '#d7e1ea',
     paddingHorizontal: 12,
   },
   coordinateInput: {
     minHeight: 42,
     minWidth: 140,
     flex: 1,
-    color: '#22201c',
+    color: '#0a2540',
     fontSize: 14,
-    backgroundColor: '#fffdf9',
-    borderRadius: 8,
+    backgroundColor: '#f6f9fc',
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d8d0c4',
+    borderColor: '#d7e1ea',
     paddingHorizontal: 12,
   },
   commandButton: {
     alignSelf: 'flex-end',
-    backgroundColor: '#0d6b5f',
-    borderRadius: 6,
+    backgroundColor: '#635bff',
+    borderRadius: 999,
     minHeight: 40,
     justifyContent: 'center',
     paddingHorizontal: 15,
     paddingVertical: 10,
   },
   secondaryButton: {
-    backgroundColor: '#3d3831',
-    borderRadius: 6,
+    backgroundColor: '#0a2540',
+    borderRadius: 999,
     minHeight: 40,
     justifyContent: 'center',
     paddingHorizontal: 15,
@@ -1487,7 +1637,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   codeText: {
-    color: '#1c1917',
+    color: '#0a2540',
     fontSize: 18,
     fontWeight: '900',
     letterSpacing: 0,
@@ -1502,20 +1652,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: '#fffaf1',
-    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#e0d4c1',
+    borderColor: '#e6edf5',
     paddingHorizontal: 16,
   },
   statusDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#0d6b5f',
+    backgroundColor: '#00d4ff',
   },
   statusText: {
-    color: '#57534e',
+    color: '#425466',
     fontSize: 13,
     fontWeight: '700',
   },
@@ -1524,21 +1674,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: '#fffdf9',
-    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#e4ddd2',
+    borderColor: '#e6edf5',
     padding: 12,
   },
   smallButton: {
-    backgroundColor: '#0d6b5f',
-    borderRadius: 6,
+    backgroundColor: '#635bff',
+    borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
   dangerButton: {
-    backgroundColor: '#a63a2f',
-    borderRadius: 6,
+    backgroundColor: '#df1b41',
+    borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
