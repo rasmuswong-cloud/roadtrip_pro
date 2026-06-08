@@ -169,11 +169,8 @@ export default function App() {
   const routeSummary = useMemo(() => estimateRouteSummary(displayedNodes), [displayedNodes]);
   const dayPlans = useMemo(() => buildDayPlans(displayedNodes), [displayedNodes]);
   const plannerRows = useMemo(() => buildPlannerRows(displayedNodes), [displayedNodes]);
-
-  const totalSpend = useMemo(
-    () => demoExpenses.reduce((sum, expense) => sum + (expense.baseAmount ?? expense.amount), 0),
-    [],
-  );
+  const budgetSummary = useMemo(() => buildBudgetSummary(displayedNodes), [displayedNodes]);
+  const totalSpend = budgetSummary.total;
 
   async function connectSupabaseTrip() {
     setIsLoading(true);
@@ -1009,7 +1006,7 @@ export default function App() {
                 <View style={styles.routeStageFooter}>
                   <Text style={styles.routeStageMeta}>{formatDistance(routeSummary.distanceMeters)} route</Text>
                   <Text style={styles.routeStageMeta}>{formatDuration(routeSummary.durationSeconds)} drive</Text>
-                  <Text style={styles.routeStageMeta}>{totalSpend} SEK spend</Text>
+                  <Text style={styles.routeStageMeta}>{formatSek(totalSpend)} spend</Text>
                 </View>
               </View>
 
@@ -1017,7 +1014,25 @@ export default function App() {
                 <Metric label="Stops" value={`${displayedNodes.length}`} accent="#0f766e" dark={isDark} />
                 <Metric label="Route" value={formatDistance(routeSummary.distanceMeters)} accent="#2563eb" dark={isDark} />
                 <Metric label="Drive" value={formatDuration(routeSummary.durationSeconds)} accent="#d97706" dark={isDark} />
-                <Metric label="Spend" value={`${totalSpend} SEK`} accent="#7c3aed" dark={isDark} />
+                <Metric label="Spend" value={formatSek(totalSpend)} accent="#7c3aed" dark={isDark} />
+              </View>
+
+              <View style={[styles.panelSection, isDark && styles.panelDark]}>
+                <View style={styles.sectionHeaderRow}>
+                  <SectionTitle title="Budget" dark={isDark} />
+                  <Text style={styles.budgetTotal}>{formatSek(totalSpend)}</Text>
+                </View>
+                <View style={styles.budgetGrid}>
+                  <BudgetCard label="Lodging" value={budgetSummary.categories.lodging} accent="#2563eb" />
+                  <BudgetCard label="Activities" value={budgetSummary.categories.activity} accent="#d97706" />
+                  <BudgetCard label="Transport" value={budgetSummary.categories.transport} accent="#00d4ff" />
+                  <BudgetCard label="Food/Other" value={budgetSummary.categories.food + budgetSummary.categories.other} accent="#635bff" />
+                </View>
+                <View style={styles.warningList}>
+                  {budgetSummary.warnings.map((warning) => (
+                    <Text key={warning} style={styles.warningText}>{warning}</Text>
+                  ))}
+                </View>
               </View>
 
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
@@ -1152,7 +1167,7 @@ export default function App() {
                       <View>
                         <Text style={[styles.dayTitle, isDark && styles.textDark]}>{dayPlan.title}</Text>
                         <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
-                          {dayPlan.nodes.length} stops / {formatDistance(dayPlan.route.distanceMeters)} / {formatDuration(dayPlan.route.durationSeconds)}
+                          {dayPlan.nodes.length} stops / {formatDistance(dayPlan.route.distanceMeters)} / {formatDuration(dayPlan.route.durationSeconds)} / {formatSek(dayPlan.budget.total)}
                         </Text>
                       </View>
                     </View>
@@ -1212,6 +1227,15 @@ function Metric({ label, value, accent, dark }: { label: string; value: string; 
   );
 }
 
+function BudgetCard({ label, value, accent }: { label: string; value: number; accent: string }) {
+  return (
+    <View style={[styles.budgetCard, { borderTopColor: accent }]}>
+      <Text style={styles.budgetLabel}>{label}</Text>
+      <Text style={styles.budgetValue}>{formatSek(value)}</Text>
+    </View>
+  );
+}
+
 function SectionTitle({ title, dark }: { title: string; dark: boolean }) {
   return <Text style={[styles.sectionTitle, dark && styles.textDark]}>{title}</Text>;
 }
@@ -1252,6 +1276,22 @@ type DayPlan = {
   title: string;
   nodes: ItineraryNode[];
   route: RouteSummary;
+  budget: BudgetSummary;
+};
+
+type BudgetCategories = {
+  lodging: number;
+  activity: number;
+  transport: number;
+  food: number;
+  other: number;
+};
+
+type BudgetSummary = {
+  total: number;
+  categories: BudgetCategories;
+  missingCostCount: number;
+  warnings: string[];
 };
 
 type PlannerRow = {
@@ -1278,6 +1318,7 @@ function buildDayPlans(nodes: ItineraryNode[]): DayPlan[] {
     title: key === 'unscheduled' ? 'Unscheduled' : `Day ${index + 1} / ${formatDateLabel(key)}`,
     nodes: groupNodes,
     route: estimateRouteSummary(groupNodes),
+    budget: buildBudgetSummary(groupNodes),
   }));
 }
 
@@ -1299,6 +1340,157 @@ function buildPlannerRows(nodes: ItineraryNode[]): PlannerRow[] {
 
 function formatNodeCost(node: ItineraryNode): string {
   return formatRawNodeCost(node);
+}
+
+function buildBudgetSummary(nodes: ItineraryNode[]): BudgetSummary {
+  const categories: BudgetCategories = {
+    lodging: 0,
+    activity: 0,
+    transport: 0,
+    food: 0,
+    other: 0,
+  };
+  let missingCostCount = 0;
+
+  nodes.forEach((node) => {
+    const breakdown = nodeCostBreakdown(node);
+    const nodeTotal = Object.values(breakdown).reduce((sum, value) => sum + value, 0);
+
+    if (nodeTotal <= 0) {
+      missingCostCount += 1;
+    }
+
+    categories.lodging += breakdown.lodging;
+    categories.activity += breakdown.activity;
+    categories.transport += breakdown.transport;
+    categories.food += breakdown.food;
+    categories.other += breakdown.other;
+  });
+
+  const total = Object.values(categories).reduce((sum, value) => sum + value, 0);
+  const warnings = buildBudgetWarnings(nodes, total, missingCostCount);
+
+  return {
+    total,
+    categories,
+    missingCostCount,
+    warnings,
+  };
+}
+
+function buildBudgetWarnings(nodes: ItineraryNode[], total: number, missingCostCount: number): string[] {
+  const warnings: string[] = [];
+  const dayTotals = new Map<string, number>();
+
+  nodes.forEach((node) => {
+    const key = node.startsAt ? node.startsAt.slice(0, 10) : 'unscheduled';
+    const current = dayTotals.get(key) ?? 0;
+    dayTotals.set(key, current + nodeCostTotal(node));
+  });
+
+  const mostExpensiveEntry = Array.from(dayTotals.entries()).sort((a, b) => b[1] - a[1])[0];
+
+  if (mostExpensiveEntry && mostExpensiveEntry[1] > 0) {
+    const [mostExpensiveDay, mostExpensiveTotal] = mostExpensiveEntry;
+    warnings.push(`Highest day: ${mostExpensiveDay === 'unscheduled' ? 'Unscheduled' : formatDateLabel(mostExpensiveDay)} at ${formatSek(mostExpensiveTotal)}.`);
+  }
+
+  if (missingCostCount > 0) {
+    warnings.push(`${missingCostCount} steps have no cost yet.`);
+  }
+
+  if (total === 0) {
+    warnings.push('No budget entered yet. Add costs to planner rows to unlock totals.');
+  }
+
+  return warnings;
+}
+
+function nodeCostBreakdown(node: ItineraryNode): BudgetCategories {
+  const lodgingCost = parseCostValue(node.metadata.lodgingCostSek);
+  const activityCost = parseCostValue(node.metadata.activityCostSek);
+
+  if (lodgingCost > 0 || activityCost > 0) {
+    return {
+      lodging: lodgingCost,
+      activity: activityCost,
+      transport: 0,
+      food: 0,
+      other: 0,
+    };
+  }
+
+  const rawCost = parseCostValue(node.metadata.costSek ?? node.metadata.cost ?? node.metadata.price);
+  const empty: BudgetCategories = {
+    lodging: 0,
+    activity: 0,
+    transport: 0,
+    food: 0,
+    other: 0,
+  };
+
+  if (rawCost <= 0) {
+    return empty;
+  }
+
+  const category = budgetCategoryForNode(node);
+  return {
+    ...empty,
+    [category]: rawCost,
+  };
+}
+
+function nodeCostTotal(node: ItineraryNode): number {
+  return Object.values(nodeCostBreakdown(node)).reduce((sum, value) => sum + value, 0);
+}
+
+function budgetCategoryForNode(node: ItineraryNode): keyof BudgetCategories {
+  switch (node.type) {
+    case 'lodging':
+    case 'camping':
+      return 'lodging';
+    case 'activity':
+      return 'activity';
+    case 'gastronomy':
+      return 'food';
+    case 'transport':
+    case 'fuel':
+      return 'transport';
+    default:
+      return 'other';
+  }
+}
+
+function parseCostValue(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value !== 'string') {
+    return 0;
+  }
+
+  const parts = value.split('+');
+  return parts.reduce((sum, part) => sum + parseCostPart(part), 0);
+}
+
+function parseCostPart(value: string): number {
+  const matches = value.replace(',', '.').match(/\d+(?:\.\d+)?/g);
+  if (!matches?.length) {
+    return 0;
+  }
+
+  const numbers = matches.map(Number).filter(Number.isFinite);
+  if (value.includes('-') && numbers.length >= 2) {
+    const [low = 0, high = 0] = numbers;
+    return (low + high) / 2;
+  }
+
+  return numbers.reduce((sum, number) => sum + number, 0);
+}
+
+function formatSek(value: number): string {
+  return `${Math.round(value).toLocaleString('sv-SE')} SEK`;
 }
 
 function formatRawNodeCost(node: ItineraryNode): string {
@@ -1840,6 +2032,54 @@ const styles = StyleSheet.create({
     color: '#0a2540',
     fontSize: 18,
     fontWeight: '800',
+  },
+  budgetTotal: {
+    color: '#0a2540',
+    fontSize: 24,
+    fontWeight: '900',
+  },
+  budgetGrid: {
+    flexDirection: 'row',
+    gap: 12,
+    flexWrap: 'wrap',
+  },
+  budgetCard: {
+    flex: 1,
+    minWidth: 170,
+    minHeight: 78,
+    justifyContent: 'space-between',
+    borderRadius: 14,
+    borderTopWidth: 3,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e6edf5',
+    backgroundColor: '#f6f9fc',
+    padding: 14,
+  },
+  budgetLabel: {
+    color: '#425466',
+    fontSize: 12,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  budgetValue: {
+    color: '#0a2540',
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  warningList: {
+    gap: 8,
+  },
+  warningText: {
+    color: '#7a4b00',
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 18,
+    backgroundColor: '#fff7df',
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#ffe3a3',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   sheetTable: {
     minWidth: 860,
