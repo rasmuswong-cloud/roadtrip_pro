@@ -136,14 +136,14 @@ const demoExpenses: Expense[] = [
 export default function App() {
   const isDark = false;
   const [command, setCommand] = useState('');
-  const [statusMessage, setStatusMessage] = useState('Ready to connect Supabase.');
+  const [statusMessage, setStatusMessage] = useState('Redo att ansluta resan.');
   const [isLoading, setIsLoading] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [shareCode, setShareCode] = useState('');
   const [generatedShareCode, setGeneratedShareCode] = useState('');
-  const [placeQuery, setPlaceQuery] = useState('campsite near Cortina');
+  const [placeQuery, setPlaceQuery] = useState('camping nära Cortina');
   const [placeResults, setPlaceResults] = useState<GooglePlace[]>([]);
   const [savedPois, setSavedPois] = useState<Poi[]>([]);
   const [itineraryNodes, setItineraryNodes] = useState<ItineraryNode[]>([]);
@@ -176,21 +176,21 @@ export default function App() {
 
   async function connectSupabaseTrip() {
     setIsLoading(true);
-    setStatusMessage('Connecting to Supabase...');
+    setStatusMessage('Ansluter resan...');
 
     try {
       const existingUser = await getCurrentUser();
       const user = existingUser ?? (await getOrCreateAnonymousUser());
 
       setUserId(user.id);
-      await ensureUserProfile(user.id, user.email ?? 'Roadtrip Planner');
+      await ensureUserProfile(user.id, user.email ?? 'Reseplanerare');
       const trip = await ensureFirstTrip(user.id);
       const nodes = await listItineraryNodes(trip.id);
 
       upsertTrip(trip);
       setActiveTrip(trip.id);
       setItineraryNodes(nodes);
-      setStatusMessage(`Connected: ${trip.name}`);
+      setStatusMessage(`Ansluten: ${trip.name}`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -200,16 +200,16 @@ export default function App() {
 
   async function sendLoginLink() {
     if (!email.trim()) {
-      setStatusMessage('Type your email first.');
+      setStatusMessage('Skriv din e-post först.');
       return;
     }
 
     setIsLoading(true);
-    setStatusMessage('Sending magic link...');
+    setStatusMessage('Skickar inloggningslänk...');
 
     try {
       await sendMagicLink(email.trim());
-      setStatusMessage('Magic link sent. Open it in this browser, then press Connect.');
+      setStatusMessage('Inloggningslänk skickad. Öppna den i denna webbläsare och tryck Anslut.');
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -225,7 +225,7 @@ export default function App() {
       setUserId(null);
       setActiveTrip('');
       setGeneratedShareCode('');
-      setStatusMessage('Signed out.');
+      setStatusMessage('Utloggad.');
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -235,17 +235,17 @@ export default function App() {
 
   async function createShareCode() {
     if (!activeTripId) {
-      setStatusMessage('Connect to a trip first.');
+      setStatusMessage('Anslut en resa först.');
       return;
     }
 
     setIsLoading(true);
-    setStatusMessage('Creating share code...');
+    setStatusMessage('Skapar delningskod...');
 
     try {
       const code = await createTripShareCode(activeTripId);
       setGeneratedShareCode(code);
-      setStatusMessage(`Share code created: ${code}`);
+      setStatusMessage(`Delningskod skapad: ${code}`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -255,28 +255,28 @@ export default function App() {
 
   async function joinSharedTrip() {
     if (!shareCode.trim()) {
-      setStatusMessage('Paste a share code first.');
+      setStatusMessage('Klistra in en delningskod först.');
       return;
     }
 
     setIsLoading(true);
-    setStatusMessage('Joining shared trip...');
+    setStatusMessage('Går med i delad resa...');
 
     try {
       const user = await getCurrentUser();
       if (!user) {
-        setStatusMessage('Sign in with email before joining a trip.');
+        setStatusMessage('Logga in med e-post innan du går med i en resa.');
         return;
       }
 
-      await ensureUserProfile(user.id, user.email ?? 'Roadtrip Planner');
+      await ensureUserProfile(user.id, user.email ?? 'Reseplanerare');
       const trip = await joinTripByShareCode(shareCode);
       const nodes = await listItineraryNodes(trip.id);
       setUserId(user.id);
       upsertTrip(trip);
       setActiveTrip(trip.id);
       setItineraryNodes(nodes);
-      setStatusMessage(`Joined: ${trip.name}`);
+      setStatusMessage(`Gick med i: ${trip.name}`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -286,12 +286,12 @@ export default function App() {
 
   async function searchPlaces() {
     if (!placeQuery.trim()) {
-      setStatusMessage('Type a place search first.');
+      setStatusMessage('Skriv vad du vill söka efter först.');
       return;
     }
 
     setIsLoading(true);
-    setStatusMessage('Searching Google Places...');
+    setStatusMessage('Söker platser...');
 
     try {
       const results = await searchGooglePlaces({
@@ -301,7 +301,7 @@ export default function App() {
       });
 
       setPlaceResults(results);
-      setStatusMessage(`Found ${results.length} places.`);
+      setStatusMessage(`Hittade ${results.length} platser.`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -311,18 +311,18 @@ export default function App() {
 
   async function savePlace(place: GooglePlace) {
     if (!activeTripId || !userId) {
-      setStatusMessage('Press Connect before saving a place.');
+      setStatusMessage('Tryck Anslut innan du sparar en plats.');
       return;
     }
 
     const poi = googlePlaceToPoi(place, activeTripId, userId);
     if (!poi) {
-      setStatusMessage('This place has no coordinates.');
+      setStatusMessage('Den här platsen saknar koordinater.');
       return;
     }
 
     setIsLoading(true);
-    setStatusMessage(`Saving ${poi.name}...`);
+    setStatusMessage(`Sparar ${poi.name}...`);
 
     try {
       const savedPoi = await upsertPoi(poi);
@@ -330,7 +330,7 @@ export default function App() {
       upsertPoiInStore(savedPoi);
       setItineraryNodes((current) => sortNodes([...current.filter((candidate) => candidate.id !== node.id), node]));
       setSavedPois((current) => [savedPoi, ...current.filter((candidate) => candidate.id !== savedPoi.id)]);
-      setStatusMessage(`Saved stop: ${savedPoi.name}`);
+      setStatusMessage(`Sparade stopp: ${savedPoi.name}`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -340,7 +340,7 @@ export default function App() {
 
   async function createManualStop() {
     if (!activeTripId || !userId) {
-      setStatusMessage('Connect before adding a stop.');
+      setStatusMessage('Anslut innan du lägger till ett stopp.');
       return;
     }
 
@@ -348,12 +348,12 @@ export default function App() {
     const longitude = Number(stopLongitude.replace(',', '.'));
 
     if (!stopName.trim() || Number.isNaN(latitude) || Number.isNaN(longitude)) {
-      setStatusMessage('Stop needs a name plus valid latitude and longitude.');
+      setStatusMessage('Stoppet behöver namn samt giltig latitud och longitud.');
       return;
     }
 
     setIsLoading(true);
-    setStatusMessage('Saving stop...');
+    setStatusMessage('Sparar stopp...');
 
     try {
       const now = new Date().toISOString();
@@ -386,7 +386,7 @@ export default function App() {
       setStopLatitude('');
       setStopLongitude('');
       setStopNotes('');
-      setStatusMessage(`Added stop: ${node.title}`);
+      setStatusMessage(`Lade till stopp: ${node.title}`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -396,17 +396,17 @@ export default function App() {
 
   async function parseAiCommand() {
     if (!activeTripId) {
-      setStatusMessage('Connect to a trip before using AI.');
+      setStatusMessage('Anslut en resa innan du använder AI.');
       return;
     }
 
     if (!command.trim()) {
-      setStatusMessage('Type an AI command first.');
+      setStatusMessage('Skriv ett AI-kommando först.');
       return;
     }
 
     setIsLoading(true);
-    setStatusMessage('Parsing command with AI...');
+    setStatusMessage('Tolkar kommandot med AI...');
     setLatestAiPlan(null);
 
     try {
@@ -431,9 +431,9 @@ export default function App() {
       });
 
       setLatestAiPlan(plan);
-      const warningText = plan.warnings.length > 0 ? ` Warnings: ${plan.warnings.join(' ')}` : '';
+      const warningText = plan.warnings.length > 0 ? ` Varningar: ${plan.warnings.join(' ')}` : '';
       setStatusMessage(
-        `AI plan: ${plan.reasoningSummary} (${plan.mutations.length} mutations, ${Math.round(plan.confidence * 100)}% confidence).${warningText}`,
+        `AI-plan: ${plan.reasoningSummary} (${plan.mutations.length} ändringar, ${Math.round(plan.confidence * 100)}% säkerhet).${warningText}`,
       );
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
@@ -444,22 +444,22 @@ export default function App() {
 
   async function confirmAiPlan() {
     if (!latestAiPlan) {
-      setStatusMessage('Parse an AI command before confirming.');
+      setStatusMessage('Tolka ett AI-kommando innan du bekräftar.');
       return;
     }
 
     if (!userId) {
-      setStatusMessage('Connect before confirming an AI plan.');
+      setStatusMessage('Anslut innan du bekräftar en AI-plan.');
       return;
     }
 
     if (latestAiPlan.mutations.length === 0) {
-      setStatusMessage('AI plan has no changes to apply.');
+      setStatusMessage('AI-planen har inga ändringar att spara.');
       return;
     }
 
     setIsLoading(true);
-    setStatusMessage('Applying AI plan...');
+    setStatusMessage('Sparar AI-plan...');
 
     try {
       const result = await applyConfirmedMutationPlan(latestAiPlan, userId, {
@@ -488,8 +488,8 @@ export default function App() {
       }
 
       setLatestAiPlan(null);
-      const warningText = result.warnings.length > 0 ? ` Warnings: ${result.warnings.join(' ')}` : '';
-      setStatusMessage(`Applied AI plan: ${result.itineraryNodes.length} stops, ${result.expenses.length} expenses, ${result.pois.length} places.${warningText}`);
+      const warningText = result.warnings.length > 0 ? ` Varningar: ${result.warnings.join(' ')}` : '';
+      setStatusMessage(`AI-plan sparad: ${result.itineraryNodes.length} stopp, ${result.expenses.length} kostnader, ${result.pois.length} platser.${warningText}`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -499,7 +499,7 @@ export default function App() {
 
   async function removeStop(nodeId: string) {
     setIsLoading(true);
-    setStatusMessage('Removing stop...');
+    setStatusMessage('Tar bort stopp...');
 
     try {
       await deleteItineraryNode(nodeId);
@@ -507,7 +507,7 @@ export default function App() {
       if (selectedPlannerNodeId === nodeId) {
         clearPlannerEditor();
       }
-      setStatusMessage('Stop removed.');
+      setStatusMessage('Stopp borttaget.');
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -517,12 +517,12 @@ export default function App() {
 
   async function scheduleStop(node: ItineraryNode, hour: number) {
     if (itineraryNodes.length === 0) {
-      setStatusMessage('Connect before scheduling demo stops.');
+      setStatusMessage('Anslut innan du schemalägger demo-stopp.');
       return;
     }
 
     setIsLoading(true);
-    setStatusMessage(`Scheduling ${node.title}...`);
+    setStatusMessage(`Schemalägger ${node.title}...`);
 
     try {
       const scheduledAt = setNodeTime(node, hour);
@@ -537,7 +537,7 @@ export default function App() {
       if (selectedPlannerNodeId === savedNode.id) {
         populatePlannerEditor(savedNode);
       }
-      setStatusMessage(`${savedNode.title} scheduled for ${formatTime(savedNode.startsAt)}.`);
+      setStatusMessage(`${savedNode.title} schemalagt till ${formatTime(savedNode.startsAt)}.`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -547,7 +547,7 @@ export default function App() {
 
   async function moveStop(nodeId: string, direction: -1 | 1) {
     if (itineraryNodes.length === 0) {
-      setStatusMessage('Connect before reordering demo stops.');
+      setStatusMessage('Anslut innan du ändrar ordning på demo-stopp.');
       return;
     }
 
@@ -558,12 +558,12 @@ export default function App() {
     const targetNode = orderedNodes[targetIndex];
 
     if (!currentNode || !targetNode) {
-      setStatusMessage(direction < 0 ? 'Step is already first.' : 'Step is already last.');
+      setStatusMessage(direction < 0 ? 'Steget ligger redan först.' : 'Steget ligger redan sist.');
       return;
     }
 
     setIsLoading(true);
-    setStatusMessage(`Moving ${currentNode.title}...`);
+    setStatusMessage(`Flyttar ${currentNode.title}...`);
 
     try {
       const now = new Date().toISOString();
@@ -589,7 +589,7 @@ export default function App() {
         }
         return node;
       })));
-      setStatusMessage(`Moved step: ${updatedCurrent.title}`);
+      setStatusMessage(`Flyttade steg: ${updatedCurrent.title}`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -618,7 +618,7 @@ export default function App() {
     setPlannerCost(formatRawNodeCost(node));
     setPlannerHotelNote(formatReservation(node));
     setPlannerNotes(node.notes ?? '');
-    setStatusMessage(`Editing: ${node.title}`);
+    setStatusMessage(`Redigerar: ${node.title}`);
   }
 
   function clearPlannerEditor() {
@@ -637,35 +637,35 @@ export default function App() {
 
   async function savePlannerEdit() {
     if (!selectedPlannerNodeId) {
-      setStatusMessage('Select a planner row first.');
+      setStatusMessage('Välj en rad i planeringen först.');
       return;
     }
 
     if (itineraryNodes.length === 0) {
-      setStatusMessage('Connect before editing demo rows.');
+      setStatusMessage('Anslut innan du redigerar demo-rader.');
       return;
     }
 
     const node = itineraryNodes.find((candidate) => candidate.id === selectedPlannerNodeId);
     if (!node) {
-      setStatusMessage('Selected planner row is no longer available.');
+      setStatusMessage('Den valda raden finns inte längre.');
       return;
     }
 
     if (!plannerTitle.trim()) {
-      setStatusMessage('Planner row needs a title.');
+      setStatusMessage('Raden behöver en titel.');
       return;
     }
 
     setIsLoading(true);
-    setStatusMessage('Saving step...');
+    setStatusMessage('Sparar steg...');
 
     try {
       const latitude = plannerLatitude.trim() ? Number(plannerLatitude.replace(',', '.')) : null;
       const longitude = plannerLongitude.trim() ? Number(plannerLongitude.replace(',', '.')) : null;
 
       if ((latitude === null) !== (longitude === null) || (latitude !== null && (Number.isNaN(latitude) || Number.isNaN(longitude)))) {
-        setStatusMessage('Use both valid latitude and longitude, or leave both blank.');
+        setStatusMessage('Ange både giltig latitud och longitud, eller lämna båda tomma.');
         return;
       }
 
@@ -704,7 +704,7 @@ export default function App() {
 
       setItineraryNodes((current) => sortNodes(current.map((candidate) => (candidate.id === savedNode.id ? savedNode : candidate))));
       populatePlannerEditor(savedNode);
-      setStatusMessage(`Saved step: ${savedNode.title}`);
+      setStatusMessage(`Sparade steg: ${savedNode.title}`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -714,24 +714,24 @@ export default function App() {
 
   async function addPlannerStep() {
     if (!activeTripId || !userId) {
-      setStatusMessage('Connect before adding a step.');
+      setStatusMessage('Anslut innan du lägger till ett steg.');
       return;
     }
 
     if (!plannerTitle.trim()) {
-      setStatusMessage('New step needs a title.');
+      setStatusMessage('Nytt steg behöver en titel.');
       return;
     }
 
     setIsLoading(true);
-    setStatusMessage('Adding step...');
+    setStatusMessage('Lägger till steg...');
 
     try {
       const latitude = plannerLatitude.trim() ? Number(plannerLatitude.replace(',', '.')) : null;
       const longitude = plannerLongitude.trim() ? Number(plannerLongitude.replace(',', '.')) : null;
 
       if ((latitude === null) !== (longitude === null) || (latitude !== null && (Number.isNaN(latitude) || Number.isNaN(longitude)))) {
-        setStatusMessage('Use both valid latitude and longitude, or leave both blank.');
+        setStatusMessage('Ange både giltig latitud och longitud, eller lämna båda tomma.');
         return;
       }
 
@@ -765,7 +765,7 @@ export default function App() {
 
       setItineraryNodes((current) => sortNodes([...current, savedNode]));
       populatePlannerEditor(savedNode);
-      setStatusMessage(`Added step: ${savedNode.title}`);
+      setStatusMessage(`Lade till steg: ${savedNode.title}`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -775,12 +775,12 @@ export default function App() {
 
   async function importReseplanrarePlan() {
     if (!activeTripId || !userId) {
-      setStatusMessage('Connect before importing the Excel plan.');
+      setStatusMessage('Anslut innan du importerar Excel-planen.');
       return;
     }
 
     setIsLoading(true);
-    setStatusMessage('Importing Excel plan...');
+    setStatusMessage('Importerar Excel-plan...');
 
     try {
       const existingRows = new Set(
@@ -791,7 +791,7 @@ export default function App() {
       const rowsToImport = reseplanrareSeedRows.filter((row) => !existingRows.has(row.sourceRow));
 
       if (rowsToImport.length === 0) {
-        setStatusMessage('Excel plan is already imported.');
+        setStatusMessage('Excel-planen är redan importerad.');
         return;
       }
 
@@ -801,7 +801,7 @@ export default function App() {
       }
 
       setItineraryNodes((current) => sortNodes([...current, ...importedNodes]));
-      setStatusMessage(`Imported ${importedNodes.length} rows from Reseplanrare.xlsx. Ideas captured: ${reseplanrareIdeaPlaces.length}.`);
+      setStatusMessage(`Importerade ${importedNodes.length} rader från Reseplanrare.xlsx. Idéplatser sparade: ${reseplanrareIdeaPlaces.length}.`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -851,19 +851,19 @@ export default function App() {
             <Text style={[styles.title, isDark && styles.textDark]}>{demoTrip.name}</Text>
           </View>
           <View style={styles.navLinks}>
-            {['Route', 'Budget', 'Days'].map((item) => (
+            {['Rutt', 'Budget', 'Dagar'].map((item) => (
               <Text key={item} style={styles.navLink}>{item}</Text>
             ))}
           </View>
           <View style={styles.headerActions}>
             <View style={[styles.tripStatePill, activeTripId ? styles.tripStatePillActive : null]}>
-              <Text style={[styles.tripStateText, activeTripId ? styles.tripStateTextActive : null]}>{activeTripId ? 'Synced' : 'Local'}</Text>
+              <Text style={[styles.tripStateText, activeTripId ? styles.tripStateTextActive : null]}>{activeTripId ? 'Synkad' : 'Lokal'}</Text>
             </View>
             <Pressable style={styles.modeButton} onPress={() => setIsEditMode((current) => !current)}>
-              <Text style={styles.modeButtonText}>{isEditMode ? 'Demo view' : 'Edit mode'}</Text>
+              <Text style={styles.modeButtonText}>{isEditMode ? 'Demovy' : 'Redigera'}</Text>
             </Pressable>
             <Pressable style={[styles.syncButton, isLoading && styles.disabledButton]} onPress={connectSupabaseTrip} disabled={isLoading}>
-              <Text style={styles.syncButtonText}>{isLoading ? 'Wait' : activeTripId ? 'Refresh' : 'Connect'}</Text>
+              <Text style={styles.syncButtonText}>{isLoading ? 'Vänta' : activeTripId ? 'Uppdatera' : 'Anslut'}</Text>
             </Pressable>
           </View>
         </View>
@@ -881,25 +881,25 @@ export default function App() {
               </Text>
               <View style={styles.heroCtas}>
                 <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={connectSupabaseTrip} disabled={isLoading}>
-                  <Text style={styles.commandButtonText}>{activeTripId ? 'Sync trip' : 'Connect trip'}</Text>
+                  <Text style={styles.commandButtonText}>{activeTripId ? 'Synka resa' : 'Anslut resa'}</Text>
                 </Pressable>
                 <Pressable style={styles.heroSecondaryButton} onPress={parseAiCommand} disabled={isLoading}>
-                  <Text style={styles.heroSecondaryText}>Ask AI</Text>
+                  <Text style={styles.heroSecondaryText}>Fråga AI</Text>
                 </Pressable>
               </View>
             </View>
             <View style={styles.heroStats}>
               <View style={styles.heroStat}>
                 <Text style={styles.heroStatValue}>{displayedNodes.length}</Text>
-                <Text style={styles.heroStatLabel}>Stops</Text>
+                <Text style={styles.heroStatLabel}>Stopp</Text>
               </View>
               <View style={styles.heroStat}>
                 <Text style={styles.heroStatValue}>{formatDistance(routeSummary.distanceMeters)}</Text>
-                <Text style={styles.heroStatLabel}>Route</Text>
+                <Text style={styles.heroStatLabel}>Rutt</Text>
               </View>
               <View style={styles.heroStat}>
                 <Text style={styles.heroStatValue}>{formatDuration(routeSummary.durationSeconds)}</Text>
-                <Text style={styles.heroStatLabel}>Drive</Text>
+                <Text style={styles.heroStatLabel}>Körning</Text>
               </View>
             </View>
           </View>
@@ -911,15 +911,15 @@ export default function App() {
 
           <View style={styles.demoActionBar}>
             <View>
-              <Text style={styles.demoActionTitle}>Demo ready</Text>
-              <Text style={styles.demoActionText}>{activeTripId ? 'Planen är ansluten. Importera Excel-planen om den inte syns än.' : 'Tryck Connect innan du importerar den riktiga resplanen.'}</Text>
+              <Text style={styles.demoActionTitle}>Redo att visa</Text>
+              <Text style={styles.demoActionText}>{activeTripId ? 'Planen är ansluten. Importera Excel-planen om den inte syns än.' : 'Tryck Anslut innan du importerar den riktiga resplanen.'}</Text>
             </View>
             <View style={styles.demoActionButtons}>
               <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={connectSupabaseTrip} disabled={isLoading}>
-                <Text style={styles.secondaryButtonText}>{activeTripId ? 'Refresh' : 'Connect'}</Text>
+                <Text style={styles.secondaryButtonText}>{activeTripId ? 'Uppdatera' : 'Anslut'}</Text>
               </Pressable>
               <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={importReseplanrarePlan} disabled={isLoading || !activeTripId}>
-                <Text style={styles.commandButtonText}>Import Excel plan</Text>
+                <Text style={styles.commandButtonText}>Importera Excel-plan</Text>
               </Pressable>
             </View>
           </View>
@@ -928,7 +928,7 @@ export default function App() {
             {!isDemoMode ? (
             <View style={styles.sidebarColumn}>
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
-                <SectionTitle title="Account" dark={isDark} />
+                <SectionTitle title="Konto" dark={isDark} />
                 <TextInput
                   value={email}
                   onChangeText={setEmail}
@@ -940,41 +940,41 @@ export default function App() {
                 />
                 <View style={styles.actionRow}>
                   <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={sendLoginLink} disabled={isLoading}>
-                    <Text style={styles.commandButtonText}>Send link</Text>
+                    <Text style={styles.commandButtonText}>Skicka länk</Text>
                   </Pressable>
                   <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={disconnect} disabled={isLoading}>
-                    <Text style={styles.secondaryButtonText}>Sign out</Text>
+                    <Text style={styles.secondaryButtonText}>Logga ut</Text>
                   </Pressable>
                 </View>
               </View>
 
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
-                <SectionTitle title="Share" dark={isDark} />
+                <SectionTitle title="Dela" dark={isDark} />
                 <View style={styles.actionRow}>
                   <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={createShareCode} disabled={isLoading}>
-                    <Text style={styles.commandButtonText}>Create code</Text>
+                    <Text style={styles.commandButtonText}>Skapa kod</Text>
                   </Pressable>
-                  <Text style={[styles.codeText, isDark && styles.textDark]}>{generatedShareCode || 'No code yet'}</Text>
+                  <Text style={[styles.codeText, isDark && styles.textDark]}>{generatedShareCode || 'Ingen kod än'}</Text>
                 </View>
                 <TextInput
                   value={shareCode}
                   onChangeText={setShareCode}
-                  placeholder="Paste partner code"
+                  placeholder="Klistra in kod"
                   placeholderTextColor={isDark ? '#737373' : '#78716c'}
                   style={[styles.singleLineInput, isDark && styles.inputDark]}
                   autoCapitalize="characters"
                 />
                 <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={joinSharedTrip} disabled={isLoading}>
-                  <Text style={styles.commandButtonText}>Join trip</Text>
+                  <Text style={styles.commandButtonText}>Gå med</Text>
                 </Pressable>
               </View>
 
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
-                <SectionTitle title="AI Co-Pilot" dark={isDark} />
+                <SectionTitle title="AI-reseassistent" dark={isDark} />
                 <TextInput
                   value={command}
                   onChangeText={setCommand}
-                  placeholder="Ask for a campsite, route change, budget warning..."
+                  placeholder="Be om camping, ruttändring, budgetvarning..."
                   placeholderTextColor={isDark ? '#737373' : '#78716c'}
                   style={[styles.commandInput, isDark && styles.inputDark]}
                   multiline
@@ -982,11 +982,11 @@ export default function App() {
                 <View style={styles.actionRow}>
                   {latestAiPlan?.mutations.length ? (
                     <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={confirmAiPlan} disabled={isLoading}>
-                      <Text style={styles.secondaryButtonText}>Confirm plan</Text>
+                      <Text style={styles.secondaryButtonText}>Bekräfta plan</Text>
                     </Pressable>
                   ) : null}
                   <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={parseAiCommand} disabled={isLoading}>
-                    <Text style={styles.commandButtonText}>Parse command</Text>
+                    <Text style={styles.commandButtonText}>Tolka kommando</Text>
                   </Pressable>
                 </View>
               </View>
@@ -997,22 +997,22 @@ export default function App() {
               <View style={styles.routeStage}>
                 <View style={styles.routeStageHeader}>
                   <View>
-                    <Text style={styles.routeStageKicker}>Interactive route map</Text>
-                    <Text style={styles.routeStageTitle}>Practice Google Maps</Text>
+                    <Text style={styles.routeStageKicker}>Interaktiv ruttkarta</Text>
+                    <Text style={styles.routeStageTitle}>Övningskarta</Text>
                   </View>
                   <View style={styles.routeBadge}>
-                    <Text style={styles.routeBadgeText}>{displayedNodes.length} stops</Text>
+                    <Text style={styles.routeBadgeText}>{displayedNodes.length} stopp</Text>
                   </View>
                 </View>
                 <View style={styles.mapShell}>
                   <NavigationMap nodes={displayedNodes} activeRoute={routeSummary.geometry ? routeSummary : demoRoute} followUser={false} />
                   <View style={styles.mapOverlayPanel}>
-                    <Text style={styles.mapOverlayKicker}>Roadtrip layer</Text>
+                    <Text style={styles.mapOverlayKicker}>Reselager</Text>
                     <Text style={styles.mapOverlayTitle}>{demoTrip.name}</Text>
                     <Text style={styles.mapOverlayMeta}>{formatDistance(routeSummary.distanceMeters)} / {formatDuration(routeSummary.durationSeconds)}</Text>
                   </View>
                   <View style={styles.mapLayerControls}>
-                    {['Map', 'Stops', 'Costs'].map((label, index) => (
+                    {['Karta', 'Stopp', 'Kostnad'].map((label, index) => (
                       <View key={label} style={[styles.mapLayerChip, index === 0 && styles.mapLayerChipActive]}>
                         <Text style={[styles.mapLayerText, index === 0 && styles.mapLayerTextActive]}>{label}</Text>
                       </View>
@@ -1020,29 +1020,29 @@ export default function App() {
                   </View>
                   <View style={styles.mapLegend}>
                     <View style={[styles.legendDot, { backgroundColor: '#635bff' }]} />
-                    <Text style={styles.legendText}>planned stop</Text>
+                    <Text style={styles.legendText}>planerat stopp</Text>
                     <View style={[styles.legendDot, { backgroundColor: '#00d4ff' }]} />
-                    <Text style={styles.legendText}>route</Text>
+                    <Text style={styles.legendText}>rutt</Text>
                   </View>
                 </View>
                 <View style={styles.routeStageFooter}>
-                  <Text style={styles.routeStageMeta}>{formatDistance(routeSummary.distanceMeters)} route</Text>
-                  <Text style={styles.routeStageMeta}>{formatDuration(routeSummary.durationSeconds)} drive</Text>
-                  <Text style={styles.routeStageMeta}>{formatSek(totalSpend)} spend</Text>
+                  <Text style={styles.routeStageMeta}>{formatDistance(routeSummary.distanceMeters)} rutt</Text>
+                  <Text style={styles.routeStageMeta}>{formatDuration(routeSummary.durationSeconds)} körning</Text>
+                  <Text style={styles.routeStageMeta}>{formatSek(totalSpend)} kostnad</Text>
                 </View>
               </View>
 
               <View style={styles.statsRow}>
-                <Metric label="Stops" value={`${displayedNodes.length}`} accent="#0f766e" dark={isDark} />
-                <Metric label="Route" value={formatDistance(routeSummary.distanceMeters)} accent="#2563eb" dark={isDark} />
-                <Metric label="Drive" value={formatDuration(routeSummary.durationSeconds)} accent="#d97706" dark={isDark} />
-                <Metric label="Spend" value={formatSek(totalSpend)} accent="#7c3aed" dark={isDark} />
+                <Metric label="Stopp" value={`${displayedNodes.length}`} accent="#0f766e" dark={isDark} />
+                <Metric label="Rutt" value={formatDistance(routeSummary.distanceMeters)} accent="#2563eb" dark={isDark} />
+                <Metric label="Körning" value={formatDuration(routeSummary.durationSeconds)} accent="#d97706" dark={isDark} />
+                <Metric label="Kostnad" value={formatSek(totalSpend)} accent="#7c3aed" dark={isDark} />
               </View>
 
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
                 <View style={styles.sectionHeaderRow}>
-                  <SectionTitle title="Trip Overview" dark={isDark} />
-                  <Text style={styles.overviewMeta}>{dayPlans.length} days / {budgetSummary.warnings.length} smart flags</Text>
+                  <SectionTitle title="Reseöversikt" dark={isDark} />
+                  <Text style={styles.overviewMeta}>{dayPlans.length} dagar / {budgetSummary.warnings.length} smarta flaggor</Text>
                 </View>
                 <View style={styles.dayOverviewGrid}>
                   {dayPlans.map((dayPlan) => (
@@ -1057,10 +1057,10 @@ export default function App() {
                   <Text style={styles.budgetTotal}>{formatSek(totalSpend)}</Text>
                 </View>
                 <View style={styles.budgetGrid}>
-                  <BudgetCard label="Lodging" value={budgetSummary.categories.lodging} accent="#2563eb" />
-                  <BudgetCard label="Activities" value={budgetSummary.categories.activity} accent="#d97706" />
+                  <BudgetCard label="Boende" value={budgetSummary.categories.lodging} accent="#2563eb" />
+                  <BudgetCard label="Aktiviteter" value={budgetSummary.categories.activity} accent="#d97706" />
                   <BudgetCard label="Transport" value={budgetSummary.categories.transport} accent="#00d4ff" />
-                  <BudgetCard label="Food/Other" value={budgetSummary.categories.food + budgetSummary.categories.other} accent="#635bff" />
+                  <BudgetCard label="Mat/övrigt" value={budgetSummary.categories.food + budgetSummary.categories.other} accent="#635bff" />
                 </View>
                 <View style={styles.warningList}>
                   {budgetSummary.warnings.map((warning) => (
@@ -1071,17 +1071,17 @@ export default function App() {
 
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
                 <View style={styles.sectionHeaderRow}>
-                  <SectionTitle title="Planner Sheet" dark={isDark} />
+                  <SectionTitle title="Planeringstabell" dark={isDark} />
                   {!isDemoMode ? (
                     <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={importReseplanrarePlan} disabled={isLoading || !activeTripId}>
-                      <Text style={styles.secondaryButtonText}>Import Excel plan</Text>
+                      <Text style={styles.secondaryButtonText}>Importera Excel-plan</Text>
                     </Pressable>
                   ) : null}
                 </View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   <View style={styles.sheetTable}>
                     <View style={[styles.sheetRow, styles.sheetHeaderRow]}>
-                      {['Date', 'Place', 'Lodging', 'Activity', 'Cost', 'Hotel / note'].map((header) => (
+                      {['Datum', 'Plats', 'Boende', 'Aktivitet', 'Kostnad', 'Hotell / notis'].map((header) => (
                         <Text key={header} style={[styles.sheetHeaderCell, isDark && styles.textDark]}>{header}</Text>
                       ))}
                     </View>
@@ -1108,10 +1108,10 @@ export default function App() {
                 {!isDemoMode ? (
                 <View style={[styles.plannerEditor, isDark && styles.innerPanelDark]}>
                   <View style={styles.editorHeaderRow}>
-                    <Text style={[styles.editorTitle, isDark && styles.textDark]}>{selectedPlannerNodeId ? 'Edit selected step' : 'Select a step to edit'}</Text>
+                    <Text style={[styles.editorTitle, isDark && styles.textDark]}>{selectedPlannerNodeId ? 'Redigera valt steg' : 'Välj ett steg att redigera'}</Text>
                     {selectedPlannerNodeId ? (
                       <Pressable style={styles.clearButton} onPress={clearPlannerEditor} disabled={isLoading}>
-                        <Text style={styles.clearButtonText}>Clear</Text>
+                        <Text style={styles.clearButtonText}>Rensa</Text>
                       </Pressable>
                     ) : null}
                   </View>
@@ -1123,31 +1123,31 @@ export default function App() {
                         onPress={() => setPlannerType(type)}
                         disabled={isLoading}
                       >
-                        <Text style={[styles.typeChipText, plannerType === type && styles.typeChipTextActive]}>{type}</Text>
+                        <Text style={[styles.typeChipText, plannerType === type && styles.typeChipTextActive]}>{formatNodeType(type)}</Text>
                       </Pressable>
                     ))}
                   </View>
                   <View style={styles.actionRow}>
-                    <TextInput value={plannerDate} onChangeText={setPlannerDate} placeholder="YYYY-MM-DD" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
-                    <TextInput value={plannerTime} onChangeText={setPlannerTime} placeholder="HH:MM" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
+                    <TextInput value={plannerDate} onChangeText={setPlannerDate} placeholder="ÅÅÅÅ-MM-DD" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
+                    <TextInput value={plannerTime} onChangeText={setPlannerTime} placeholder="TT:MM" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
                   </View>
-                  <TextInput value={plannerTitle} onChangeText={setPlannerTitle} placeholder="Place, lodging, or activity" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.singleLineInput, isDark && styles.inputDark]} />
-                  <TextInput value={plannerPlace} onChangeText={setPlannerPlace} placeholder="Place name shown in sheet" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.singleLineInput, isDark && styles.inputDark]} />
+                  <TextInput value={plannerTitle} onChangeText={setPlannerTitle} placeholder="Plats, boende eller aktivitet" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.singleLineInput, isDark && styles.inputDark]} />
+                  <TextInput value={plannerPlace} onChangeText={setPlannerPlace} placeholder="Platsnamn i tabellen" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.singleLineInput, isDark && styles.inputDark]} />
                   <View style={styles.actionRow}>
-                    <TextInput value={plannerLatitude} onChangeText={setPlannerLatitude} placeholder="Latitude" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} inputMode="decimal" />
-                    <TextInput value={plannerLongitude} onChangeText={setPlannerLongitude} placeholder="Longitude" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} inputMode="decimal" />
+                    <TextInput value={plannerLatitude} onChangeText={setPlannerLatitude} placeholder="Latitud" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} inputMode="decimal" />
+                    <TextInput value={plannerLongitude} onChangeText={setPlannerLongitude} placeholder="Longitud" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} inputMode="decimal" />
                   </View>
                   <View style={styles.actionRow}>
-                    <TextInput value={plannerCost} onChangeText={setPlannerCost} placeholder="Cost" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
-                    <TextInput value={plannerHotelNote} onChangeText={setPlannerHotelNote} placeholder="Hotel / note" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
+                    <TextInput value={plannerCost} onChangeText={setPlannerCost} placeholder="Kostnad" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
+                    <TextInput value={plannerHotelNote} onChangeText={setPlannerHotelNote} placeholder="Hotell / notis" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
                   </View>
-                  <TextInput value={plannerNotes} onChangeText={setPlannerNotes} placeholder="Notes" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.commandInput, isDark && styles.inputDark]} multiline />
+                  <TextInput value={plannerNotes} onChangeText={setPlannerNotes} placeholder="Anteckningar" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.commandInput, isDark && styles.inputDark]} multiline />
                   <View style={styles.editorActionRow}>
                     <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={addPlannerStep} disabled={isLoading}>
-                      <Text style={styles.secondaryButtonText}>Add step</Text>
+                      <Text style={styles.secondaryButtonText}>Lägg till steg</Text>
                     </Pressable>
                     <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={savePlannerEdit} disabled={isLoading || !selectedPlannerNodeId}>
-                      <Text style={styles.commandButtonText}>Save row</Text>
+                      <Text style={styles.commandButtonText}>Spara rad</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -1157,61 +1157,61 @@ export default function App() {
               {!isDemoMode ? (
               <View style={styles.twoColumnGrid}>
                 <View style={[styles.panelSection, isDark && styles.panelDark]}>
-                  <SectionTitle title="Places" dark={isDark} />
+                  <SectionTitle title="Platser" dark={isDark} />
                   <TextInput
                     value={placeQuery}
                     onChangeText={setPlaceQuery}
-                    placeholder="Search campsites, restaurants, activities..."
+                    placeholder="Sök camping, restauranger, aktiviteter..."
                     placeholderTextColor={isDark ? '#737373' : '#78716c'}
                     style={[styles.singleLineInput, isDark && styles.inputDark]}
                   />
                   <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={searchPlaces} disabled={isLoading}>
-                    <Text style={styles.commandButtonText}>Search places</Text>
+                    <Text style={styles.commandButtonText}>Sök platser</Text>
                   </Pressable>
                   {placeResults.map((place) => (
                     <View key={place.id} style={[styles.placeItem, isDark && styles.innerPanelDark]}>
                       <View style={styles.timelineCopy}>
-                        <Text style={[styles.itemTitle, isDark && styles.textDark]}>{place.displayName?.text ?? 'Unnamed place'}</Text>
+                        <Text style={[styles.itemTitle, isDark && styles.textDark]}>{place.displayName?.text ?? 'Namnlös plats'}</Text>
                         <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
                           {place.formattedAddress ?? place.primaryType ?? 'Google Places'}
                         </Text>
                       </View>
                       <Pressable style={styles.smallButton} onPress={() => void savePlace(place)} disabled={isLoading}>
-                        <Text style={styles.smallButtonText}>Save</Text>
+                        <Text style={styles.smallButtonText}>Spara</Text>
                       </Pressable>
                     </View>
                   ))}
                 </View>
 
                 <View style={[styles.panelSection, isDark && styles.panelDark]}>
-                  <SectionTitle title="Manual Stop" dark={isDark} />
-                  <TextInput value={stopName} onChangeText={setStopName} placeholder="Stop name" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.singleLineInput, isDark && styles.inputDark]} />
-                  <TextInput value={stopAddress} onChangeText={setStopAddress} placeholder="Address or short description" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.singleLineInput, isDark && styles.inputDark]} />
+                  <SectionTitle title="Manuellt stopp" dark={isDark} />
+                  <TextInput value={stopName} onChangeText={setStopName} placeholder="Namn på stopp" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.singleLineInput, isDark && styles.inputDark]} />
+                  <TextInput value={stopAddress} onChangeText={setStopAddress} placeholder="Adress eller kort beskrivning" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.singleLineInput, isDark && styles.inputDark]} />
                   <View style={styles.actionRow}>
-                    <TextInput value={stopLatitude} onChangeText={setStopLatitude} placeholder="Latitude" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} inputMode="decimal" />
-                    <TextInput value={stopLongitude} onChangeText={setStopLongitude} placeholder="Longitude" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} inputMode="decimal" />
+                    <TextInput value={stopLatitude} onChangeText={setStopLatitude} placeholder="Latitud" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} inputMode="decimal" />
+                    <TextInput value={stopLongitude} onChangeText={setStopLongitude} placeholder="Longitud" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} inputMode="decimal" />
                   </View>
-                  <TextInput value={stopNotes} onChangeText={setStopNotes} placeholder="Notes" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.commandInput, isDark && styles.inputDark]} multiline />
+                  <TextInput value={stopNotes} onChangeText={setStopNotes} placeholder="Anteckningar" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.commandInput, isDark && styles.inputDark]} multiline />
                   <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={createManualStop} disabled={isLoading}>
-                    <Text style={styles.commandButtonText}>Add stop</Text>
+                    <Text style={styles.commandButtonText}>Lägg till stopp</Text>
                   </Pressable>
                 </View>
               </View>
               ) : null}
 
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
-                <SectionTitle title="Day Planner" dark={isDark} />
+                <SectionTitle title="Dagplanering" dark={isDark} />
                 {dayPlans.map((dayPlan) => (
                   <View key={dayPlan.key} style={[styles.dayGroup, isDark && styles.innerPanelDark]}>
                     <View style={styles.dayHeader}>
                       <View>
                         <Text style={[styles.dayTitle, isDark && styles.textDark]}>{dayPlan.title}</Text>
                         <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
-                          {dayPlan.nodes.length} stops / {formatDistance(dayPlan.route.distanceMeters)} / {formatDuration(dayPlan.route.durationSeconds)} / {formatSek(dayPlan.budget.total)}
+                          {dayPlan.nodes.length} stopp / {formatDistance(dayPlan.route.distanceMeters)} / {formatDuration(dayPlan.route.durationSeconds)} / {formatSek(dayPlan.budget.total)}
                         </Text>
                         <View style={styles.smartFlagList}>
-                          {(dayPlan.smartFlags.length > 0 ? dayPlan.smartFlags : ['Looks planned']).map((flag) => (
-                            <Text key={flag} style={[styles.smartFlag, flag === 'Looks planned' && styles.smartFlagGood]}>{flag}</Text>
+                          {(dayPlan.smartFlags.length > 0 ? dayPlan.smartFlags : ['Ser planerad ut']).map((flag) => (
+                            <Text key={flag} style={[styles.smartFlag, flag === 'Ser planerad ut' && styles.smartFlagGood]}>{flag}</Text>
                           ))}
                         </View>
                       </View>
@@ -1225,19 +1225,19 @@ export default function App() {
                         <View style={styles.timelineCopy}>
                           <Text style={[styles.itemTitle, isDark && styles.textDark]}>{index + 1}. {node.title}</Text>
                           <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
-                            {node.type.toUpperCase()} / {node.notes ?? node.timezone ?? 'local time'}
+                            {formatNodeType(node.type)} / {node.notes ?? node.timezone ?? 'lokal tid'}
                           </Text>
                         </View>
                         {itineraryNodes.length > 0 && !isDemoMode ? (
                           <View style={styles.stopActions}>
                             <Pressable style={styles.secondarySmallButton} onPress={() => selectPlannerNode(node.id)} disabled={isLoading}>
-                              <Text style={styles.secondarySmallButtonText}>Edit</Text>
+                            <Text style={styles.secondarySmallButtonText}>Redigera</Text>
                             </Pressable>
                             <Pressable style={styles.secondarySmallButton} onPress={() => void moveStop(node.id, -1)} disabled={isLoading}>
-                              <Text style={styles.secondarySmallButtonText}>Up</Text>
+                              <Text style={styles.secondarySmallButtonText}>Upp</Text>
                             </Pressable>
                             <Pressable style={styles.secondarySmallButton} onPress={() => void moveStop(node.id, 1)} disabled={isLoading}>
-                              <Text style={styles.secondarySmallButtonText}>Down</Text>
+                              <Text style={styles.secondarySmallButtonText}>Ner</Text>
                             </Pressable>
                             <Pressable style={styles.smallButton} onPress={() => void scheduleStop(node, 9)} disabled={isLoading}>
                               <Text style={styles.smallButtonText}>AM</Text>
@@ -1246,7 +1246,7 @@ export default function App() {
                               <Text style={styles.smallButtonText}>PM</Text>
                             </Pressable>
                             <Pressable style={styles.dangerButton} onPress={() => void removeStop(node.id)} disabled={isLoading}>
-                              <Text style={styles.smallButtonText}>Delete</Text>
+                              <Text style={styles.smallButtonText}>Ta bort</Text>
                             </Pressable>
                           </View>
                         ) : null}
@@ -1282,8 +1282,8 @@ function BudgetCard({ label, value, accent }: { label: string; value: number; ac
 }
 
 function DayOverviewCard({ dayPlan }: { dayPlan: DayPlan }) {
-  const primaryStop = dayPlan.nodes[0]?.title ?? 'No stops yet';
-  const flags = dayPlan.smartFlags.length > 0 ? dayPlan.smartFlags : ['Looks planned'];
+  const primaryStop = dayPlan.nodes[0]?.title ?? 'Inga stopp än';
+  const flags = dayPlan.smartFlags.length > 0 ? dayPlan.smartFlags : ['Ser planerad ut'];
 
   return (
     <View style={styles.dayOverviewCard}>
@@ -1293,13 +1293,13 @@ function DayOverviewCard({ dayPlan }: { dayPlan: DayPlan }) {
       </View>
       <Text style={styles.dayOverviewPrimary}>{primaryStop}</Text>
       <View style={styles.dayOverviewStats}>
-        <Text style={styles.dayOverviewStat}>{dayPlan.nodes.length} stops</Text>
+        <Text style={styles.dayOverviewStat}>{dayPlan.nodes.length} stopp</Text>
         <Text style={styles.dayOverviewStat}>{formatDistance(dayPlan.route.distanceMeters)}</Text>
         <Text style={styles.dayOverviewStat}>{formatDuration(dayPlan.route.durationSeconds)}</Text>
       </View>
       <View style={styles.smartFlagList}>
         {flags.slice(0, 3).map((flag) => (
-          <Text key={flag} style={[styles.smartFlag, flag === 'Looks planned' && styles.smartFlagGood]}>{flag}</Text>
+          <Text key={flag} style={[styles.smartFlag, flag === 'Ser planerad ut' && styles.smartFlagGood]}>{flag}</Text>
         ))}
       </View>
     </View>
@@ -1320,6 +1320,27 @@ function nodeColor(type: ItineraryNode['type']) {
       return '#2563eb';
     default:
       return '#0f766e';
+  }
+}
+
+function formatNodeType(type: ItineraryNode['type']): string {
+  switch (type) {
+    case 'lodging':
+      return 'Boende';
+    case 'camping':
+      return 'Camping';
+    case 'activity':
+      return 'Aktivitet';
+    case 'gastronomy':
+      return 'Mat';
+    case 'fuel':
+      return 'Bränsle';
+    case 'transport':
+      return 'Transport';
+    case 'note':
+      return 'Notis';
+    default:
+      return 'Övrigt';
   }
 }
 
@@ -1388,12 +1409,12 @@ function buildDayPlans(nodes: ItineraryNode[]): DayPlan[] {
   return Array.from(groups.entries()).map(([key, groupNodes], index) => {
     const route = estimateRouteSummary(groupNodes);
     const budget = buildBudgetSummary(groupNodes);
-    const title = key === 'unscheduled' ? 'Unscheduled' : `Day ${index + 1} / ${formatDateLabel(key)}`;
+    const title = key === 'unscheduled' ? 'Oschemalagt' : `Dag ${index + 1} / ${formatDateLabel(key)}`;
 
     return {
       key,
       title,
-      shortTitle: key === 'unscheduled' ? 'Unscheduled' : `Day ${index + 1}`,
+      shortTitle: key === 'unscheduled' ? 'Oschemalagt' : `Dag ${index + 1}`,
       nodes: groupNodes,
       route,
       budget,
@@ -1429,27 +1450,27 @@ function buildDaySmartFlags(nodes: ItineraryNode[], route: RouteSummary, budget:
   const driveHours = route.durationSeconds / 3600;
 
   if (nodes.length === 0) {
-    flags.push('Empty day');
+    flags.push('Tom dag');
   }
 
   if (!hasLodging && nodes.length > 0) {
-    flags.push('Missing lodging');
+    flags.push('Saknar boende');
   }
 
   if (budget.missingCostCount > 0) {
-    flags.push(`${budget.missingCostCount} costs missing`);
+    flags.push(`${budget.missingCostCount} kostnader saknas`);
   }
 
   if (driveHours >= 5) {
-    flags.push('Long drive day');
+    flags.push('Lång kördag');
   }
 
   if (budget.total >= 3000) {
-    flags.push('High spend day');
+    flags.push('Dyr dag');
   }
 
   if (!hasTimedStop) {
-    flags.push('Needs schedule');
+    flags.push('Saknar tider');
   }
 
   return flags;
@@ -1505,15 +1526,15 @@ function buildBudgetWarnings(nodes: ItineraryNode[], total: number, missingCostC
 
   if (mostExpensiveEntry && mostExpensiveEntry[1] > 0) {
     const [mostExpensiveDay, mostExpensiveTotal] = mostExpensiveEntry;
-    warnings.push(`Highest day: ${mostExpensiveDay === 'unscheduled' ? 'Unscheduled' : formatDateLabel(mostExpensiveDay)} at ${formatSek(mostExpensiveTotal)}.`);
+    warnings.push(`Dyraste dagen: ${mostExpensiveDay === 'unscheduled' ? 'Oschemalagt' : formatDateLabel(mostExpensiveDay)} med ${formatSek(mostExpensiveTotal)}.`);
   }
 
   if (missingCostCount > 0) {
-    warnings.push(`${missingCostCount} steps have no cost yet.`);
+    warnings.push(`${missingCostCount} steg saknar kostnad.`);
   }
 
   if (total === 0) {
-    warnings.push('No budget entered yet. Add costs to planner rows to unlock totals.');
+    warnings.push('Ingen budget inlagd än. Lägg till kostnader i planeringen för att få totalsummor.');
   }
 
   return warnings;
@@ -1642,10 +1663,10 @@ function buildNodeFromSeedRow(row: ReseplanrareSeedRow, tripId: string, userId: 
   const startsAt = row.date ? new Date(`${row.date}T09:00:00`).toISOString() : null;
   const costParts = [row.lodgingCost, row.activityCost].filter(Boolean);
   const notes = [
-    row.activity && row.place !== row.activity ? `Place: ${row.place}` : null,
-    row.hotel ? `Hotel/note: ${row.hotel}` : null,
-    costParts.length ? `Cost from Excel: ${costParts.join(' + ')} SEK` : null,
-    `Imported from Reseplanrare.xlsx row ${row.sourceRow}`,
+    row.activity && row.place !== row.activity ? `Plats: ${row.place}` : null,
+    row.hotel ? `Hotell/notis: ${row.hotel}` : null,
+    costParts.length ? `Kostnad från Excel: ${costParts.join(' + ')} SEK` : null,
+    `Importerad från Reseplanrare.xlsx rad ${row.sourceRow}`,
   ].filter(Boolean).join('\n');
 
   return {
