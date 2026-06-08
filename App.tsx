@@ -148,6 +148,13 @@ export default function App() {
   const [savedPois, setSavedPois] = useState<Poi[]>([]);
   const [itineraryNodes, setItineraryNodes] = useState<ItineraryNode[]>([]);
   const [latestAiPlan, setLatestAiPlan] = useState<ItineraryMutationPlan | null>(null);
+  const [selectedPlannerNodeId, setSelectedPlannerNodeId] = useState<string | null>(null);
+  const [plannerTitle, setPlannerTitle] = useState('');
+  const [plannerDate, setPlannerDate] = useState('');
+  const [plannerTime, setPlannerTime] = useState('');
+  const [plannerCost, setPlannerCost] = useState('');
+  const [plannerHotelNote, setPlannerHotelNote] = useState('');
+  const [plannerNotes, setPlannerNotes] = useState('');
   const [stopName, setStopName] = useState('');
   const [stopAddress, setStopAddress] = useState('');
   const [stopLatitude, setStopLatitude] = useState('');
@@ -530,6 +537,86 @@ export default function App() {
     }
   }
 
+  function selectPlannerNode(nodeId: string) {
+    const node = displayedNodes.find((candidate) => candidate.id === nodeId);
+    if (!node) {
+      return;
+    }
+
+    populatePlannerEditor(node);
+  }
+
+  function populatePlannerEditor(node: ItineraryNode) {
+    setSelectedPlannerNodeId(node.id);
+    setPlannerTitle(node.title);
+    setPlannerDate(node.startsAt ? node.startsAt.slice(0, 10) : '');
+    setPlannerTime(node.startsAt ? toTimeInput(node.startsAt) : '');
+    setPlannerCost(formatRawNodeCost(node));
+    setPlannerHotelNote(formatReservation(node));
+    setPlannerNotes(node.notes ?? '');
+  }
+
+  async function savePlannerEdit() {
+    if (!selectedPlannerNodeId) {
+      setStatusMessage('Select a planner row first.');
+      return;
+    }
+
+    if (itineraryNodes.length === 0) {
+      setStatusMessage('Connect before editing demo rows.');
+      return;
+    }
+
+    const node = itineraryNodes.find((candidate) => candidate.id === selectedPlannerNodeId);
+    if (!node) {
+      setStatusMessage('Selected planner row is no longer available.');
+      return;
+    }
+
+    if (!plannerTitle.trim()) {
+      setStatusMessage('Planner row needs a title.');
+      return;
+    }
+
+    setIsLoading(true);
+    setStatusMessage('Saving planner row...');
+
+    try {
+      const nextReservation = { ...node.reservation };
+      if (plannerHotelNote.trim()) {
+        nextReservation.provider = plannerHotelNote.trim();
+      } else {
+        delete nextReservation.provider;
+      }
+
+      const nextMetadata = { ...node.metadata };
+      if (plannerCost.trim()) {
+        nextMetadata.cost = plannerCost.trim();
+      } else {
+        delete nextMetadata.cost;
+      }
+
+      const savedNode = await upsertItineraryNode({
+        ...node,
+        title: plannerTitle.trim(),
+        startsAt: buildIsoFromInputs(plannerDate, plannerTime),
+        notes: plannerNotes.trim() || null,
+        reservation: nextReservation,
+        metadata: nextMetadata,
+        updatedAt: new Date().toISOString(),
+        version: node.version + 1,
+      });
+
+      setItineraryNodes((current) => sortNodes(current.map((candidate) => (candidate.id === savedNode.id ? savedNode : candidate))));
+      populatePlannerEditor(savedNode);
+      setStatusMessage(`Saved planner row: ${savedNode.title}`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   async function createNodeFromPoi(poi: Poi): Promise<ItineraryNode> {
     if (!activeTripId || !userId) {
       throw new Error('Connect before saving a stop.');
@@ -670,17 +757,40 @@ export default function App() {
                       ))}
                     </View>
                     {plannerRows.map((row) => (
-                      <View key={row.id} style={[styles.sheetRow, isDark && styles.innerPanelDark]}>
+                      <Pressable
+                        key={row.id}
+                        style={[
+                          styles.sheetRow,
+                          selectedPlannerNodeId === row.id && styles.sheetRowSelected,
+                          isDark && styles.innerPanelDark,
+                        ]}
+                        onPress={() => selectPlannerNode(row.id)}
+                      >
                         <Text style={[styles.sheetCell, isDark && styles.textDark]}>{row.date}</Text>
                         <Text style={[styles.sheetCell, isDark && styles.textDark]}>{row.place}</Text>
                         <Text style={[styles.sheetCell, isDark && styles.textDark]}>{row.lodging}</Text>
                         <Text style={[styles.sheetCell, isDark && styles.textDark]}>{row.activity}</Text>
                         <Text style={[styles.sheetCell, isDark && styles.textDark]}>{row.cost}</Text>
                         <Text style={[styles.sheetWideCell, isDark && styles.textDark]}>{row.hotel}</Text>
-                      </View>
+                      </Pressable>
                     ))}
                   </View>
                 </ScrollView>
+                <View style={[styles.plannerEditor, isDark && styles.innerPanelDark]}>
+                  <View style={styles.actionRow}>
+                    <TextInput value={plannerDate} onChangeText={setPlannerDate} placeholder="YYYY-MM-DD" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
+                    <TextInput value={plannerTime} onChangeText={setPlannerTime} placeholder="HH:MM" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
+                  </View>
+                  <TextInput value={plannerTitle} onChangeText={setPlannerTitle} placeholder="Place, lodging, or activity" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.singleLineInput, isDark && styles.inputDark]} />
+                  <View style={styles.actionRow}>
+                    <TextInput value={plannerCost} onChangeText={setPlannerCost} placeholder="Cost" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
+                    <TextInput value={plannerHotelNote} onChangeText={setPlannerHotelNote} placeholder="Hotel / note" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
+                  </View>
+                  <TextInput value={plannerNotes} onChangeText={setPlannerNotes} placeholder="Notes" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.commandInput, isDark && styles.inputDark]} multiline />
+                  <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={savePlannerEdit} disabled={isLoading || !selectedPlannerNodeId}>
+                    <Text style={styles.commandButtonText}>Save row</Text>
+                  </Pressable>
+                </View>
               </View>
 
               <View style={styles.twoColumnGrid}>
@@ -865,9 +975,13 @@ function buildPlannerRows(nodes: ItineraryNode[]): PlannerRow[] {
 }
 
 function formatNodeCost(node: ItineraryNode): string {
+  return formatRawNodeCost(node);
+}
+
+function formatRawNodeCost(node: ItineraryNode): string {
   const cost = node.metadata.costSek ?? node.metadata.cost ?? node.metadata.price;
   if (typeof cost === 'number') {
-    return `${cost} SEK`;
+    return String(cost);
   }
 
   if (typeof cost === 'string') {
@@ -900,6 +1014,27 @@ function formatTime(value?: string | null): string {
   }
 
   return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(new Date(value));
+}
+
+function toTimeInput(value: string): string {
+  const date = new Date(value);
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
+function buildIsoFromInputs(dateValue: string, timeValue: string): string | null {
+  if (!dateValue.trim()) {
+    return null;
+  }
+
+  const time = timeValue.trim() || '09:00';
+  const candidate = new Date(`${dateValue.trim()}T${time}:00`);
+  if (Number.isNaN(candidate.getTime())) {
+    throw new Error('Use date YYYY-MM-DD and time HH:MM.');
+  }
+
+  return candidate.toISOString();
 }
 
 function setNodeTime(node: ItineraryNode, hour: number): string {
@@ -1059,6 +1194,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
+  sheetRowSelected: {
+    borderColor: '#2563eb',
+    borderWidth: 2,
+    backgroundColor: '#eff6ff',
+  },
   sheetHeaderRow: {
     minHeight: 38,
     backgroundColor: '#e7f0ed',
@@ -1081,6 +1221,14 @@ const styles = StyleSheet.create({
     color: '#1c1917',
     fontSize: 13,
     fontWeight: '700',
+  },
+  plannerEditor: {
+    gap: 10,
+    backgroundColor: '#f8faf9',
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e7e5e4',
+    padding: 12,
   },
   sectionTitle: {
     color: '#1c1917',
