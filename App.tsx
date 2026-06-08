@@ -783,8 +783,8 @@ export default function App() {
               <View style={styles.routeStage}>
                 <View style={styles.routeStageHeader}>
                   <View>
-                    <Text style={styles.routeStageKicker}>Live route preview</Text>
-                    <Text style={styles.routeStageTitle}>Övnings Google Maps</Text>
+                    <Text style={styles.routeStageKicker}>Interactive route map</Text>
+                    <Text style={styles.routeStageTitle}>Practice Google Maps</Text>
                   </View>
                   <View style={styles.routeBadge}>
                     <Text style={styles.routeBadgeText}>{displayedNodes.length} stops</Text>
@@ -792,6 +792,24 @@ export default function App() {
                 </View>
                 <View style={styles.mapShell}>
                   <NavigationMap nodes={displayedNodes} activeRoute={routeSummary.geometry ? routeSummary : demoRoute} followUser={false} />
+                  <View style={styles.mapOverlayPanel}>
+                    <Text style={styles.mapOverlayKicker}>Roadtrip layer</Text>
+                    <Text style={styles.mapOverlayTitle}>{demoTrip.name}</Text>
+                    <Text style={styles.mapOverlayMeta}>{formatDistance(routeSummary.distanceMeters)} / {formatDuration(routeSummary.durationSeconds)}</Text>
+                  </View>
+                  <View style={styles.mapLayerControls}>
+                    {['Map', 'Stops', 'Costs'].map((label, index) => (
+                      <View key={label} style={[styles.mapLayerChip, index === 0 && styles.mapLayerChipActive]}>
+                        <Text style={[styles.mapLayerText, index === 0 && styles.mapLayerTextActive]}>{label}</Text>
+                      </View>
+                    ))}
+                  </View>
+                  <View style={styles.mapLegend}>
+                    <View style={[styles.legendDot, { backgroundColor: '#635bff' }]} />
+                    <Text style={styles.legendText}>planned stop</Text>
+                    <View style={[styles.legendDot, { backgroundColor: '#00d4ff' }]} />
+                    <Text style={styles.legendText}>route</Text>
+                  </View>
                 </View>
                 <View style={styles.routeStageFooter}>
                   <Text style={styles.routeStageMeta}>{formatDistance(routeSummary.distanceMeters)} route</Text>
@@ -1208,11 +1226,12 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   mapShell: {
-    height: 390,
+    height: 520,
     overflow: 'hidden',
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d7e1ea',
+    position: 'relative',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#111827',
     backgroundColor: '#101820',
   },
   content: {
@@ -1226,7 +1245,7 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   tripHero: {
-    minHeight: 280,
+    minHeight: 220,
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'stretch',
@@ -1237,12 +1256,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#e6edf5',
-    padding: 30,
+    padding: 28,
   },
   heroPlaneOne: {
     position: 'absolute',
     right: -160,
-    top: -94,
+    top: -112,
     width: 560,
     height: 190,
     backgroundColor: '#7a73ff',
@@ -1281,8 +1300,8 @@ const styles = StyleSheet.create({
   heroTitle: {
     maxWidth: 760,
     color: '#0a2540',
-    fontSize: 46,
-    lineHeight: 52,
+    fontSize: 40,
+    lineHeight: 46,
     fontWeight: '900',
   },
   heroBody: {
@@ -1356,28 +1375,30 @@ const styles = StyleSheet.create({
   },
   routeStage: {
     gap: 14,
-    borderRadius: 22,
-    backgroundColor: '#ffffff',
+    overflow: 'hidden',
+    borderRadius: 26,
+    backgroundColor: '#0a2540',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#e6edf5',
-    padding: 16,
+    borderColor: '#0a2540',
+    padding: 14,
   },
   routeStageHeader: {
-    minHeight: 46,
+    minHeight: 56,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
+    paddingHorizontal: 6,
   },
   routeStageKicker: {
-    color: '#635bff',
+    color: '#00d4ff',
     fontSize: 12,
     fontWeight: '900',
     textTransform: 'uppercase',
   },
   routeStageTitle: {
-    color: '#0a2540',
-    fontSize: 22,
+    color: '#ffffff',
+    fontSize: 24,
     fontWeight: '900',
   },
   routeBadge: {
@@ -1399,11 +1420,94 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 10,
     flexWrap: 'wrap',
+    paddingHorizontal: 6,
+    paddingBottom: 2,
   },
   routeStageMeta: {
+    color: '#c7d2fe',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  mapOverlayPanel: {
+    position: 'absolute',
+    left: 18,
+    top: 18,
+    minWidth: 240,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.94)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(215,225,234,0.9)',
+    padding: 16,
+  },
+  mapOverlayKicker: {
+    color: '#635bff',
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  mapOverlayTitle: {
+    color: '#0a2540',
+    fontSize: 20,
+    fontWeight: '900',
+    marginTop: 4,
+  },
+  mapOverlayMeta: {
     color: '#425466',
     fontSize: 13,
     fontWeight: '800',
+    marginTop: 6,
+  },
+  mapLayerControls: {
+    position: 'absolute',
+    right: 18,
+    top: 18,
+    flexDirection: 'row',
+    gap: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(10,37,64,0.82)',
+    padding: 6,
+  },
+  mapLayerChip: {
+    minHeight: 34,
+    justifyContent: 'center',
+    borderRadius: 999,
+    paddingHorizontal: 13,
+  },
+  mapLayerChipActive: {
+    backgroundColor: '#ffffff',
+  },
+  mapLayerText: {
+    color: '#dbeafe',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  mapLayerTextActive: {
+    color: '#0a2540',
+  },
+  mapLegend: {
+    position: 'absolute',
+    left: 18,
+    bottom: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.94)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(215,225,234,0.9)',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  legendDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+  },
+  legendText: {
+    color: '#425466',
+    fontSize: 12,
+    fontWeight: '900',
+    textTransform: 'uppercase',
   },
   twoColumnGrid: {
     flexDirection: 'row',
