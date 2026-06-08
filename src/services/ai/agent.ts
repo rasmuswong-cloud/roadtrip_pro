@@ -14,8 +14,31 @@ export async function parseItineraryCommand(input: string, context: AgentContext
   });
 
   if (error) {
-    throw new Error(error.message);
+    throw new Error(await getFunctionErrorMessage(error));
   }
 
   return itineraryMutationSchema.parse(data);
+}
+
+async function getFunctionErrorMessage(error: unknown): Promise<string> {
+  const fallbackMessage = error instanceof Error ? error.message : String(error);
+  const context = (error as { context?: unknown }).context;
+
+  if (context instanceof Response) {
+    try {
+      const payload = await context.clone().json();
+      if (typeof payload?.error === 'string') {
+        return payload.error;
+      }
+
+      return JSON.stringify(payload);
+    } catch {
+      const text = await context.clone().text();
+      if (text) {
+        return text;
+      }
+    }
+  }
+
+  return fallbackMessage;
 }
