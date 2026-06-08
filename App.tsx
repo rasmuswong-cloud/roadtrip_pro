@@ -12,7 +12,7 @@ import {
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { NavigationMap } from '@/components/map/NavigationMap';
 import type { Expense, ItineraryNode, Poi, RouteSummary, Trip } from '@/models';
-import { getCurrentUser, sendMagicLink, signOut } from '@/services/auth/authService';
+import { getCurrentUser, getOrCreateAnonymousUser, sendMagicLink, signOut } from '@/services/auth/authService';
 import { parseItineraryCommand } from '@/services/ai/agent';
 import { upsertPoi } from '@/services/database/poiRepository';
 import { ensureUserProfile } from '@/services/database/profileRepository';
@@ -165,11 +165,8 @@ export default function App() {
     setStatusMessage('Connecting to Supabase...');
 
     try {
-      const user = await getCurrentUser();
-      if (!user) {
-        setStatusMessage('Send a magic link and open it first.');
-        return;
-      }
+      const existingUser = await getCurrentUser();
+      const user = existingUser ?? (await getOrCreateAnonymousUser());
 
       setUserId(user.id);
       await ensureUserProfile(user.id, user.email ?? 'Roadtrip Planner');
