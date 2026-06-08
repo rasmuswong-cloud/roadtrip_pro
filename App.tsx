@@ -11,7 +11,7 @@ import {
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { NavigationMap } from '@/components/map/NavigationMap';
 import { reseplanrareIdeaPlaces, reseplanrareSeedRows, type ReseplanrareSeedRow } from '@/data/reseplanrareSeed';
-import type { Expense, ItineraryNode, Poi, RouteSummary, Trip } from '@/models';
+import type { Expense, ItineraryNode, ItineraryNodeType, Poi, RouteSummary, Trip } from '@/models';
 import { getCurrentUser, getOrCreateAnonymousUser, sendMagicLink, signOut } from '@/services/auth/authService';
 import { applyConfirmedMutationPlan } from '@/services/ai/applyMutationPlan';
 import { parseItineraryCommand } from '@/services/ai/agent';
@@ -149,8 +149,12 @@ export default function App() {
   const [latestAiPlan, setLatestAiPlan] = useState<ItineraryMutationPlan | null>(null);
   const [selectedPlannerNodeId, setSelectedPlannerNodeId] = useState<string | null>(null);
   const [plannerTitle, setPlannerTitle] = useState('');
+  const [plannerType, setPlannerType] = useState<ItineraryNodeType>('custom');
+  const [plannerPlace, setPlannerPlace] = useState('');
   const [plannerDate, setPlannerDate] = useState('');
   const [plannerTime, setPlannerTime] = useState('');
+  const [plannerLatitude, setPlannerLatitude] = useState('');
+  const [plannerLongitude, setPlannerLongitude] = useState('');
   const [plannerCost, setPlannerCost] = useState('');
   const [plannerHotelNote, setPlannerHotelNote] = useState('');
   const [plannerNotes, setPlannerNotes] = useState('');
@@ -501,6 +505,9 @@ export default function App() {
     try {
       await deleteItineraryNode(nodeId);
       setItineraryNodes((current) => current.filter((node) => node.id !== nodeId));
+      if (selectedPlannerNodeId === nodeId) {
+        clearPlannerEditor();
+      }
       setStatusMessage('Stop removed.');
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
@@ -528,6 +535,9 @@ export default function App() {
       });
 
       setItineraryNodes((current) => sortNodes(current.map((candidate) => (candidate.id === savedNode.id ? savedNode : candidate))));
+      if (selectedPlannerNodeId === savedNode.id) {
+        populatePlannerEditor(savedNode);
+      }
       setStatusMessage(`${savedNode.title} scheduled for ${formatTime(savedNode.startsAt)}.`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
@@ -548,11 +558,30 @@ export default function App() {
   function populatePlannerEditor(node: ItineraryNode) {
     setSelectedPlannerNodeId(node.id);
     setPlannerTitle(node.title);
+    setPlannerType(node.type);
+    setPlannerPlace(typeof node.metadata.place === 'string' ? node.metadata.place : '');
     setPlannerDate(node.startsAt ? node.startsAt.slice(0, 10) : '');
     setPlannerTime(node.startsAt ? toTimeInput(node.startsAt) : '');
+    setPlannerLatitude(node.location ? String(node.location.latitude) : '');
+    setPlannerLongitude(node.location ? String(node.location.longitude) : '');
     setPlannerCost(formatRawNodeCost(node));
     setPlannerHotelNote(formatReservation(node));
     setPlannerNotes(node.notes ?? '');
+    setStatusMessage(`Editing: ${node.title}`);
+  }
+
+  function clearPlannerEditor() {
+    setSelectedPlannerNodeId(null);
+    setPlannerTitle('');
+    setPlannerType('custom');
+    setPlannerPlace('');
+    setPlannerDate('');
+    setPlannerTime('');
+    setPlannerLatitude('');
+    setPlannerLongitude('');
+    setPlannerCost('');
+    setPlannerHotelNote('');
+    setPlannerNotes('');
   }
 
   async function savePlannerEdit() {
@@ -578,9 +607,17 @@ export default function App() {
     }
 
     setIsLoading(true);
-    setStatusMessage('Saving planner row...');
+    setStatusMessage('Saving step...');
 
     try {
+      const latitude = plannerLatitude.trim() ? Number(plannerLatitude.replace(',', '.')) : null;
+      const longitude = plannerLongitude.trim() ? Number(plannerLongitude.replace(',', '.')) : null;
+
+      if ((latitude === null) !== (longitude === null) || (latitude !== null && (Number.isNaN(latitude) || Number.isNaN(longitude)))) {
+        setStatusMessage('Use both valid latitude and longitude, or leave both blank.');
+        return;
+      }
+
       const nextReservation = { ...node.reservation };
       if (plannerHotelNote.trim()) {
         nextReservation.provider = plannerHotelNote.trim();
@@ -595,10 +632,18 @@ export default function App() {
         delete nextMetadata.cost;
       }
 
+      if (plannerPlace.trim()) {
+        nextMetadata.place = plannerPlace.trim();
+      } else {
+        delete nextMetadata.place;
+      }
+
       const savedNode = await upsertItineraryNode({
         ...node,
+        type: plannerType,
         title: plannerTitle.trim(),
         startsAt: buildIsoFromInputs(plannerDate, plannerTime),
+        location: latitude !== null && longitude !== null ? { latitude, longitude } : null,
         notes: plannerNotes.trim() || null,
         reservation: nextReservation,
         metadata: nextMetadata,
@@ -608,7 +653,7 @@ export default function App() {
 
       setItineraryNodes((current) => sortNodes(current.map((candidate) => (candidate.id === savedNode.id ? savedNode : candidate))));
       populatePlannerEditor(savedNode);
-      setStatusMessage(`Saved planner row: ${savedNode.title}`);
+      setStatusMessage(`Saved step: ${savedNode.title}`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -897,11 +942,36 @@ export default function App() {
                   </View>
                 </ScrollView>
                 <View style={[styles.plannerEditor, isDark && styles.innerPanelDark]}>
+                  <View style={styles.editorHeaderRow}>
+                    <Text style={[styles.editorTitle, isDark && styles.textDark]}>{selectedPlannerNodeId ? 'Edit selected step' : 'Select a step to edit'}</Text>
+                    {selectedPlannerNodeId ? (
+                      <Pressable style={styles.clearButton} onPress={clearPlannerEditor} disabled={isLoading}>
+                        <Text style={styles.clearButtonText}>Clear</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                  <View style={styles.typeChipRow}>
+                    {(['lodging', 'camping', 'activity', 'gastronomy', 'transport', 'custom'] as ItineraryNodeType[]).map((type) => (
+                      <Pressable
+                        key={type}
+                        style={[styles.typeChip, plannerType === type && styles.typeChipActive]}
+                        onPress={() => setPlannerType(type)}
+                        disabled={isLoading}
+                      >
+                        <Text style={[styles.typeChipText, plannerType === type && styles.typeChipTextActive]}>{type}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
                   <View style={styles.actionRow}>
                     <TextInput value={plannerDate} onChangeText={setPlannerDate} placeholder="YYYY-MM-DD" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
                     <TextInput value={plannerTime} onChangeText={setPlannerTime} placeholder="HH:MM" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
                   </View>
                   <TextInput value={plannerTitle} onChangeText={setPlannerTitle} placeholder="Place, lodging, or activity" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.singleLineInput, isDark && styles.inputDark]} />
+                  <TextInput value={plannerPlace} onChangeText={setPlannerPlace} placeholder="Place name shown in sheet" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.singleLineInput, isDark && styles.inputDark]} />
+                  <View style={styles.actionRow}>
+                    <TextInput value={plannerLatitude} onChangeText={setPlannerLatitude} placeholder="Latitude" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} inputMode="decimal" />
+                    <TextInput value={plannerLongitude} onChangeText={setPlannerLongitude} placeholder="Longitude" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} inputMode="decimal" />
+                  </View>
                   <View style={styles.actionRow}>
                     <TextInput value={plannerCost} onChangeText={setPlannerCost} placeholder="Cost" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
                     <TextInput value={plannerHotelNote} onChangeText={setPlannerHotelNote} placeholder="Hotel / note" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
@@ -982,6 +1052,9 @@ export default function App() {
                         </View>
                         {itineraryNodes.length > 0 ? (
                           <View style={styles.stopActions}>
+                            <Pressable style={styles.secondarySmallButton} onPress={() => selectPlannerNode(node.id)} disabled={isLoading}>
+                              <Text style={styles.secondarySmallButtonText}>Edit</Text>
+                            </Pressable>
                             <Pressable style={styles.smallButton} onPress={() => void scheduleStop(node, 9)} disabled={isLoading}>
                               <Text style={styles.smallButtonText}>AM</Text>
                             </Pressable>
@@ -1691,6 +1764,59 @@ const styles = StyleSheet.create({
     borderColor: '#e6edf5',
     padding: 12,
   },
+  editorHeaderRow: {
+    minHeight: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  editorTitle: {
+    color: '#0a2540',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  clearButton: {
+    minHeight: 30,
+    justifyContent: 'center',
+    borderRadius: 999,
+    backgroundColor: '#e7ecff',
+    paddingHorizontal: 12,
+  },
+  clearButtonText: {
+    color: '#635bff',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  typeChipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  typeChip: {
+    minHeight: 32,
+    justifyContent: 'center',
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d7e1ea',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
+  },
+  typeChipActive: {
+    borderColor: '#635bff',
+    backgroundColor: '#635bff',
+  },
+  typeChipText: {
+    color: '#425466',
+    fontSize: 12,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  typeChipTextActive: {
+    color: '#ffffff',
+  },
   sectionTitle: {
     color: '#0a2540',
     fontSize: 18,
@@ -1883,6 +2009,17 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 8,
+  },
+  secondarySmallButton: {
+    backgroundColor: '#e7ecff',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  secondarySmallButtonText: {
+    color: '#635bff',
+    fontSize: 12,
+    fontWeight: '900',
   },
   dangerButton: {
     backgroundColor: '#df1b41',
