@@ -157,6 +157,7 @@ export default function App() {
 
   const displayedNodes = itineraryNodes.length > 0 ? itineraryNodes : demoNodes;
   const routeSummary = useMemo(() => estimateRouteSummary(displayedNodes), [displayedNodes]);
+  const dayPlans = useMemo(() => buildDayPlans(displayedNodes), [displayedNodes]);
 
   const totalSpend = useMemo(
     () => demoExpenses.reduce((sum, expense) => sum + (expense.baseAmount ?? expense.amount), 0),
@@ -501,6 +502,33 @@ export default function App() {
     }
   }
 
+  async function scheduleStop(node: ItineraryNode, hour: number) {
+    if (itineraryNodes.length === 0) {
+      setStatusMessage('Connect before scheduling demo stops.');
+      return;
+    }
+
+    setIsLoading(true);
+    setStatusMessage(`Scheduling ${node.title}...`);
+
+    try {
+      const scheduledAt = setNodeTime(node, hour);
+      const savedNode = await upsertItineraryNode({
+        ...node,
+        startsAt: scheduledAt,
+        updatedAt: new Date().toISOString(),
+        version: node.version + 1,
+      });
+
+      setItineraryNodes((current) => sortNodes(current.map((candidate) => (candidate.id === savedNode.id ? savedNode : candidate))));
+      setStatusMessage(`${savedNode.title} scheduled for ${formatTime(savedNode.startsAt)}.`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   async function createNodeFromPoi(poi: Poi): Promise<ItineraryNode> {
     if (!activeTripId || !userId) {
       throw new Error('Connect before saving a stop.');
@@ -675,21 +703,44 @@ export default function App() {
               </View>
 
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
-                <SectionTitle title="Timeline" dark={isDark} />
-                {displayedNodes.map((node, index) => (
-                  <View key={node.id} style={[styles.timelineItem, isDark && styles.innerPanelDark]}>
-                    <View style={[styles.nodeDot, { backgroundColor: nodeColor(node.type) }]} />
-                    <View style={styles.timelineCopy}>
-                      <Text style={[styles.itemTitle, isDark && styles.textDark]}>{index + 1}. {node.title}</Text>
-                      <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
-                        {node.type.toUpperCase()} / {node.notes ?? node.timezone ?? 'local time'}
-                      </Text>
+                <SectionTitle title="Day Planner" dark={isDark} />
+                {dayPlans.map((dayPlan) => (
+                  <View key={dayPlan.key} style={[styles.dayGroup, isDark && styles.innerPanelDark]}>
+                    <View style={styles.dayHeader}>
+                      <View>
+                        <Text style={[styles.dayTitle, isDark && styles.textDark]}>{dayPlan.title}</Text>
+                        <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
+                          {dayPlan.nodes.length} stops / {formatDistance(dayPlan.route.distanceMeters)} / {formatDuration(dayPlan.route.durationSeconds)}
+                        </Text>
+                      </View>
                     </View>
-                    {itineraryNodes.length > 0 ? (
-                      <Pressable style={styles.dangerButton} onPress={() => void removeStop(node.id)} disabled={isLoading}>
-                        <Text style={styles.smallButtonText}>Delete</Text>
-                      </Pressable>
-                    ) : null}
+                    {dayPlan.nodes.map((node, index) => (
+                      <View key={node.id} style={[styles.timelineItem, isDark && styles.innerPanelDark]}>
+                        <View style={styles.timeRail}>
+                          <Text style={[styles.timeText, isDark && styles.textDark]}>{formatTime(node.startsAt)}</Text>
+                          <View style={[styles.nodeDot, { backgroundColor: nodeColor(node.type) }]} />
+                        </View>
+                        <View style={styles.timelineCopy}>
+                          <Text style={[styles.itemTitle, isDark && styles.textDark]}>{index + 1}. {node.title}</Text>
+                          <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
+                            {node.type.toUpperCase()} / {node.notes ?? node.timezone ?? 'local time'}
+                          </Text>
+                        </View>
+                        {itineraryNodes.length > 0 ? (
+                          <View style={styles.stopActions}>
+                            <Pressable style={styles.smallButton} onPress={() => void scheduleStop(node, 9)} disabled={isLoading}>
+                              <Text style={styles.smallButtonText}>AM</Text>
+                            </Pressable>
+                            <Pressable style={styles.smallButton} onPress={() => void scheduleStop(node, 18)} disabled={isLoading}>
+                              <Text style={styles.smallButtonText}>PM</Text>
+                            </Pressable>
+                            <Pressable style={styles.dangerButton} onPress={() => void removeStop(node.id)} disabled={isLoading}>
+                              <Text style={styles.smallButtonText}>Delete</Text>
+                            </Pressable>
+                          </View>
+                        ) : null}
+                      </View>
+                    ))}
                   </View>
                 ))}
               </View>
@@ -728,7 +779,59 @@ function nodeColor(type: ItineraryNode['type']) {
 }
 
 function sortNodes(nodes: ItineraryNode[]): ItineraryNode[] {
-  return [...nodes].sort((a, b) => a.sortOrder - b.sortOrder);
+  return [...nodes].sort((a, b) => {
+    const timeA = a.startsAt ? new Date(a.startsAt).getTime() : Number.POSITIVE_INFINITY;
+    const timeB = b.startsAt ? new Date(b.startsAt).getTime() : Number.POSITIVE_INFINITY;
+
+    if (timeA !== timeB) {
+      return timeA - timeB;
+    }
+
+    return a.sortOrder - b.sortOrder;
+  });
+}
+
+type DayPlan = {
+  key: string;
+  title: string;
+  nodes: ItineraryNode[];
+  route: RouteSummary;
+};
+
+function buildDayPlans(nodes: ItineraryNode[]): DayPlan[] {
+  const sortedNodes = sortNodes(nodes);
+  const groups = new Map<string, ItineraryNode[]>();
+
+  sortedNodes.forEach((node) => {
+    const key = node.startsAt ? node.startsAt.slice(0, 10) : 'unscheduled';
+    groups.set(key, [...(groups.get(key) ?? []), node]);
+  });
+
+  return Array.from(groups.entries()).map(([key, groupNodes], index) => ({
+    key,
+    title: key === 'unscheduled' ? 'Unscheduled' : `Day ${index + 1} / ${formatDateLabel(key)}`,
+    nodes: groupNodes,
+    route: estimateRouteSummary(groupNodes),
+  }));
+}
+
+function formatDateLabel(dateKey: string): string {
+  const date = new Date(`${dateKey}T12:00:00`);
+  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date);
+}
+
+function formatTime(value?: string | null): string {
+  if (!value) {
+    return '--:--';
+  }
+
+  return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(new Date(value));
+}
+
+function setNodeTime(node: ItineraryNode, hour: number): string {
+  const baseDate = node.startsAt ? new Date(node.startsAt) : new Date();
+  baseDate.setHours(hour, 0, 0, 0);
+  return baseDate.toISOString();
 }
 
 function cryptoRandomId(): string {
@@ -871,6 +974,26 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '800',
   },
+  dayGroup: {
+    gap: 10,
+    backgroundColor: '#f8faf9',
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e7e5e4',
+    padding: 12,
+  },
+  dayHeader: {
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 2,
+  },
+  dayTitle: {
+    color: '#1c1917',
+    fontSize: 15,
+    fontWeight: '900',
+  },
   timelineItem: {
     minHeight: 74,
     flexDirection: 'row',
@@ -882,6 +1005,16 @@ const styles = StyleSheet.create({
     borderColor: '#e7e5e4',
     padding: 14,
   },
+  timeRail: {
+    width: 62,
+    alignItems: 'center',
+    gap: 8,
+  },
+  timeText: {
+    color: '#1c1917',
+    fontSize: 12,
+    fontWeight: '900',
+  },
   nodeDot: {
     width: 12,
     height: 12,
@@ -889,6 +1022,13 @@ const styles = StyleSheet.create({
   },
   timelineCopy: {
     flex: 1,
+  },
+  stopActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+    flexWrap: 'wrap',
   },
   itemTitle: {
     color: '#1c1917',
