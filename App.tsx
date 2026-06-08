@@ -138,6 +138,7 @@ export default function App() {
   const [command, setCommand] = useState('');
   const [statusMessage, setStatusMessage] = useState('Ready to connect Supabase.');
   const [isLoading, setIsLoading] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [shareCode, setShareCode] = useState('');
@@ -166,6 +167,7 @@ export default function App() {
   const { activeTripId, setActiveTrip, upsertTrip, upsertPoi: upsertPoiInStore } = useTripStore();
 
   const displayedNodes = itineraryNodes.length > 0 ? itineraryNodes : demoNodes;
+  const isDemoMode = !isEditMode;
   const routeSummary = useMemo(() => estimateRouteSummary(displayedNodes), [displayedNodes]);
   const dayPlans = useMemo(() => buildDayPlans(displayedNodes), [displayedNodes]);
   const plannerRows = useMemo(() => buildPlannerRows(displayedNodes), [displayedNodes]);
@@ -849,7 +851,7 @@ export default function App() {
             <Text style={[styles.title, isDark && styles.textDark]}>{demoTrip.name}</Text>
           </View>
           <View style={styles.navLinks}>
-            {['Plan', 'Route', 'Budget', 'Share'].map((item) => (
+            {['Route', 'Budget', 'Days'].map((item) => (
               <Text key={item} style={styles.navLink}>{item}</Text>
             ))}
           </View>
@@ -857,6 +859,9 @@ export default function App() {
             <View style={[styles.tripStatePill, activeTripId ? styles.tripStatePillActive : null]}>
               <Text style={[styles.tripStateText, activeTripId ? styles.tripStateTextActive : null]}>{activeTripId ? 'Synced' : 'Local'}</Text>
             </View>
+            <Pressable style={styles.modeButton} onPress={() => setIsEditMode((current) => !current)}>
+              <Text style={styles.modeButtonText}>{isEditMode ? 'Demo view' : 'Edit mode'}</Text>
+            </Pressable>
             <Pressable style={[styles.syncButton, isLoading && styles.disabledButton]} onPress={connectSupabaseTrip} disabled={isLoading}>
               <Text style={styles.syncButtonText}>{isLoading ? 'Wait' : activeTripId ? 'Refresh' : 'Connect'}</Text>
             </Pressable>
@@ -869,10 +874,10 @@ export default function App() {
             <View style={styles.heroPlaneTwo} />
             <View style={styles.heroPlaneThree} />
             <View style={styles.tripHeroCopy}>
-              <Text style={styles.heroEyebrow}>Route OS for roadtrips</Text>
-              <Text style={styles.heroTitle}>Plan the trip, route, budget, and campsite flow in one place.</Text>
+              <Text style={styles.heroEyebrow}>Roadtrip 2026</Text>
+              <Text style={styles.heroTitle}>En snygg reseplan med rutt, dagar och budget på samma plats.</Text>
               <Text style={styles.heroBody}>
-                A collaborative workspace for stops, lodging, activities, AI changes, and spreadsheet-style planning.
+                Importerad från vår planering, synkad i molnet och redo att justeras tillsammans.
               </Text>
               <View style={styles.heroCtas}>
                 <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={connectSupabaseTrip} disabled={isLoading}>
@@ -904,7 +909,23 @@ export default function App() {
             <Text style={[styles.statusText, isDark && styles.textMutedDark]}>{statusMessage}</Text>
           </View>
 
+          <View style={styles.demoActionBar}>
+            <View>
+              <Text style={styles.demoActionTitle}>Demo ready</Text>
+              <Text style={styles.demoActionText}>{activeTripId ? 'Planen är ansluten. Importera Excel-planen om den inte syns än.' : 'Tryck Connect innan du importerar den riktiga resplanen.'}</Text>
+            </View>
+            <View style={styles.demoActionButtons}>
+              <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={connectSupabaseTrip} disabled={isLoading}>
+                <Text style={styles.secondaryButtonText}>{activeTripId ? 'Refresh' : 'Connect'}</Text>
+              </Pressable>
+              <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={importReseplanrarePlan} disabled={isLoading || !activeTripId}>
+                <Text style={styles.commandButtonText}>Import Excel plan</Text>
+              </Pressable>
+            </View>
+          </View>
+
           <View style={styles.dashboardGrid}>
+            {!isDemoMode ? (
             <View style={styles.sidebarColumn}>
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
                 <SectionTitle title="Account" dark={isDark} />
@@ -970,6 +991,7 @@ export default function App() {
                 </View>
               </View>
             </View>
+            ) : null}
 
             <View style={styles.mainColumn}>
               <View style={styles.routeStage}>
@@ -1038,9 +1060,11 @@ export default function App() {
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
                 <View style={styles.sectionHeaderRow}>
                   <SectionTitle title="Planner Sheet" dark={isDark} />
-                  <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={importReseplanrarePlan} disabled={isLoading || !activeTripId}>
-                    <Text style={styles.secondaryButtonText}>Import Excel plan</Text>
-                  </Pressable>
+                  {!isDemoMode ? (
+                    <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={importReseplanrarePlan} disabled={isLoading || !activeTripId}>
+                      <Text style={styles.secondaryButtonText}>Import Excel plan</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   <View style={styles.sheetTable}>
@@ -1069,6 +1093,7 @@ export default function App() {
                     ))}
                   </View>
                 </ScrollView>
+                {!isDemoMode ? (
                 <View style={[styles.plannerEditor, isDark && styles.innerPanelDark]}>
                   <View style={styles.editorHeaderRow}>
                     <Text style={[styles.editorTitle, isDark && styles.textDark]}>{selectedPlannerNodeId ? 'Edit selected step' : 'Select a step to edit'}</Text>
@@ -1114,8 +1139,10 @@ export default function App() {
                     </Pressable>
                   </View>
                 </View>
+                ) : null}
               </View>
 
+              {!isDemoMode ? (
               <View style={styles.twoColumnGrid}>
                 <View style={[styles.panelSection, isDark && styles.panelDark]}>
                   <SectionTitle title="Places" dark={isDark} />
@@ -1158,6 +1185,7 @@ export default function App() {
                   </Pressable>
                 </View>
               </View>
+              ) : null}
 
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
                 <SectionTitle title="Day Planner" dark={isDark} />
@@ -1183,7 +1211,7 @@ export default function App() {
                             {node.type.toUpperCase()} / {node.notes ?? node.timezone ?? 'local time'}
                           </Text>
                         </View>
-                        {itineraryNodes.length > 0 ? (
+                        {itineraryNodes.length > 0 && !isDemoMode ? (
                           <View style={styles.stopActions}>
                             <Pressable style={styles.secondarySmallButton} onPress={() => selectPlannerNode(node.id)} disabled={isLoading}>
                               <Text style={styles.secondarySmallButtonText}>Edit</Text>
@@ -1704,6 +1732,21 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 13,
     fontWeight: '800',
+  },
+  modeButton: {
+    minHeight: 40,
+    justifyContent: 'center',
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d7e1ea',
+    backgroundColor: '#f6f9fc',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  modeButtonText: {
+    color: '#0a2540',
+    fontSize: 13,
+    fontWeight: '900',
   },
   mapShell: {
     height: 520,
@@ -2368,6 +2411,39 @@ const styles = StyleSheet.create({
     color: '#425466',
     fontSize: 13,
     fontWeight: '700',
+  },
+  demoActionBar: {
+    minHeight: 88,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 16,
+    flexWrap: 'wrap',
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d7e1ea',
+    backgroundColor: '#ffffff',
+    padding: 18,
+  },
+  demoActionTitle: {
+    color: '#0a2540',
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  demoActionText: {
+    maxWidth: 720,
+    color: '#425466',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  demoActionButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 10,
+    flexWrap: 'wrap',
   },
   placeItem: {
     minHeight: 68,
