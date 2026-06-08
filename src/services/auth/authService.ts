@@ -8,6 +8,10 @@ export async function getCurrentUser(): Promise<User | null> {
   } = await supabase.auth.getUser();
 
   if (error) {
+    if (error.message.toLowerCase().includes('auth session missing')) {
+      return null;
+    }
+
     throw error;
   }
 
@@ -40,6 +44,20 @@ export async function getOrCreateAnonymousUser(): Promise<User> {
   } = await supabase.auth.getUser();
 
   if (getUserError) {
+    if (getUserError.message.toLowerCase().includes('auth session missing')) {
+      const { data, error } = await supabase.auth.signInAnonymously();
+
+      if (error) {
+        throw error;
+      }
+
+      if (!data.user) {
+        throw new Error('Supabase did not return a user after anonymous sign-in.');
+      }
+
+      return data.user;
+    }
+
     throw getUserError;
   }
 
