@@ -6,7 +6,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  useColorScheme,
   View,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -134,8 +133,7 @@ const demoExpenses: Expense[] = [
 ];
 
 export default function App() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const isDark = false;
   const [command, setCommand] = useState('');
   const [statusMessage, setStatusMessage] = useState('Ready to connect Supabase.');
   const [isLoading, setIsLoading] = useState(false);
@@ -669,7 +667,32 @@ export default function App() {
         </View>
 
         <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
+          <View style={styles.tripHero}>
+            <View style={styles.tripHeroCopy}>
+              <Text style={styles.heroEyebrow}>Shared roadtrip planner</Text>
+              <Text style={styles.heroTitle}>Munich to Cortina, planned together.</Text>
+              <Text style={styles.heroBody}>
+                Keep stops, campsites, budget, notes, and route changes in one clean travel board.
+              </Text>
+            </View>
+            <View style={styles.heroStats}>
+              <View style={styles.heroStat}>
+                <Text style={styles.heroStatValue}>{displayedNodes.length}</Text>
+                <Text style={styles.heroStatLabel}>Stops</Text>
+              </View>
+              <View style={styles.heroStat}>
+                <Text style={styles.heroStatValue}>{formatDistance(routeSummary.distanceMeters)}</Text>
+                <Text style={styles.heroStatLabel}>Route</Text>
+              </View>
+              <View style={styles.heroStat}>
+                <Text style={styles.heroStatValue}>{formatDuration(routeSummary.durationSeconds)}</Text>
+                <Text style={styles.heroStatLabel}>Drive</Text>
+              </View>
+            </View>
+          </View>
+
           <View style={[styles.statusPanel, isDark && styles.panelDark]}>
+            <View style={styles.statusDot} />
             <Text style={[styles.statusText, isDark && styles.textMutedDark]}>{statusMessage}</Text>
           </View>
 
@@ -1072,11 +1095,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 32,
-    paddingVertical: 20,
-    backgroundColor: '#fbfaf7',
+    paddingHorizontal: 34,
+    paddingVertical: 18,
+    backgroundColor: '#fffaf1',
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#dfd8ce',
+    borderBottomColor: '#e8ddcc',
   },
   headerDark: {
     backgroundColor: '#0b0b0b',
@@ -1136,11 +1159,11 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   mapShell: {
-    height: 360,
+    height: 430,
     overflow: 'hidden',
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d8d0c4',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#b7d4cd',
     backgroundColor: '#101820',
   },
   content: {
@@ -1150,17 +1173,81 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 1500,
     alignSelf: 'center',
+    padding: 24,
+    gap: 16,
+  },
+  tripHero: {
+    minHeight: 176,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    justifyContent: 'space-between',
+    gap: 18,
+    borderRadius: 10,
+    backgroundColor: '#efe6d8',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#dacbb7',
     padding: 22,
-    gap: 14,
+  },
+  tripHeroCopy: {
+    flex: 1,
+    minWidth: 320,
+    justifyContent: 'center',
+    gap: 8,
+  },
+  heroEyebrow: {
+    color: '#0d6b5f',
+    fontSize: 12,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  heroTitle: {
+    color: '#201b16',
+    fontSize: 34,
+    lineHeight: 40,
+    fontWeight: '900',
+  },
+  heroBody: {
+    maxWidth: 680,
+    color: '#5c554c',
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: '700',
+  },
+  heroStats: {
+    width: 360,
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'stretch',
+  },
+  heroStat: {
+    flex: 1,
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: 8,
+    backgroundColor: '#fffaf1',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#dfd3c1',
+    padding: 14,
+  },
+  heroStatValue: {
+    color: '#201b16',
+    fontSize: 19,
+    fontWeight: '900',
+  },
+  heroStatLabel: {
+    color: '#6b6258',
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
   },
   dashboardGrid: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 16,
+    gap: 18,
     flexWrap: 'wrap',
   },
   sidebarColumn: {
-    width: 320,
+    width: 300,
     gap: 12,
   },
   mainColumn: {
@@ -1178,11 +1265,11 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 300,
     gap: 10,
-    backgroundColor: '#fbfaf7',
+    backgroundColor: '#fffaf1',
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#ddd5ca',
-    padding: 14,
+    borderColor: '#e0d4c1',
+    padding: 16,
   },
   statsRow: {
     flexDirection: 'row',
@@ -1412,12 +1499,20 @@ const styles = StyleSheet.create({
   },
   statusPanel: {
     minHeight: 44,
-    justifyContent: 'center',
-    backgroundColor: '#fbfaf7',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#fffaf1',
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#ddd5ca',
+    borderColor: '#e0d4c1',
     paddingHorizontal: 16,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#0d6b5f',
   },
   statusText: {
     color: '#57534e',
