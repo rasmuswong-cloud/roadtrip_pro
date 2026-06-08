@@ -1,4 +1,5 @@
 import type { Expense, ItineraryNode, Poi } from '@/models';
+import { upsertPoi } from '@/services/database/poiRepository';
 import { upsertExpense, upsertItineraryNode } from '@/services/database/tripRepository';
 import type { ItineraryMutationPlan } from './itineraryMutationSchema';
 
@@ -9,17 +10,24 @@ export type AppliedMutationResult = {
   warnings: string[];
 };
 
+type ApplyMutationOptions = {
+  confirmed?: boolean;
+  existingNodes?: ItineraryNode[];
+};
+
 export async function applyConfirmedMutationPlan(
   plan: ItineraryMutationPlan,
   actorId: string,
+  options: ApplyMutationOptions = {},
 ): Promise<AppliedMutationResult> {
-  if (plan.requiresConfirmation) {
+  if (plan.requiresConfirmation && !options.confirmed) {
     throw new Error('Mutation plan requires user confirmation before applying.');
   }
 
   const itineraryNodes: ItineraryNode[] = [];
   const expenses: Expense[] = [];
   const pois: Poi[] = [];
+  const warnings = [...plan.warnings];
 
   for (const mutation of plan.mutations) {
     if (mutation.type === 'create_itinerary_node') {
@@ -49,6 +57,16 @@ export async function applyConfirmedMutationPlan(
       itineraryNodes.push(await upsertItineraryNode(node));
     }
 
+    if (mutation.type === 'update_itinerary_node') {
+      const existingNode = options.existingNodes?.find((node) => node.id === mutation.nodeId);
+      if (!existingNode) {
+        warnings.push(`Skipped update for missing itinerary node ${mutation.nodeId}.`);
+        continue;
+      }
+
+      itineraryNodes.push(await upsertItineraryNode(applySafeNodePatch(existingNode, mutation.patch)));
+    }
+
     if (mutation.type === 'create_expense') {
       const now = new Date().toISOString();
       const expense: Expense = {
@@ -71,9 +89,87 @@ export async function applyConfirmedMutationPlan(
 
       expenses.push(await upsertExpense(expense));
     }
+
+    if (mutation.type === 'create_poi') {
+      const now = new Date().toISOString();
+      const poi: Poi = {
+        id: cryptoRandomId(),
+        tripId: mutation.tripId,
+        createdBy: actorId,
+        name: mutation.payload.name,
+        category: mutation.payload.category,
+        location: {
+          latitude: mutation.payload.latitude,
+          longitude: mutation.payload.longitude,
+        },
+        address: mutation.payload.address ?? null,
+        source: 'custom',
+        externalRef: `ai:${cryptoRandomId()}`,
+        rating: null,
+        openingHours: {},
+        contact: {},
+        imagery: [],
+        metadata: mutation.payload.metadata,
+        isPrivate: true,
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+        version: 1,
+      };
+
+      pois.push(await upsertPoi(poi));
+    }
   }
 
-  return { itineraryNodes, expenses, pois, warnings: plan.warnings };
+  return { itineraryNodes, expenses, pois, warnings };
+}
+
+function applySafeNodePatch(node: ItineraryNode, patch: Record<string, unknown>): ItineraryNode {
+  const next: ItineraryNode = {
+    ...node,
+    updatedAt: new Date().toISOString(),
+    version: node.version + 1,
+  };
+
+  if (typeof patch.title === 'string' && patch.title.trim()) {
+    next.title = patch.title.trim();
+  }
+
+  if (typeof patch.notes === 'string' || patch.notes === null) {
+    next.notes = patch.notes;
+  }
+
+  if (typeof patch.startsAt === 'string' || patch.startsAt === null) {
+    next.startsAt = patch.startsAt;
+  }
+
+  if (typeof patch.endsAt === 'string' || patch.endsAt === null) {
+    next.endsAt = patch.endsAt;
+  }
+
+  if (patch.location === null) {
+    next.location = null;
+  } else if (isCoordinates(patch.location)) {
+    next.location = patch.location;
+  }
+
+  return next;
+}
+
+function isCoordinates(value: unknown): value is NonNullable<ItineraryNode['location']> {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const maybeCoordinates = value as { latitude?: unknown; longitude?: unknown };
+  return (
+    typeof maybeCoordinates.latitude === 'number' &&
+    typeof maybeCoordinates.longitude === 'number' &&
+    maybeCoordinates.latitude >= -90 &&
+    maybeCoordinates.latitude <= 90 &&
+    maybeCoordinates.longitude >= -180 &&
+    maybeCoordinates.longitude <= 180
+  );
 }
 
 function cryptoRandomId(): string {

@@ -13,7 +13,9 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { NavigationMap } from '@/components/map/NavigationMap';
 import type { Expense, ItineraryNode, Poi, RouteSummary, Trip } from '@/models';
 import { getCurrentUser, getOrCreateAnonymousUser, sendMagicLink, signOut } from '@/services/auth/authService';
+import { applyConfirmedMutationPlan } from '@/services/ai/applyMutationPlan';
 import { parseItineraryCommand } from '@/services/ai/agent';
+import type { ItineraryMutationPlan } from '@/services/ai/itineraryMutationSchema';
 import { upsertPoi } from '@/services/database/poiRepository';
 import { ensureUserProfile } from '@/services/database/profileRepository';
 import {
@@ -145,6 +147,7 @@ export default function App() {
   const [placeResults, setPlaceResults] = useState<GooglePlace[]>([]);
   const [savedPois, setSavedPois] = useState<Poi[]>([]);
   const [itineraryNodes, setItineraryNodes] = useState<ItineraryNode[]>([]);
+  const [latestAiPlan, setLatestAiPlan] = useState<ItineraryMutationPlan | null>(null);
   const [stopName, setStopName] = useState('');
   const [stopAddress, setStopAddress] = useState('');
   const [stopLatitude, setStopLatitude] = useState('');
@@ -393,6 +396,7 @@ export default function App() {
 
     setIsLoading(true);
     setStatusMessage('Parsing command with AI...');
+    setLatestAiPlan(null);
 
     try {
       const plan = await parseItineraryCommand(command.trim(), {
@@ -415,10 +419,66 @@ export default function App() {
         },
       });
 
+      setLatestAiPlan(plan);
       const warningText = plan.warnings.length > 0 ? ` Warnings: ${plan.warnings.join(' ')}` : '';
       setStatusMessage(
         `AI plan: ${plan.reasoningSummary} (${plan.mutations.length} mutations, ${Math.round(plan.confidence * 100)}% confidence).${warningText}`,
       );
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function confirmAiPlan() {
+    if (!latestAiPlan) {
+      setStatusMessage('Parse an AI command before confirming.');
+      return;
+    }
+
+    if (!userId) {
+      setStatusMessage('Connect before confirming an AI plan.');
+      return;
+    }
+
+    if (latestAiPlan.mutations.length === 0) {
+      setStatusMessage('AI plan has no changes to apply.');
+      return;
+    }
+
+    setIsLoading(true);
+    setStatusMessage('Applying AI plan...');
+
+    try {
+      const result = await applyConfirmedMutationPlan(latestAiPlan, userId, {
+        confirmed: true,
+        existingNodes: itineraryNodes,
+      });
+
+      if (result.itineraryNodes.length > 0) {
+        setItineraryNodes((current) => {
+          const next = [...current];
+          result.itineraryNodes.forEach((node) => {
+            const index = next.findIndex((candidate) => candidate.id === node.id);
+            if (index >= 0) {
+              next[index] = node;
+            } else {
+              next.push(node);
+            }
+          });
+          return sortNodes(next);
+        });
+      }
+
+      if (result.pois.length > 0) {
+        result.pois.forEach(upsertPoiInStore);
+        setSavedPois((current) => [...result.pois, ...current.filter((poi) => !result.pois.some((savedPoi) => savedPoi.id === poi.id))]);
+      }
+
+      setLatestAiPlan(null);
+      const warningText = result.warnings.length > 0 ? ` Warnings: ${result.warnings.join(' ')}` : '';
+      setStatusMessage(`Applied AI plan: ${result.itineraryNodes.length} stops, ${result.expenses.length} expenses, ${result.pois.length} places.${warningText}`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -546,9 +606,16 @@ export default function App() {
                   style={[styles.commandInput, isDark && styles.inputDark]}
                   multiline
                 />
-                <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={parseAiCommand} disabled={isLoading}>
-                  <Text style={styles.commandButtonText}>Parse command</Text>
-                </Pressable>
+                <View style={styles.actionRow}>
+                  {latestAiPlan?.mutations.length ? (
+                    <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={confirmAiPlan} disabled={isLoading}>
+                      <Text style={styles.secondaryButtonText}>Confirm plan</Text>
+                    </Pressable>
+                  ) : null}
+                  <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={parseAiCommand} disabled={isLoading}>
+                    <Text style={styles.commandButtonText}>Parse command</Text>
+                  </Pressable>
+                </View>
               </View>
             </View>
 
