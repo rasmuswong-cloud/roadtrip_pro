@@ -1041,6 +1041,18 @@ export default function App() {
 
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
                 <View style={styles.sectionHeaderRow}>
+                  <SectionTitle title="Trip Overview" dark={isDark} />
+                  <Text style={styles.overviewMeta}>{dayPlans.length} days / {budgetSummary.warnings.length} smart flags</Text>
+                </View>
+                <View style={styles.dayOverviewGrid}>
+                  {dayPlans.map((dayPlan) => (
+                    <DayOverviewCard key={dayPlan.key} dayPlan={dayPlan} />
+                  ))}
+                </View>
+              </View>
+
+              <View style={[styles.panelSection, isDark && styles.panelDark]}>
+                <View style={styles.sectionHeaderRow}>
                   <SectionTitle title="Budget" dark={isDark} />
                   <Text style={styles.budgetTotal}>{formatSek(totalSpend)}</Text>
                 </View>
@@ -1197,6 +1209,11 @@ export default function App() {
                         <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
                           {dayPlan.nodes.length} stops / {formatDistance(dayPlan.route.distanceMeters)} / {formatDuration(dayPlan.route.durationSeconds)} / {formatSek(dayPlan.budget.total)}
                         </Text>
+                        <View style={styles.smartFlagList}>
+                          {(dayPlan.smartFlags.length > 0 ? dayPlan.smartFlags : ['Looks planned']).map((flag) => (
+                            <Text key={flag} style={[styles.smartFlag, flag === 'Looks planned' && styles.smartFlagGood]}>{flag}</Text>
+                          ))}
+                        </View>
                       </View>
                     </View>
                     {dayPlan.nodes.map((node, index) => (
@@ -1264,6 +1281,31 @@ function BudgetCard({ label, value, accent }: { label: string; value: number; ac
   );
 }
 
+function DayOverviewCard({ dayPlan }: { dayPlan: DayPlan }) {
+  const primaryStop = dayPlan.nodes[0]?.title ?? 'No stops yet';
+  const flags = dayPlan.smartFlags.length > 0 ? dayPlan.smartFlags : ['Looks planned'];
+
+  return (
+    <View style={styles.dayOverviewCard}>
+      <View style={styles.dayOverviewHeader}>
+        <Text style={styles.dayOverviewTitle}>{dayPlan.shortTitle}</Text>
+        <Text style={styles.dayOverviewCost}>{formatSek(dayPlan.budget.total)}</Text>
+      </View>
+      <Text style={styles.dayOverviewPrimary}>{primaryStop}</Text>
+      <View style={styles.dayOverviewStats}>
+        <Text style={styles.dayOverviewStat}>{dayPlan.nodes.length} stops</Text>
+        <Text style={styles.dayOverviewStat}>{formatDistance(dayPlan.route.distanceMeters)}</Text>
+        <Text style={styles.dayOverviewStat}>{formatDuration(dayPlan.route.durationSeconds)}</Text>
+      </View>
+      <View style={styles.smartFlagList}>
+        {flags.slice(0, 3).map((flag) => (
+          <Text key={flag} style={[styles.smartFlag, flag === 'Looks planned' && styles.smartFlagGood]}>{flag}</Text>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function SectionTitle({ title, dark }: { title: string; dark: boolean }) {
   return <Text style={[styles.sectionTitle, dark && styles.textDark]}>{title}</Text>;
 }
@@ -1302,9 +1344,11 @@ function nextSortOrder(nodes: ItineraryNode[]): number {
 type DayPlan = {
   key: string;
   title: string;
+  shortTitle: string;
   nodes: ItineraryNode[];
   route: RouteSummary;
   budget: BudgetSummary;
+  smartFlags: string[];
 };
 
 type BudgetCategories = {
@@ -1341,13 +1385,21 @@ function buildDayPlans(nodes: ItineraryNode[]): DayPlan[] {
     groups.set(key, [...(groups.get(key) ?? []), node]);
   });
 
-  return Array.from(groups.entries()).map(([key, groupNodes], index) => ({
-    key,
-    title: key === 'unscheduled' ? 'Unscheduled' : `Day ${index + 1} / ${formatDateLabel(key)}`,
-    nodes: groupNodes,
-    route: estimateRouteSummary(groupNodes),
-    budget: buildBudgetSummary(groupNodes),
-  }));
+  return Array.from(groups.entries()).map(([key, groupNodes], index) => {
+    const route = estimateRouteSummary(groupNodes);
+    const budget = buildBudgetSummary(groupNodes);
+    const title = key === 'unscheduled' ? 'Unscheduled' : `Day ${index + 1} / ${formatDateLabel(key)}`;
+
+    return {
+      key,
+      title,
+      shortTitle: key === 'unscheduled' ? 'Unscheduled' : `Day ${index + 1}`,
+      nodes: groupNodes,
+      route,
+      budget,
+      smartFlags: buildDaySmartFlags(groupNodes, route, budget),
+    };
+  });
 }
 
 function buildPlannerRows(nodes: ItineraryNode[]): PlannerRow[] {
@@ -1368,6 +1420,39 @@ function buildPlannerRows(nodes: ItineraryNode[]): PlannerRow[] {
 
 function formatNodeCost(node: ItineraryNode): string {
   return formatRawNodeCost(node);
+}
+
+function buildDaySmartFlags(nodes: ItineraryNode[], route: RouteSummary, budget: BudgetSummary): string[] {
+  const flags: string[] = [];
+  const hasLodging = nodes.some((node) => node.type === 'lodging' || node.type === 'camping');
+  const hasTimedStop = nodes.some((node) => Boolean(node.startsAt));
+  const driveHours = route.durationSeconds / 3600;
+
+  if (nodes.length === 0) {
+    flags.push('Empty day');
+  }
+
+  if (!hasLodging && nodes.length > 0) {
+    flags.push('Missing lodging');
+  }
+
+  if (budget.missingCostCount > 0) {
+    flags.push(`${budget.missingCostCount} costs missing`);
+  }
+
+  if (driveHours >= 5) {
+    flags.push('Long drive day');
+  }
+
+  if (budget.total >= 3000) {
+    flags.push('High spend day');
+  }
+
+  if (!hasTimedStop) {
+    flags.push('Needs schedule');
+  }
+
+  return flags;
 }
 
 function buildBudgetSummary(nodes: ItineraryNode[]): BudgetSummary {
@@ -2108,6 +2193,82 @@ const styles = StyleSheet.create({
     color: '#0a2540',
     fontSize: 18,
     fontWeight: '900',
+  },
+  overviewMeta: {
+    color: '#425466',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  dayOverviewGrid: {
+    flexDirection: 'row',
+    gap: 12,
+    flexWrap: 'wrap',
+  },
+  dayOverviewCard: {
+    flex: 1,
+    minWidth: 240,
+    gap: 10,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e6edf5',
+    backgroundColor: '#f6f9fc',
+    padding: 14,
+  },
+  dayOverviewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  dayOverviewTitle: {
+    color: '#635bff',
+    fontSize: 13,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  dayOverviewCost: {
+    color: '#0a2540',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  dayOverviewPrimary: {
+    color: '#0a2540',
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  dayOverviewStats: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  dayOverviewStat: {
+    color: '#425466',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  smartFlagList: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+    marginTop: 6,
+  },
+  smartFlag: {
+    color: '#7a4b00',
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    borderRadius: 999,
+    backgroundColor: '#fff7df',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#ffe3a3',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  smartFlagGood: {
+    color: '#076b4d',
+    backgroundColor: '#e7f8ef',
+    borderColor: '#b8ead1',
   },
   warningList: {
     gap: 8,
