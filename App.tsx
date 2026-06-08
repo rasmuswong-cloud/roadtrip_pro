@@ -149,6 +149,7 @@ export default function App() {
   const [itineraryNodes, setItineraryNodes] = useState<ItineraryNode[]>([]);
   const [latestAiPlan, setLatestAiPlan] = useState<ItineraryMutationPlan | null>(null);
   const [selectedPlannerNodeId, setSelectedPlannerNodeId] = useState<string | null>(null);
+  const [draftPlannerDayKey, setDraftPlannerDayKey] = useState<string | null>(null);
   const [plannerTitle, setPlannerTitle] = useState('');
   const [plannerType, setPlannerType] = useState<ItineraryNodeType>('custom');
   const [plannerPlace, setPlannerPlace] = useState('');
@@ -170,7 +171,6 @@ export default function App() {
   const isDemoMode = !isEditMode;
   const routeSummary = useMemo(() => estimateRouteSummary(displayedNodes), [displayedNodes]);
   const dayPlans = useMemo(() => buildDayPlans(displayedNodes), [displayedNodes]);
-  const displayedPlannerNodes = useMemo(() => sortNodes(displayedNodes), [displayedNodes]);
   const budgetSummary = useMemo(() => buildBudgetSummary(displayedNodes), [displayedNodes]);
   const totalSpend = budgetSummary.total;
 
@@ -608,6 +608,7 @@ export default function App() {
 
   function populatePlannerEditor(node: ItineraryNode) {
     setSelectedPlannerNodeId(node.id);
+    setDraftPlannerDayKey(null);
     setPlannerTitle(node.title);
     setPlannerType(node.type);
     setPlannerPlace(typeof node.metadata.place === 'string' ? node.metadata.place : '');
@@ -623,6 +624,7 @@ export default function App() {
 
   function clearPlannerEditor() {
     setSelectedPlannerNodeId(null);
+    setDraftPlannerDayKey(null);
     setPlannerTitle('');
     setPlannerType('custom');
     setPlannerPlace('');
@@ -635,15 +637,11 @@ export default function App() {
     setPlannerNotes('');
   }
 
-  function prepareInlineEdit(nodeId: string) {
-    if (selectedPlannerNodeId !== nodeId) {
-      selectPlannerNode(nodeId);
-    }
-  }
-
-  function addInlineRow() {
+  function startNewPlannerStep(dayKey: string) {
     clearPlannerEditor();
-    setStatusMessage('Fyll i den nya raden direkt i tabellen och tryck Lägg till.');
+    setDraftPlannerDayKey(dayKey);
+    setPlannerDate(dayKey === 'unscheduled' ? '' : dayKey);
+    setStatusMessage('Fyll i det nya steget direkt i dagen och tryck Lägg till.');
   }
 
   async function savePlannerEdit() {
@@ -784,14 +782,60 @@ export default function App() {
     }
   }
 
+  function renderPlannerInlineEditor(mode: 'edit' | 'new') {
+    return (
+      <View style={[styles.dayInlineEditor, isDark && styles.innerPanelDark]}>
+        <View style={styles.typeChipRow}>
+          {inlineNodeTypes.map((type) => (
+            <Pressable
+              key={type}
+              style={[styles.typeChip, plannerType === type && styles.typeChipActive]}
+              onPress={() => setPlannerType(type)}
+              disabled={isLoading}
+            >
+              <Text style={[styles.typeChipText, plannerType === type && styles.typeChipTextActive]}>{formatNodeType(type)}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <View style={styles.actionRow}>
+          <TextInput value={plannerDate} onChangeText={setPlannerDate} placeholder="ÅÅÅÅ-MM-DD" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
+          <TextInput value={plannerTime} onChangeText={setPlannerTime} placeholder="TT:MM" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
+        </View>
+        <TextInput value={plannerTitle} onChangeText={setPlannerTitle} placeholder="Plats, boende eller aktivitet" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.singleLineInput, isDark && styles.inputDark]} />
+        <View style={styles.actionRow}>
+          <TextInput value={plannerPlace} onChangeText={setPlannerPlace} placeholder="Plats" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
+          <TextInput value={plannerCost} onChangeText={setPlannerCost} placeholder="Kostnad" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
+        </View>
+        <TextInput value={plannerHotelNote} onChangeText={setPlannerHotelNote} placeholder="Hotell / bokning / notis" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.singleLineInput, isDark && styles.inputDark]} />
+        <TextInput value={plannerNotes} onChangeText={setPlannerNotes} placeholder="Anteckningar" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.commandInput, isDark && styles.inputDark]} multiline />
+        <View style={styles.advancedEditorGrid}>
+          <TextInput value={plannerLatitude} onChangeText={setPlannerLatitude} placeholder="Latitud" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} inputMode="decimal" />
+          <TextInput value={plannerLongitude} onChangeText={setPlannerLongitude} placeholder="Longitud" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} inputMode="decimal" />
+        </View>
+        <View style={styles.editorActionRow}>
+          <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={clearPlannerEditor} disabled={isLoading}>
+            <Text style={styles.secondaryButtonText}>Avbryt</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.commandButton, isLoading && styles.disabledButton]}
+            onPress={mode === 'new' ? addPlannerStep : savePlannerEdit}
+            disabled={isLoading || (mode === 'edit' && !selectedPlannerNodeId)}
+          >
+            <Text style={styles.commandButtonText}>{mode === 'new' ? 'Lägg till' : 'Spara'}</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
   async function importReseplanrarePlan() {
     if (!activeTripId || !userId) {
-      setStatusMessage('Anslut innan du importerar Excel-planen.');
+      setStatusMessage('Anslut innan du laddar resplanen.');
       return;
     }
 
     setIsLoading(true);
-    setStatusMessage('Importerar Excel-plan...');
+    setStatusMessage('Laddar resplan...');
 
     try {
       const existingRows = new Set(
@@ -802,7 +846,7 @@ export default function App() {
       const rowsToImport = reseplanrareSeedRows.filter((row) => !existingRows.has(row.sourceRow));
 
       if (rowsToImport.length === 0) {
-        setStatusMessage('Excel-planen är redan importerad.');
+        setStatusMessage('Resplanen är redan laddad.');
         return;
       }
 
@@ -812,7 +856,7 @@ export default function App() {
       }
 
       setItineraryNodes((current) => sortNodes([...current, ...importedNodes]));
-      setStatusMessage(`Importerade ${importedNodes.length} rader från Reseplanrare.xlsx. Idéplatser sparade: ${reseplanrareIdeaPlaces.length}.`);
+      setStatusMessage(`Laddade ${importedNodes.length} steg till dagplaneringen. Idéplatser sparade: ${reseplanrareIdeaPlaces.length}.`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -923,14 +967,14 @@ export default function App() {
           <View style={styles.demoActionBar}>
             <View>
               <Text style={styles.demoActionTitle}>Redo att visa</Text>
-              <Text style={styles.demoActionText}>{activeTripId ? 'Planen är ansluten. Importera Excel-planen om den inte syns än.' : 'Tryck Anslut innan du importerar den riktiga resplanen.'}</Text>
+              <Text style={styles.demoActionText}>{activeTripId ? 'Planen är ansluten. Ladda resplanen om den inte syns än.' : 'Tryck Anslut innan du laddar den riktiga resplanen.'}</Text>
             </View>
             <View style={styles.demoActionButtons}>
               <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={connectSupabaseTrip} disabled={isLoading}>
                 <Text style={styles.secondaryButtonText}>{activeTripId ? 'Uppdatera' : 'Anslut'}</Text>
               </Pressable>
               <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={importReseplanrarePlan} disabled={isLoading || !activeTripId}>
-                <Text style={styles.commandButtonText}>Importera Excel-plan</Text>
+                <Text style={styles.commandButtonText}>Ladda resplan</Text>
               </Pressable>
             </View>
           </View>
@@ -1080,212 +1124,6 @@ export default function App() {
                 </View>
               </View>
 
-              <View style={[styles.panelSection, isDark && styles.panelDark]}>
-                <View style={styles.sectionHeaderRow}>
-                  <SectionTitle title="Planeringstabell" dark={isDark} />
-                  {!isDemoMode ? (
-                    <View style={styles.headerActionRow}>
-                      <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={addInlineRow} disabled={isLoading}>
-                        <Text style={styles.secondaryButtonText}>Ny rad</Text>
-                      </Pressable>
-                      <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={importReseplanrarePlan} disabled={isLoading || !activeTripId}>
-                        <Text style={styles.secondaryButtonText}>Importera Excel-plan</Text>
-                      </Pressable>
-                    </View>
-                  ) : null}
-                </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View style={styles.sheetTable}>
-                    <View style={[styles.sheetRow, styles.sheetHeaderRow]}>
-                      {['Datum', 'Tid', 'Typ', 'Titel', 'Plats', 'Kostnad', 'Notis', 'Åtgärd'].map((header) => (
-                        <Text key={header} style={[styles.sheetHeaderCell, isDark && styles.textDark]}>{header}</Text>
-                      ))}
-                    </View>
-                    {displayedPlannerNodes.map((node) => {
-                      const isSelected = selectedPlannerNodeId === node.id;
-                      const dateValue = isSelected ? plannerDate : node.startsAt?.slice(0, 10) ?? '';
-                      const timeValue = isSelected ? plannerTime : node.startsAt ? toTimeInput(node.startsAt) : '';
-                      const typeValue = isSelected ? plannerType : node.type;
-                      const titleValue = isSelected ? plannerTitle : node.title;
-                      const placeValue = isSelected ? plannerPlace : typeof node.metadata.place === 'string' ? node.metadata.place : '';
-                      const costValue = isSelected ? plannerCost : formatRawNodeCost(node);
-                      const noteValue = (isSelected ? plannerHotelNote || plannerNotes : formatReservation(node) || node.notes) ?? '';
-
-                      return (
-                        <View
-                          key={node.id}
-                          style={[
-                            styles.sheetRow,
-                            isSelected && styles.sheetRowSelected,
-                            isDark && styles.innerPanelDark,
-                          ]}
-                        >
-                          <TextInput
-                            value={dateValue}
-                            onFocus={() => prepareInlineEdit(node.id)}
-                            onChangeText={(value) => {
-                              prepareInlineEdit(node.id);
-                              setPlannerDate(value);
-                            }}
-                            editable={!isDemoMode && !isLoading}
-                            placeholder="ÅÅÅÅ-MM-DD"
-                            placeholderTextColor={isDark ? '#737373' : '#78716c'}
-                            style={[styles.sheetInput, isDark && styles.inputDark]}
-                          />
-                          <TextInput
-                            value={timeValue}
-                            onFocus={() => prepareInlineEdit(node.id)}
-                            onChangeText={(value) => {
-                              prepareInlineEdit(node.id);
-                              setPlannerTime(value);
-                            }}
-                            editable={!isDemoMode && !isLoading}
-                            placeholder="TT:MM"
-                            placeholderTextColor={isDark ? '#737373' : '#78716c'}
-                            style={[styles.sheetInput, isDark && styles.inputDark]}
-                          />
-                          <Pressable
-                            style={[styles.sheetTypeButton, isSelected && styles.sheetTypeButtonActive]}
-                            onPress={() => {
-                              prepareInlineEdit(node.id);
-                              setPlannerType(nextNodeType(typeValue));
-                            }}
-                            disabled={isDemoMode || isLoading}
-                          >
-                            <Text style={[styles.sheetTypeButtonText, isSelected && styles.sheetTypeButtonTextActive]}>{formatNodeType(typeValue)}</Text>
-                          </Pressable>
-                          <TextInput
-                            value={titleValue}
-                            onFocus={() => prepareInlineEdit(node.id)}
-                            onChangeText={(value) => {
-                              prepareInlineEdit(node.id);
-                              setPlannerTitle(value);
-                            }}
-                            editable={!isDemoMode && !isLoading}
-                            placeholder="Titel"
-                            placeholderTextColor={isDark ? '#737373' : '#78716c'}
-                            style={[styles.sheetWideInput, isDark && styles.inputDark]}
-                          />
-                          <TextInput
-                            value={placeValue}
-                            onFocus={() => prepareInlineEdit(node.id)}
-                            onChangeText={(value) => {
-                              prepareInlineEdit(node.id);
-                              setPlannerPlace(value);
-                            }}
-                            editable={!isDemoMode && !isLoading}
-                            placeholder="Plats"
-                            placeholderTextColor={isDark ? '#737373' : '#78716c'}
-                            style={[styles.sheetInput, isDark && styles.inputDark]}
-                          />
-                          <TextInput
-                            value={costValue}
-                            onFocus={() => prepareInlineEdit(node.id)}
-                            onChangeText={(value) => {
-                              prepareInlineEdit(node.id);
-                              setPlannerCost(value);
-                            }}
-                            editable={!isDemoMode && !isLoading}
-                            placeholder="SEK"
-                            placeholderTextColor={isDark ? '#737373' : '#78716c'}
-                            style={[styles.sheetInput, isDark && styles.inputDark]}
-                          />
-                          <TextInput
-                            value={noteValue}
-                            onFocus={() => prepareInlineEdit(node.id)}
-                            onChangeText={(value) => {
-                              prepareInlineEdit(node.id);
-                              setPlannerHotelNote(value);
-                            }}
-                            editable={!isDemoMode && !isLoading}
-                            placeholder="Notis"
-                            placeholderTextColor={isDark ? '#737373' : '#78716c'}
-                            style={[styles.sheetWideInput, isDark && styles.inputDark]}
-                          />
-                          {!isDemoMode ? (
-                            <View style={styles.sheetActionCell}>
-                              <Pressable style={[styles.smallButton, isLoading && styles.disabledButton]} onPress={savePlannerEdit} disabled={isLoading || !isSelected}>
-                                <Text style={styles.smallButtonText}>Spara</Text>
-                              </Pressable>
-                              <Pressable style={styles.dangerButton} onPress={() => void removeStop(node.id)} disabled={isLoading}>
-                                <Text style={styles.smallButtonText}>Ta bort</Text>
-                              </Pressable>
-                            </View>
-                          ) : (
-                            <Text style={[styles.sheetCell, isDark && styles.textDark]}>Demo</Text>
-                          )}
-                        </View>
-                      );
-                    })}
-                    {!isDemoMode && !selectedPlannerNodeId ? (
-                      <View style={[styles.sheetRow, styles.sheetNewRow, isDark && styles.innerPanelDark]}>
-                        <TextInput value={plannerDate} onChangeText={setPlannerDate} placeholder="ÅÅÅÅ-MM-DD" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.sheetInput, isDark && styles.inputDark]} />
-                        <TextInput value={plannerTime} onChangeText={setPlannerTime} placeholder="TT:MM" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.sheetInput, isDark && styles.inputDark]} />
-                        <Pressable style={styles.sheetTypeButton} onPress={() => setPlannerType(nextNodeType(plannerType))} disabled={isLoading}>
-                          <Text style={styles.sheetTypeButtonText}>{formatNodeType(plannerType)}</Text>
-                        </Pressable>
-                        <TextInput value={plannerTitle} onChangeText={setPlannerTitle} placeholder="Ny titel" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.sheetWideInput, isDark && styles.inputDark]} />
-                        <TextInput value={plannerPlace} onChangeText={setPlannerPlace} placeholder="Plats" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.sheetInput, isDark && styles.inputDark]} />
-                        <TextInput value={plannerCost} onChangeText={setPlannerCost} placeholder="SEK" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.sheetInput, isDark && styles.inputDark]} />
-                        <TextInput value={plannerHotelNote} onChangeText={setPlannerHotelNote} placeholder="Notis" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.sheetWideInput, isDark && styles.inputDark]} />
-                        <View style={styles.sheetActionCell}>
-                          <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={addPlannerStep} disabled={isLoading}>
-                            <Text style={styles.commandButtonText}>Lägg till</Text>
-                          </Pressable>
-                        </View>
-                      </View>
-                    ) : null}
-                  </View>
-                </ScrollView>
-                {!isDemoMode ? (
-                <View style={[styles.plannerEditor, isDark && styles.innerPanelDark]}>
-                  <View style={styles.editorHeaderRow}>
-                    <Text style={[styles.editorTitle, isDark && styles.textDark]}>{selectedPlannerNodeId ? 'Redigera valt steg' : 'Välj ett steg att redigera'}</Text>
-                    {selectedPlannerNodeId ? (
-                      <Pressable style={styles.clearButton} onPress={clearPlannerEditor} disabled={isLoading}>
-                        <Text style={styles.clearButtonText}>Rensa</Text>
-                      </Pressable>
-                    ) : null}
-                  </View>
-                  <View style={styles.typeChipRow}>
-                    {(['lodging', 'camping', 'activity', 'gastronomy', 'transport', 'custom'] as ItineraryNodeType[]).map((type) => (
-                      <Pressable
-                        key={type}
-                        style={[styles.typeChip, plannerType === type && styles.typeChipActive]}
-                        onPress={() => setPlannerType(type)}
-                        disabled={isLoading}
-                      >
-                        <Text style={[styles.typeChipText, plannerType === type && styles.typeChipTextActive]}>{formatNodeType(type)}</Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                  <View style={styles.actionRow}>
-                    <TextInput value={plannerDate} onChangeText={setPlannerDate} placeholder="ÅÅÅÅ-MM-DD" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
-                    <TextInput value={plannerTime} onChangeText={setPlannerTime} placeholder="TT:MM" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
-                  </View>
-                  <TextInput value={plannerTitle} onChangeText={setPlannerTitle} placeholder="Plats, boende eller aktivitet" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.singleLineInput, isDark && styles.inputDark]} />
-                  <TextInput value={plannerPlace} onChangeText={setPlannerPlace} placeholder="Platsnamn i tabellen" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.singleLineInput, isDark && styles.inputDark]} />
-                  <View style={styles.actionRow}>
-                    <TextInput value={plannerLatitude} onChangeText={setPlannerLatitude} placeholder="Latitud" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} inputMode="decimal" />
-                    <TextInput value={plannerLongitude} onChangeText={setPlannerLongitude} placeholder="Longitud" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} inputMode="decimal" />
-                  </View>
-                  <View style={styles.actionRow}>
-                    <TextInput value={plannerCost} onChangeText={setPlannerCost} placeholder="Kostnad" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
-                    <TextInput value={plannerHotelNote} onChangeText={setPlannerHotelNote} placeholder="Hotell / notis" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
-                  </View>
-                  <TextInput value={plannerNotes} onChangeText={setPlannerNotes} placeholder="Anteckningar" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.commandInput, isDark && styles.inputDark]} multiline />
-                  <View style={styles.editorActionRow}>
-                    <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={addPlannerStep} disabled={isLoading}>
-                      <Text style={styles.secondaryButtonText}>Lägg till steg</Text>
-                    </Pressable>
-                    <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={savePlannerEdit} disabled={isLoading || !selectedPlannerNodeId}>
-                      <Text style={styles.commandButtonText}>Spara rad</Text>
-                    </Pressable>
-                  </View>
-                </View>
-                ) : null}
-              </View>
-
               {!isDemoMode ? (
               <View style={styles.twoColumnGrid}>
                 <View style={[styles.panelSection, isDark && styles.panelDark]}>
@@ -1332,7 +1170,25 @@ export default function App() {
               ) : null}
 
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
-                <SectionTitle title="Dagplanering" dark={isDark} />
+                <View style={styles.sectionHeaderRow}>
+                  <SectionTitle title="Dagplanering" dark={isDark} />
+                  {!isDemoMode ? (
+                    <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={() => startNewPlannerStep('unscheduled')} disabled={isLoading}>
+                      <Text style={styles.secondaryButtonText}>Nytt oschemalagt steg</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+                {draftPlannerDayKey === 'unscheduled' ? (
+                  <View style={[styles.dayGroup, isDark && styles.innerPanelDark]}>
+                    <View style={styles.dayHeader}>
+                      <View>
+                        <Text style={[styles.dayTitle, isDark && styles.textDark]}>Oschemalagt</Text>
+                        <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>Nytt steg utan datum</Text>
+                      </View>
+                    </View>
+                    {renderPlannerInlineEditor('new')}
+                  </View>
+                ) : null}
                 {dayPlans.map((dayPlan) => (
                   <View key={dayPlan.key} style={[styles.dayGroup, isDark && styles.innerPanelDark]}>
                     <View style={styles.dayHeader}>
@@ -1347,41 +1203,55 @@ export default function App() {
                           ))}
                         </View>
                       </View>
+                      {!isDemoMode ? (
+                        <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={() => startNewPlannerStep(dayPlan.key)} disabled={isLoading}>
+                          <Text style={styles.commandButtonText}>Nytt steg</Text>
+                        </Pressable>
+                      ) : null}
                     </View>
+                    {draftPlannerDayKey === dayPlan.key ? renderPlannerInlineEditor('new') : null}
                     {dayPlan.nodes.map((node, index) => (
                       <View key={node.id} style={[styles.timelineItem, isDark && styles.innerPanelDark]}>
                         <View style={styles.timeRail}>
                           <Text style={[styles.timeText, isDark && styles.textDark]}>{formatTime(node.startsAt)}</Text>
                           <View style={[styles.nodeDot, { backgroundColor: nodeColor(node.type) }]} />
                         </View>
-                        <View style={styles.timelineCopy}>
-                          <Text style={[styles.itemTitle, isDark && styles.textDark]}>{index + 1}. {node.title}</Text>
-                          <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
-                            {formatNodeType(node.type)} / {node.notes ?? node.timezone ?? 'lokal tid'}
-                          </Text>
-                        </View>
-                        {itineraryNodes.length > 0 && !isDemoMode ? (
-                          <View style={styles.stopActions}>
-                            <Pressable style={styles.secondarySmallButton} onPress={() => selectPlannerNode(node.id)} disabled={isLoading}>
-                            <Text style={styles.secondarySmallButtonText}>Redigera</Text>
-                            </Pressable>
-                            <Pressable style={styles.secondarySmallButton} onPress={() => void moveStop(node.id, -1)} disabled={isLoading}>
-                              <Text style={styles.secondarySmallButtonText}>Upp</Text>
-                            </Pressable>
-                            <Pressable style={styles.secondarySmallButton} onPress={() => void moveStop(node.id, 1)} disabled={isLoading}>
-                              <Text style={styles.secondarySmallButtonText}>Ner</Text>
-                            </Pressable>
-                            <Pressable style={styles.smallButton} onPress={() => void scheduleStop(node, 9)} disabled={isLoading}>
-                              <Text style={styles.smallButtonText}>AM</Text>
-                            </Pressable>
-                            <Pressable style={styles.smallButton} onPress={() => void scheduleStop(node, 18)} disabled={isLoading}>
-                              <Text style={styles.smallButtonText}>PM</Text>
-                            </Pressable>
-                            <Pressable style={styles.dangerButton} onPress={() => void removeStop(node.id)} disabled={isLoading}>
-                              <Text style={styles.smallButtonText}>Ta bort</Text>
-                            </Pressable>
+                        {selectedPlannerNodeId === node.id && !isDemoMode ? (
+                          <View style={styles.timelineCopy}>
+                            {renderPlannerInlineEditor('edit')}
                           </View>
-                        ) : null}
+                        ) : (
+                          <>
+                            <View style={styles.timelineCopy}>
+                              <Text style={[styles.itemTitle, isDark && styles.textDark]}>{index + 1}. {node.title}</Text>
+                              <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
+                                {formatNodeType(node.type)} / {formatNodeCostSummary(node)}
+                              </Text>
+                            </View>
+                            {itineraryNodes.length > 0 && !isDemoMode ? (
+                              <View style={styles.stopActions}>
+                                <Pressable style={styles.secondarySmallButton} onPress={() => selectPlannerNode(node.id)} disabled={isLoading}>
+                                  <Text style={styles.secondarySmallButtonText}>Redigera</Text>
+                                </Pressable>
+                                <Pressable style={styles.secondarySmallButton} onPress={() => void moveStop(node.id, -1)} disabled={isLoading}>
+                                  <Text style={styles.secondarySmallButtonText}>Upp</Text>
+                                </Pressable>
+                                <Pressable style={styles.secondarySmallButton} onPress={() => void moveStop(node.id, 1)} disabled={isLoading}>
+                                  <Text style={styles.secondarySmallButtonText}>Ner</Text>
+                                </Pressable>
+                                <Pressable style={styles.smallButton} onPress={() => void scheduleStop(node, 9)} disabled={isLoading}>
+                                  <Text style={styles.smallButtonText}>AM</Text>
+                                </Pressable>
+                                <Pressable style={styles.smallButton} onPress={() => void scheduleStop(node, 18)} disabled={isLoading}>
+                                  <Text style={styles.smallButtonText}>PM</Text>
+                                </Pressable>
+                                <Pressable style={styles.dangerButton} onPress={() => void removeStop(node.id)} disabled={isLoading}>
+                                  <Text style={styles.smallButtonText}>Ta bort</Text>
+                                </Pressable>
+                              </View>
+                            ) : null}
+                          </>
+                        )}
                       </View>
                     ))}
                   </View>
@@ -1476,12 +1346,12 @@ function formatNodeType(type: ItineraryNode['type']): string {
   }
 }
 
-const inlineNodeTypes: ItineraryNodeType[] = ['lodging', 'camping', 'activity', 'gastronomy', 'transport', 'custom'];
-
-function nextNodeType(type: ItineraryNodeType): ItineraryNodeType {
-  const index = inlineNodeTypes.indexOf(type);
-  return inlineNodeTypes[(index + 1) % inlineNodeTypes.length] ?? 'custom';
+function formatNodeCostSummary(node: ItineraryNode): string {
+  const parts = [formatRawNodeCost(node), formatReservation(node), node.notes ?? node.timezone ?? 'lokal tid'].filter(Boolean);
+  return parts.join(' / ');
 }
+
+const inlineNodeTypes: ItineraryNodeType[] = ['lodging', 'camping', 'activity', 'gastronomy', 'transport', 'custom'];
 
 function sortNodes(nodes: ItineraryNode[]): ItineraryNode[] {
   return [...nodes].sort((a, b) => {
@@ -1774,8 +1644,8 @@ function buildNodeFromSeedRow(row: ReseplanrareSeedRow, tripId: string, userId: 
   const notes = [
     row.activity && row.place !== row.activity ? `Plats: ${row.place}` : null,
     row.hotel ? `Hotell/notis: ${row.hotel}` : null,
-    costParts.length ? `Kostnad från Excel: ${costParts.join(' + ')} SEK` : null,
-    `Importerad från Reseplanrare.xlsx rad ${row.sourceRow}`,
+    costParts.length ? `Kostnad från underlag: ${costParts.join(' + ')} SEK` : null,
+    `Laddad från resplanens underlag rad ${row.sourceRow}`,
   ].filter(Boolean).join('\n');
 
   return {
@@ -2415,150 +2285,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
-  sheetTable: {
-    minWidth: 1180,
-    gap: 4,
-  },
-  sheetRow: {
-    minHeight: 40,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#ffffff',
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#e6edf5',
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  sheetRowSelected: {
-    borderColor: '#635bff',
-    borderWidth: 2,
-    backgroundColor: '#f2f4ff',
-  },
-  sheetHeaderRow: {
-    minHeight: 36,
-    backgroundColor: '#f6f9fc',
-  },
-  sheetHeaderCell: {
-    width: 120,
-    color: '#0a2540',
-    fontSize: 12,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-  },
-  sheetCell: {
-    width: 120,
-    color: '#0a2540',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  sheetWideCell: {
-    width: 220,
-    color: '#0a2540',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  sheetInput: {
-    width: 120,
-    minHeight: 34,
-    color: '#0a2540',
-    fontSize: 13,
-    fontWeight: '800',
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d7e1ea',
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  sheetWideInput: {
-    width: 180,
-    minHeight: 34,
-    color: '#0a2540',
-    fontSize: 13,
-    fontWeight: '800',
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d7e1ea',
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  sheetTypeButton: {
-    width: 120,
-    minHeight: 34,
-    justifyContent: 'center',
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d7e1ea',
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 10,
-  },
-  sheetTypeButtonActive: {
-    borderColor: '#635bff',
-    backgroundColor: '#635bff',
-  },
-  sheetTypeButtonText: {
-    color: '#425466',
-    fontSize: 12,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    textAlign: 'center',
-  },
-  sheetTypeButtonTextActive: {
-    color: '#ffffff',
-  },
-  sheetActionCell: {
-    width: 150,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  sheetNewRow: {
-    borderStyle: 'dashed',
-    borderColor: '#635bff',
-    backgroundColor: '#f7f8ff',
-  },
-  plannerEditor: {
-    gap: 10,
-    backgroundColor: '#f6f9fc',
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#e6edf5',
-    padding: 12,
-  },
   editorActionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: 10,
     flexWrap: 'wrap',
-  },
-  editorHeaderRow: {
-    minHeight: 34,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    flexWrap: 'wrap',
-  },
-  editorTitle: {
-    color: '#0a2540',
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  clearButton: {
-    minHeight: 30,
-    justifyContent: 'center',
-    borderRadius: 999,
-    backgroundColor: '#e7ecff',
-    paddingHorizontal: 12,
-  },
-  clearButtonText: {
-    color: '#635bff',
-    fontSize: 12,
-    fontWeight: '900',
   },
   typeChipRow: {
     flexDirection: 'row',
@@ -2601,13 +2333,6 @@ const styles = StyleSheet.create({
     gap: 12,
     flexWrap: 'wrap',
   },
-  headerActionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 10,
-    flexWrap: 'wrap',
-  },
   dayGroup: {
     gap: 10,
     backgroundColor: '#f6f9fc',
@@ -2615,6 +2340,20 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#e6edf5',
     padding: 12,
+  },
+  dayInlineEditor: {
+    gap: 10,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d7e1ea',
+    backgroundColor: '#ffffff',
+    padding: 12,
+  },
+  advancedEditorGrid: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexWrap: 'wrap',
   },
   dayHeader: {
     minHeight: 42,
