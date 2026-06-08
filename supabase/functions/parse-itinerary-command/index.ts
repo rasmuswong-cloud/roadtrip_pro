@@ -12,8 +12,43 @@ Rules:
 - Do not invent bookings, purchases, ratings, or live availability.
 - Prefer requiresConfirmation=true when a mutation affects time, budget, route, or lodging.
 - Include warnings when timing, budget, opening hours, distance, or offline constraints may be risky.
+- Use only these mutation type values: create_itinerary_node, create_expense, update_itinerary_node, create_poi.
+- If the user only greets you, asks a question, or gives an unclear request, return mutations=[].
 - Never output executable code.
 `;
+
+const responseJsonSchema = {
+  type: 'object',
+  properties: {
+    reasoningSummary: { type: 'string' },
+    confidence: { type: 'number' },
+    mutations: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          type: {
+            type: 'string',
+            enum: ['create_itinerary_node', 'create_expense', 'update_itinerary_node', 'create_poi'],
+          },
+          tripId: { type: 'string' },
+          nodeId: { type: 'string' },
+          payload: { type: 'object' },
+          patch: { type: 'object' },
+        },
+        required: ['type', 'tripId'],
+      },
+    },
+    warnings: {
+      type: 'array',
+      items: { type: 'string' },
+    },
+    requiresConfirmation: { type: 'boolean' },
+  },
+  required: ['reasoningSummary', 'confidence', 'mutations', 'warnings', 'requiresConfirmation'],
+};
+
+const allowedMutationTypes = new Set(['create_itinerary_node', 'create_expense', 'update_itinerary_node', 'create_poi']);
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
@@ -73,7 +108,8 @@ Deno.serve(async (request) => {
                   outputSchemaHint: {
                     reasoningSummary: 'short explanation',
                     confidence: '0..1',
-                    mutations: 'array of typed app mutations',
+                    mutations:
+                      'array of typed app mutations; type must be exactly one of create_itinerary_node, create_expense, update_itinerary_node, create_poi',
                     warnings: 'array of proactive warnings',
                     requiresConfirmation: 'boolean',
                   },
@@ -84,6 +120,7 @@ Deno.serve(async (request) => {
         ],
         generationConfig: {
           responseMimeType: 'application/json',
+          responseJsonSchema,
           temperature: 0.2,
         },
       }),
@@ -100,7 +137,7 @@ Deno.serve(async (request) => {
       return jsonResponse({ error: 'AI agent returned an empty response.' }, 502);
     }
 
-    return jsonResponse(JSON.parse(content));
+    return jsonResponse(normalizeMutationPlan(JSON.parse(content)));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return jsonResponse({ error: message }, 500);
@@ -115,6 +152,26 @@ function jsonResponse(body: unknown, status = 200) {
       'Content-Type': 'application/json',
     },
   });
+}
+
+function normalizeMutationPlan(plan: Record<string, unknown>) {
+  const warnings = Array.isArray(plan.warnings) ? plan.warnings.filter((warning) => typeof warning === 'string') : [];
+  const mutations = Array.isArray(plan.mutations) ? plan.mutations : [];
+  const validMutations = mutations.filter((mutation): mutation is Record<string, unknown> => {
+    return typeof mutation === 'object' && mutation !== null && allowedMutationTypes.has(String((mutation as { type?: unknown }).type));
+  });
+
+  if (validMutations.length !== mutations.length) {
+    warnings.push('AI returned an unsupported mutation type, so it was ignored.');
+  }
+
+  return {
+    reasoningSummary: typeof plan.reasoningSummary === 'string' ? plan.reasoningSummary : 'AI returned a draft plan.',
+    confidence: typeof plan.confidence === 'number' ? Math.max(0, Math.min(1, plan.confidence)) : 0.4,
+    mutations: validMutations,
+    warnings,
+    requiresConfirmation: typeof plan.requiresConfirmation === 'boolean' ? plan.requiresConfirmation : true,
+  };
 }
 
 function getSupabasePublishableKey(): string | null {
