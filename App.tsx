@@ -546,6 +546,58 @@ export default function App() {
     }
   }
 
+  async function moveStop(nodeId: string, direction: -1 | 1) {
+    if (itineraryNodes.length === 0) {
+      setStatusMessage('Connect before reordering demo stops.');
+      return;
+    }
+
+    const orderedNodes = sortNodes(itineraryNodes);
+    const currentIndex = orderedNodes.findIndex((node) => node.id === nodeId);
+    const targetIndex = currentIndex + direction;
+    const currentNode = orderedNodes[currentIndex];
+    const targetNode = orderedNodes[targetIndex];
+
+    if (!currentNode || !targetNode) {
+      setStatusMessage(direction < 0 ? 'Step is already first.' : 'Step is already last.');
+      return;
+    }
+
+    setIsLoading(true);
+    setStatusMessage(`Moving ${currentNode.title}...`);
+
+    try {
+      const now = new Date().toISOString();
+      const updatedCurrent = await upsertItineraryNode({
+        ...currentNode,
+        sortOrder: targetNode.sortOrder,
+        updatedAt: now,
+        version: currentNode.version + 1,
+      });
+      const updatedTarget = await upsertItineraryNode({
+        ...targetNode,
+        sortOrder: currentNode.sortOrder,
+        updatedAt: now,
+        version: targetNode.version + 1,
+      });
+
+      setItineraryNodes((current) => sortNodes(current.map((node) => {
+        if (node.id === updatedCurrent.id) {
+          return updatedCurrent;
+        }
+        if (node.id === updatedTarget.id) {
+          return updatedTarget;
+        }
+        return node;
+      })));
+      setStatusMessage(`Moved step: ${updatedCurrent.title}`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   function selectPlannerNode(nodeId: string) {
     const node = displayedNodes.find((candidate) => candidate.id === nodeId);
     if (!node) {
@@ -654,6 +706,67 @@ export default function App() {
       setItineraryNodes((current) => sortNodes(current.map((candidate) => (candidate.id === savedNode.id ? savedNode : candidate))));
       populatePlannerEditor(savedNode);
       setStatusMessage(`Saved step: ${savedNode.title}`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function addPlannerStep() {
+    if (!activeTripId || !userId) {
+      setStatusMessage('Connect before adding a step.');
+      return;
+    }
+
+    if (!plannerTitle.trim()) {
+      setStatusMessage('New step needs a title.');
+      return;
+    }
+
+    setIsLoading(true);
+    setStatusMessage('Adding step...');
+
+    try {
+      const latitude = plannerLatitude.trim() ? Number(plannerLatitude.replace(',', '.')) : null;
+      const longitude = plannerLongitude.trim() ? Number(plannerLongitude.replace(',', '.')) : null;
+
+      if ((latitude === null) !== (longitude === null) || (latitude !== null && (Number.isNaN(latitude) || Number.isNaN(longitude)))) {
+        setStatusMessage('Use both valid latitude and longitude, or leave both blank.');
+        return;
+      }
+
+      const now = new Date().toISOString();
+      const savedNode = await upsertItineraryNode({
+        id: cryptoRandomId(),
+        tripId: activeTripId,
+        createdBy: userId,
+        type: plannerType,
+        title: plannerTitle.trim(),
+        startsAt: buildIsoFromInputs(plannerDate, plannerTime),
+        endsAt: null,
+        timezone: plannerDate.trim() ? 'Europe/Rome' : null,
+        location: latitude !== null && longitude !== null ? { latitude, longitude } : null,
+        notes: plannerNotes.trim() || null,
+        sortOrder: nextSortOrder(itineraryNodes),
+        transportMode: 'driving',
+        reservation: plannerHotelNote.trim() ? { provider: plannerHotelNote.trim() } : {},
+        equipment: [],
+        facilities: {},
+        metadata: {
+          source: 'planner',
+          place: plannerPlace.trim() || null,
+          cost: plannerCost.trim() || null,
+        },
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+        version: 1,
+      });
+
+      setItineraryNodes((current) => sortNodes([...current, savedNode]));
+      populatePlannerEditor(savedNode);
+      setStatusMessage(`Added step: ${savedNode.title}`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -977,9 +1090,14 @@ export default function App() {
                     <TextInput value={plannerHotelNote} onChangeText={setPlannerHotelNote} placeholder="Hotel / note" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
                   </View>
                   <TextInput value={plannerNotes} onChangeText={setPlannerNotes} placeholder="Notes" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.commandInput, isDark && styles.inputDark]} multiline />
-                  <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={savePlannerEdit} disabled={isLoading || !selectedPlannerNodeId}>
-                    <Text style={styles.commandButtonText}>Save row</Text>
-                  </Pressable>
+                  <View style={styles.editorActionRow}>
+                    <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={addPlannerStep} disabled={isLoading}>
+                      <Text style={styles.secondaryButtonText}>Add step</Text>
+                    </Pressable>
+                    <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={savePlannerEdit} disabled={isLoading || !selectedPlannerNodeId}>
+                      <Text style={styles.commandButtonText}>Save row</Text>
+                    </Pressable>
+                  </View>
                 </View>
               </View>
 
@@ -1055,6 +1173,12 @@ export default function App() {
                             <Pressable style={styles.secondarySmallButton} onPress={() => selectPlannerNode(node.id)} disabled={isLoading}>
                               <Text style={styles.secondarySmallButtonText}>Edit</Text>
                             </Pressable>
+                            <Pressable style={styles.secondarySmallButton} onPress={() => void moveStop(node.id, -1)} disabled={isLoading}>
+                              <Text style={styles.secondarySmallButtonText}>Up</Text>
+                            </Pressable>
+                            <Pressable style={styles.secondarySmallButton} onPress={() => void moveStop(node.id, 1)} disabled={isLoading}>
+                              <Text style={styles.secondarySmallButtonText}>Down</Text>
+                            </Pressable>
                             <Pressable style={styles.smallButton} onPress={() => void scheduleStop(node, 9)} disabled={isLoading}>
                               <Text style={styles.smallButtonText}>AM</Text>
                             </Pressable>
@@ -1116,6 +1240,11 @@ function sortNodes(nodes: ItineraryNode[]): ItineraryNode[] {
 
     return a.sortOrder - b.sortOrder;
   });
+}
+
+function nextSortOrder(nodes: ItineraryNode[]): number {
+  const maxSortOrder = nodes.reduce((max, node) => Math.max(max, node.sortOrder), 0);
+  return maxSortOrder + 100;
 }
 
 type DayPlan = {
@@ -1763,6 +1892,13 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#e6edf5',
     padding: 12,
+  },
+  editorActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 10,
+    flexWrap: 'wrap',
   },
   editorHeaderRow: {
     minHeight: 34,
