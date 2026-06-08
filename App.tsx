@@ -13,6 +13,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { NavigationMap } from '@/components/map/NavigationMap';
 import type { Expense, ItineraryNode, Poi, RouteSummary, Trip } from '@/models';
 import { getCurrentUser, sendMagicLink, signOut } from '@/services/auth/authService';
+import { parseItineraryCommand } from '@/services/ai/agent';
 import { upsertPoi } from '@/services/database/poiRepository';
 import { ensureUserProfile } from '@/services/database/profileRepository';
 import {
@@ -382,6 +383,52 @@ export default function App() {
     }
   }
 
+  async function parseAiCommand() {
+    if (!activeTripId) {
+      setStatusMessage('Connect to a trip before using AI.');
+      return;
+    }
+
+    if (!command.trim()) {
+      setStatusMessage('Type an AI command first.');
+      return;
+    }
+
+    setIsLoading(true);
+    setStatusMessage('Parsing command with AI...');
+
+    try {
+      const plan = await parseItineraryCommand(command.trim(), {
+        tripId: activeTripId,
+        userTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        currentIsoTime: new Date().toISOString(),
+        tripSnapshot: {
+          nodes: displayedNodes.map((node) => ({
+            id: node.id,
+            title: node.title,
+            type: node.type,
+            startsAt: node.startsAt,
+            endsAt: node.endsAt,
+            location: node.location,
+          })),
+          route: {
+            distanceMeters: routeSummary.distanceMeters,
+            durationSeconds: routeSummary.durationSeconds,
+          },
+        },
+      });
+
+      const warningText = plan.warnings.length > 0 ? ` Warnings: ${plan.warnings.join(' ')}` : '';
+      setStatusMessage(
+        `AI plan: ${plan.reasoningSummary} (${plan.mutations.length} mutations, ${Math.round(plan.confidence * 100)}% confidence).${warningText}`,
+      );
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   async function removeStop(nodeId: string) {
     setIsLoading(true);
     setStatusMessage('Removing stop...');
@@ -502,7 +549,7 @@ export default function App() {
                   style={[styles.commandInput, isDark && styles.inputDark]}
                   multiline
                 />
-                <Pressable style={styles.commandButton}>
+                <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={parseAiCommand} disabled={isLoading}>
                   <Text style={styles.commandButtonText}>Parse command</Text>
                 </Pressable>
               </View>

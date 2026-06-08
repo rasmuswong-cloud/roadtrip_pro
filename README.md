@@ -69,7 +69,6 @@ Create an Expo app around this scaffold and provide these values:
 EXPO_PUBLIC_SUPABASE_URL=
 EXPO_PUBLIC_SUPABASE_ANON_KEY=
 EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN=
-OPENAI_API_KEY=
 ```
 
-The `OPENAI_API_KEY` should be used from a trusted backend or edge function in production, not directly in a mobile client.
+Set `OPENAI_API_KEY` as a Supabase Edge Function secret for `supabase/functions/parse-itinerary-command`; do not expose it through Expo or Vercel client environment variables.
