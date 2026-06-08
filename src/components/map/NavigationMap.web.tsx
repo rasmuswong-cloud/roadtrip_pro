@@ -31,7 +31,7 @@ export function NavigationMap({ nodes, activeRoute }: NavigationMapProps) {
         </View>
       ))}
       <View style={styles.info}>
-        <Text style={styles.infoTitle}>Desktop Preview</Text>
+        <Text style={styles.infoTitle}>Övnings Google Maps</Text>
         <Text style={styles.infoText}>
           {activeRoute ? `${Math.round(activeRoute.distanceMeters / 1000)} km route` : 'No route loaded'} / {points.length} stops
         </Text>
