@@ -144,8 +144,8 @@ export default function App() {
   const [shareCode, setShareCode] = useState('');
   const [generatedShareCode, setGeneratedShareCode] = useState('');
   const [placeQuery, setPlaceQuery] = useState('camping nära Cortina');
+  const [activePlaceDayKey, setActivePlaceDayKey] = useState<string | null>(null);
   const [placeResults, setPlaceResults] = useState<GooglePlace[]>([]);
-  const [savedPois, setSavedPois] = useState<Poi[]>([]);
   const [itineraryNodes, setItineraryNodes] = useState<ItineraryNode[]>([]);
   const [latestAiPlan, setLatestAiPlan] = useState<ItineraryMutationPlan | null>(null);
   const [selectedPlannerNodeId, setSelectedPlannerNodeId] = useState<string | null>(null);
@@ -160,11 +160,6 @@ export default function App() {
   const [plannerCost, setPlannerCost] = useState('');
   const [plannerHotelNote, setPlannerHotelNote] = useState('');
   const [plannerNotes, setPlannerNotes] = useState('');
-  const [stopName, setStopName] = useState('');
-  const [stopAddress, setStopAddress] = useState('');
-  const [stopLatitude, setStopLatitude] = useState('');
-  const [stopLongitude, setStopLongitude] = useState('');
-  const [stopNotes, setStopNotes] = useState('');
   const { activeTripId, setActiveTrip, upsertTrip, upsertPoi: upsertPoiInStore } = useTripStore();
 
   const displayedNodes = itineraryNodes.length > 0 ? itineraryNodes : demoNodes;
@@ -290,14 +285,20 @@ export default function App() {
       return;
     }
 
+    if (!activePlaceDayKey) {
+      setStatusMessage('Välj en dag att lägga platsen i först.');
+      return;
+    }
+
     setIsLoading(true);
-    setStatusMessage('Söker platser...');
+    setStatusMessage(`Söker platser till ${formatDayKey(activePlaceDayKey)}...`);
 
     try {
       const results = await searchGooglePlaces({
         query: placeQuery.trim(),
-        center: { latitude: 46.5405, longitude: 12.1357 },
+        center: centerForDay(activePlaceDayKey),
         radiusMeters: 30_000,
+        languageCode: 'sv',
       });
 
       setPlaceResults(results);
@@ -309,9 +310,14 @@ export default function App() {
     }
   }
 
-  async function savePlace(place: GooglePlace) {
+  async function savePlace(place: GooglePlace, dayKey = activePlaceDayKey) {
     if (!activeTripId || !userId) {
       setStatusMessage('Tryck Anslut innan du sparar en plats.');
+      return;
+    }
+
+    if (!dayKey) {
+      setStatusMessage('Välj vilken dag platsen ska läggas till i.');
       return;
     }
 
@@ -326,67 +332,11 @@ export default function App() {
 
     try {
       const savedPoi = await upsertPoi(poi);
-      const node = await createNodeFromPoi(savedPoi);
+      const node = await createNodeFromPoi(savedPoi, dayKey);
       upsertPoiInStore(savedPoi);
       setItineraryNodes((current) => sortNodes([...current.filter((candidate) => candidate.id !== node.id), node]));
-      setSavedPois((current) => [savedPoi, ...current.filter((candidate) => candidate.id !== savedPoi.id)]);
-      setStatusMessage(`Sparade stopp: ${savedPoi.name}`);
-    } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function createManualStop() {
-    if (!activeTripId || !userId) {
-      setStatusMessage('Anslut innan du lägger till ett stopp.');
-      return;
-    }
-
-    const latitude = Number(stopLatitude.replace(',', '.'));
-    const longitude = Number(stopLongitude.replace(',', '.'));
-
-    if (!stopName.trim() || Number.isNaN(latitude) || Number.isNaN(longitude)) {
-      setStatusMessage('Stoppet behöver namn samt giltig latitud och longitud.');
-      return;
-    }
-
-    setIsLoading(true);
-    setStatusMessage('Sparar stopp...');
-
-    try {
-      const now = new Date().toISOString();
-      const node = await upsertItineraryNode({
-        id: cryptoRandomId(),
-        tripId: activeTripId,
-        createdBy: userId,
-        type: 'custom',
-        title: stopName.trim(),
-        notes: [stopAddress.trim(), stopNotes.trim()].filter(Boolean).join('\n') || null,
-        startsAt: null,
-        endsAt: null,
-        timezone: null,
-        location: { latitude, longitude },
-        sortOrder: Date.now(),
-        transportMode: 'driving',
-        reservation: {},
-        equipment: [],
-        facilities: {},
-        metadata: { source: 'manual' },
-        createdAt: now,
-        updatedAt: now,
-        deletedAt: null,
-        version: 1,
-      });
-
-      setItineraryNodes((current) => sortNodes([...current, node]));
-      setStopName('');
-      setStopAddress('');
-      setStopLatitude('');
-      setStopLongitude('');
-      setStopNotes('');
-      setStatusMessage(`Lade till stopp: ${node.title}`);
+      setPlaceResults([]);
+      setStatusMessage(`Sparade ${savedPoi.name} i ${formatDayKey(dayKey)}.`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -484,7 +434,6 @@ export default function App() {
 
       if (result.pois.length > 0) {
         result.pois.forEach(upsertPoiInStore);
-        setSavedPois((current) => [...result.pois, ...current.filter((poi) => !result.pois.some((savedPoi) => savedPoi.id === poi.id))]);
       }
 
       setLatestAiPlan(null);
@@ -642,6 +591,21 @@ export default function App() {
     setDraftPlannerDayKey(dayKey);
     setPlannerDate(dayKey === 'unscheduled' ? '' : dayKey);
     setStatusMessage('Fyll i det nya steget direkt i dagen och tryck Lägg till.');
+  }
+
+  function startPlaceSearch(dayKey: string, suggestedQuery?: string) {
+    setActivePlaceDayKey(dayKey);
+    setPlaceResults([]);
+    if (suggestedQuery) {
+      setPlaceQuery(suggestedQuery);
+    }
+    setStatusMessage(`Sök och lägg till plats direkt i ${formatDayKey(dayKey)}.`);
+  }
+
+  function centerForDay(dayKey: string) {
+    const dayNodes = displayedNodes.filter((node) => (node.startsAt ? node.startsAt.slice(0, 10) : 'unscheduled') === dayKey);
+    const locatedNode = dayNodes.find((node) => node.location) ?? displayedNodes.find((node) => node.location);
+    return locatedNode?.location ?? { latitude: 46.5405, longitude: 12.1357 };
   }
 
   async function savePlannerEdit() {
@@ -828,6 +792,51 @@ export default function App() {
     );
   }
 
+  function renderDayPlaceSearch(dayKey: string) {
+    if (activePlaceDayKey !== dayKey) {
+      return null;
+    }
+
+    return (
+      <View style={[styles.dayPlaceSearch, isDark && styles.innerPanelDark]}>
+        <View style={styles.actionRow}>
+          <TextInput
+            value={placeQuery}
+            onChangeText={setPlaceQuery}
+            placeholder="Sök camping, restaurang, utsikt, aktivitet..."
+            placeholderTextColor={isDark ? '#737373' : '#78716c'}
+            style={[styles.singleLineInput, isDark && styles.inputDark]}
+          />
+          <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={searchPlaces} disabled={isLoading}>
+            <Text style={styles.commandButtonText}>Sök</Text>
+          </Pressable>
+          <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={() => setActivePlaceDayKey(null)} disabled={isLoading}>
+            <Text style={styles.secondaryButtonText}>Stäng</Text>
+          </Pressable>
+        </View>
+        {placeResults.length > 0 ? (
+          <View style={styles.placeResultList}>
+            {placeResults.map((place) => (
+              <View key={place.id} style={[styles.placeItem, isDark && styles.innerPanelDark]}>
+                <View style={styles.timelineCopy}>
+                  <Text style={[styles.itemTitle, isDark && styles.textDark]}>{place.displayName?.text ?? 'Namnlös plats'}</Text>
+                  <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
+                    {[place.formattedAddress, place.rating ? `${place.rating} i betyg` : null, place.primaryType].filter(Boolean).join(' / ')}
+                  </Text>
+                </View>
+                <Pressable style={styles.smallButton} onPress={() => void savePlace(place, dayKey)} disabled={isLoading}>
+                  <Text style={styles.smallButtonText}>Lägg till</Text>
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>Sökningen använder stopp i samma dag som kartcentrum när det finns.</Text>
+        )}
+      </View>
+    );
+  }
+
   async function importReseplanrarePlan() {
     if (!activeTripId || !userId) {
       setStatusMessage('Anslut innan du laddar resplanen.');
@@ -864,12 +873,13 @@ export default function App() {
     }
   }
 
-  async function createNodeFromPoi(poi: Poi): Promise<ItineraryNode> {
+  async function createNodeFromPoi(poi: Poi, dayKey: string): Promise<ItineraryNode> {
     if (!activeTripId || !userId) {
       throw new Error('Anslut innan du sparar ett stopp.');
     }
 
     const now = new Date().toISOString();
+    const startsAt = dayKey === 'unscheduled' ? null : buildIsoFromInputs(dayKey, '');
 
     return upsertItineraryNode({
       id: cryptoRandomId(),
@@ -879,11 +889,11 @@ export default function App() {
       type: poi.category.includes('camp') ? 'camping' : 'custom',
       title: poi.name,
       notes: poi.address ?? null,
-      startsAt: null,
+      startsAt,
       endsAt: null,
-      timezone: null,
+      timezone: startsAt ? 'Europe/Rome' : null,
       location: poi.location,
-      sortOrder: Date.now(),
+      sortOrder: nextSortOrder(itineraryNodes),
       transportMode: 'driving',
       reservation: {},
       equipment: [],
@@ -1124,60 +1134,21 @@ export default function App() {
                 </View>
               </View>
 
-              {!isDemoMode ? (
-              <View style={styles.twoColumnGrid}>
-                <View style={[styles.panelSection, isDark && styles.panelDark]}>
-                  <SectionTitle title="Platser" dark={isDark} />
-                  <TextInput
-                    value={placeQuery}
-                    onChangeText={setPlaceQuery}
-                    placeholder="Sök camping, restauranger, aktiviteter..."
-                    placeholderTextColor={isDark ? '#737373' : '#78716c'}
-                    style={[styles.singleLineInput, isDark && styles.inputDark]}
-                  />
-                  <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={searchPlaces} disabled={isLoading}>
-                    <Text style={styles.commandButtonText}>Sök platser</Text>
-                  </Pressable>
-                  {placeResults.map((place) => (
-                    <View key={place.id} style={[styles.placeItem, isDark && styles.innerPanelDark]}>
-                      <View style={styles.timelineCopy}>
-                        <Text style={[styles.itemTitle, isDark && styles.textDark]}>{place.displayName?.text ?? 'Namnlös plats'}</Text>
-                        <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
-                          {place.formattedAddress ?? place.primaryType ?? 'Google Places'}
-                        </Text>
-                      </View>
-                      <Pressable style={styles.smallButton} onPress={() => void savePlace(place)} disabled={isLoading}>
-                        <Text style={styles.smallButtonText}>Spara</Text>
-                      </Pressable>
-                    </View>
-                  ))}
-                </View>
-
-                <View style={[styles.panelSection, isDark && styles.panelDark]}>
-                  <SectionTitle title="Manuellt stopp" dark={isDark} />
-                  <TextInput value={stopName} onChangeText={setStopName} placeholder="Namn på stopp" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.singleLineInput, isDark && styles.inputDark]} />
-                  <TextInput value={stopAddress} onChangeText={setStopAddress} placeholder="Adress eller kort beskrivning" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.singleLineInput, isDark && styles.inputDark]} />
-                  <View style={styles.actionRow}>
-                    <TextInput value={stopLatitude} onChangeText={setStopLatitude} placeholder="Latitud" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} inputMode="decimal" />
-                    <TextInput value={stopLongitude} onChangeText={setStopLongitude} placeholder="Longitud" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} inputMode="decimal" />
-                  </View>
-                  <TextInput value={stopNotes} onChangeText={setStopNotes} placeholder="Anteckningar" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.commandInput, isDark && styles.inputDark]} multiline />
-                  <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={createManualStop} disabled={isLoading}>
-                    <Text style={styles.commandButtonText}>Lägg till stopp</Text>
-                  </Pressable>
-                </View>
-              </View>
-              ) : null}
-
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
                 <View style={styles.sectionHeaderRow}>
                   <SectionTitle title="Dagplanering" dark={isDark} />
                   {!isDemoMode ? (
-                    <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={() => startNewPlannerStep('unscheduled')} disabled={isLoading}>
-                      <Text style={styles.secondaryButtonText}>Nytt oschemalagt steg</Text>
-                    </Pressable>
+                    <View style={styles.dayHeaderActions}>
+                      <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={() => startPlaceSearch('unscheduled', 'camping')} disabled={isLoading}>
+                        <Text style={styles.secondaryButtonText}>Sök plats</Text>
+                      </Pressable>
+                      <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={() => startNewPlannerStep('unscheduled')} disabled={isLoading}>
+                        <Text style={styles.secondaryButtonText}>Nytt oschemalagt steg</Text>
+                      </Pressable>
+                    </View>
                   ) : null}
                 </View>
+                {renderDayPlaceSearch('unscheduled')}
                 {draftPlannerDayKey === 'unscheduled' ? (
                   <View style={[styles.dayGroup, isDark && styles.innerPanelDark]}>
                     <View style={styles.dayHeader}>
@@ -1204,11 +1175,17 @@ export default function App() {
                         </View>
                       </View>
                       {!isDemoMode ? (
-                        <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={() => startNewPlannerStep(dayPlan.key)} disabled={isLoading}>
-                          <Text style={styles.commandButtonText}>Nytt steg</Text>
-                        </Pressable>
+                        <View style={styles.dayHeaderActions}>
+                          <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={() => startPlaceSearch(dayPlan.key, dayPlan.insight.hasLodging ? 'restaurang eller aktivitet' : 'camping eller hotell')} disabled={isLoading}>
+                            <Text style={styles.secondaryButtonText}>Lägg till plats</Text>
+                          </Pressable>
+                          <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={() => startNewPlannerStep(dayPlan.key)} disabled={isLoading}>
+                            <Text style={styles.commandButtonText}>Nytt steg</Text>
+                          </Pressable>
+                        </View>
                       ) : null}
                     </View>
+                    {renderDayPlaceSearch(dayPlan.key)}
                     <View style={styles.dayInsightGrid}>
                       <DayInsight label="Boende" value={dayPlan.insight.lodgingLabel} tone={dayPlan.insight.hasLodging ? 'good' : 'warn'} />
                       <DayInsight label="Aktiviteter" value={dayPlan.insight.activitiesLabel} tone={dayPlan.insight.activityCount > 0 ? 'good' : 'neutral'} />
@@ -1728,6 +1705,10 @@ function formatDateLabel(dateKey: string): string {
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date);
 }
 
+function formatDayKey(dayKey: string): string {
+  return dayKey === 'unscheduled' ? 'oschemalagt' : formatDateLabel(dayKey);
+}
+
 function buildNodeFromSeedRow(row: ReseplanrareSeedRow, tripId: string, userId: string): ItineraryNode {
   const now = new Date().toISOString();
   const title = row.activity ? row.activity : row.hotel ? row.hotel : row.place;
@@ -2209,12 +2190,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textTransform: 'uppercase',
   },
-  twoColumnGrid: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 16,
-    flexWrap: 'wrap',
-  },
   panelSection: {
     flex: 1,
     minWidth: 300,
@@ -2447,6 +2422,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     padding: 12,
   },
+  dayPlaceSearch: {
+    gap: 10,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d7e1ea',
+    backgroundColor: '#ffffff',
+    padding: 12,
+  },
+  placeResultList: {
+    gap: 8,
+  },
   dayInsightGrid: {
     flexDirection: 'row',
     gap: 10,
@@ -2506,6 +2492,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 2,
+  },
+  dayHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+    flexWrap: 'wrap',
   },
   dayTitle: {
     color: '#0a2540',
