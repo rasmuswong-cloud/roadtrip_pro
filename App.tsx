@@ -161,6 +161,7 @@ export default function App() {
   const [plannerHotelNote, setPlannerHotelNote] = useState('');
   const [plannerNotes, setPlannerNotes] = useState('');
   const [travelerCountText, setTravelerCountText] = useState('2');
+  const [packingDraftByDay, setPackingDraftByDay] = useState<Record<string, string>>({});
   const { activeTripId, setActiveTrip, upsertTrip, upsertPoi: upsertPoiInStore } = useTripStore();
 
   const displayedNodes = itineraryNodes.length > 0 ? itineraryNodes : demoNodes;
@@ -653,6 +654,82 @@ export default function App() {
         return;
       default:
         return;
+    }
+  }
+
+  async function togglePackingItem(dayPlan: DayPlan, item: string) {
+    if (isDemoMode || isLoading) {
+      return;
+    }
+
+    const targetNode = dayPlan.nodes[0];
+    if (!targetNode) {
+      setStatusMessage('Lägg till ett stopp först, så kan packlistan sparas.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const packedItems = readPackedItems(targetNode);
+      const nextPackedItems = packedItems.includes(item)
+        ? packedItems.filter((candidate) => candidate !== item)
+        : [...packedItems, item];
+      const savedNode = await upsertItineraryNode({
+        ...targetNode,
+        metadata: {
+          ...targetNode.metadata,
+          packedItems: nextPackedItems,
+        },
+        updatedAt: new Date().toISOString(),
+      });
+
+      setItineraryNodes((current) => sortNodes(current.map((node) => (node.id === savedNode.id ? savedNode : node))));
+      setStatusMessage(nextPackedItems.includes(item) ? `Packat: ${item}` : `Markerade som ej packat: ${item}`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function addPackingItem(dayPlan: DayPlan) {
+    if (isDemoMode || isLoading) {
+      return;
+    }
+
+    const targetNode = dayPlan.nodes[0];
+    const item = (packingDraftByDay[dayPlan.key] ?? '').trim();
+    if (!item) {
+      setStatusMessage('Skriv vad du vill lägga till i packlistan.');
+      return;
+    }
+
+    if (!targetNode) {
+      setStatusMessage('Lägg till ett stopp först, så kan packlistan sparas.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const existingEquipment = targetNode.equipment ?? [];
+      if (existingEquipment.some((equipment) => equipment.name.toLowerCase() === item.toLowerCase())) {
+        setStatusMessage(`${item} finns redan i packlistan.`);
+        return;
+      }
+
+      const savedNode = await upsertItineraryNode({
+        ...targetNode,
+        equipment: [...existingEquipment, { name: item, quantity: 1 }],
+        updatedAt: new Date().toISOString(),
+      });
+
+      setItineraryNodes((current) => sortNodes(current.map((node) => (node.id === savedNode.id ? savedNode : node))));
+      setPackingDraftByDay((current) => ({ ...current, [dayPlan.key]: '' }));
+      setStatusMessage(`Lade till i packlistan: ${item}`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsLoading(false);
     }
   }
 
@@ -1277,9 +1354,37 @@ export default function App() {
                       <Text style={styles.packingTitle}>Packa / ta med</Text>
                       <View style={styles.packingList}>
                         {dayPlan.insight.packingItems.map((item) => (
-                          <Text key={item} style={styles.packingChip}>{item}</Text>
+                          <Pressable
+                            key={item}
+                            style={[
+                              styles.packingChip,
+                              dayPlan.insight.packedItems.includes(item) && styles.packingChipDone,
+                              isDemoMode && styles.checkItemStatic,
+                            ]}
+                            onPress={() => void togglePackingItem(dayPlan, item)}
+                            disabled={isDemoMode || isLoading}
+                          >
+                            <Text style={[styles.packingChipText, dayPlan.insight.packedItems.includes(item) && styles.packingChipTextDone]}>
+                              {dayPlan.insight.packedItems.includes(item) ? 'Packad' : 'Ta med'}
+                            </Text>
+                            <Text style={styles.packingChipLabel}>{item}</Text>
+                          </Pressable>
                         ))}
                       </View>
+                      {!isDemoMode ? (
+                        <View style={styles.packingAddRow}>
+                          <TextInput
+                            value={packingDraftByDay[dayPlan.key] ?? ''}
+                            onChangeText={(text) => setPackingDraftByDay((current) => ({ ...current, [dayPlan.key]: text }))}
+                            placeholder="Lägg till egen sak"
+                            placeholderTextColor={isDark ? '#737373' : '#78716c'}
+                            style={[styles.packingInput, isDark && styles.inputDark]}
+                          />
+                          <Pressable style={[styles.secondarySmallButton, isLoading && styles.disabledButton]} onPress={() => void addPackingItem(dayPlan)} disabled={isLoading}>
+                            <Text style={styles.secondarySmallButtonText}>Lägg till</Text>
+                          </Pressable>
+                        </View>
+                      ) : null}
                     </View>
                     {draftPlannerDayKey === dayPlan.key ? renderPlannerInlineEditor('new') : null}
                     {dayPlan.nodes.map((node, index) => (
@@ -1506,6 +1611,7 @@ type DayInsightSummary = {
   isLongDrive: boolean;
   checklist: DayChecklistItem[];
   packingItems: string[];
+  packedItems: string[];
 };
 
 type DayChecklistItem = {
@@ -1587,6 +1693,7 @@ function buildDayInsight(nodes: ItineraryNode[], route: RouteSummary, budget: Bu
     isLongDrive,
     checklist: buildDayChecklist(nodes, route, budget),
     packingItems: buildDayPackingList(nodes, route),
+    packedItems: buildPackedItems(nodes),
   };
 }
 
@@ -1615,7 +1722,7 @@ function buildDayPackingList(nodes: ItineraryNode[], route: RouteSummary): strin
       node.type,
       node.title,
       node.notes,
-      Array.isArray(node.equipment) ? node.equipment.join(' ') : '',
+      Array.isArray(node.equipment) ? node.equipment.map((item) => item.name).join(' ') : '',
       JSON.stringify(node.reservation ?? {}),
       JSON.stringify(node.facilities ?? {}),
       JSON.stringify(node.metadata ?? {}),
@@ -1650,7 +1757,28 @@ function buildDayPackingList(nodes: ItineraryNode[], route: RouteSummary): strin
     ['Snacks', 'Offlinekarta', 'Billaddare'].forEach((item) => items.add(item));
   }
 
+  nodes.forEach((node) => {
+    node.equipment?.forEach((equipment) => {
+      if (equipment.name.trim()) {
+        items.add(equipment.name.trim());
+      }
+    });
+  });
+
   return Array.from(items).slice(0, 10);
+}
+
+function buildPackedItems(nodes: ItineraryNode[]): string[] {
+  const packedItems = new Set<string>();
+  nodes.forEach((node) => {
+    readPackedItems(node).forEach((item) => packedItems.add(item));
+  });
+  return Array.from(packedItems);
+}
+
+function readPackedItems(node: ItineraryNode): string[] {
+  const value = node.metadata.packedItems;
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 }
 
 function buildDaySmartFlags(nodes: ItineraryNode[], route: RouteSummary, budget: BudgetSummary): string[] {
@@ -2776,15 +2904,52 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   packingChip: {
-    color: '#0a2540',
-    fontSize: 12,
-    fontWeight: '800',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
     borderRadius: 999,
     backgroundColor: '#ffffff',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#d8e5f2',
     paddingHorizontal: 10,
     paddingVertical: 7,
+  },
+  packingChipDone: {
+    backgroundColor: '#f0fbf5',
+    borderColor: '#b8ead1',
+  },
+  packingChipText: {
+    color: '#635bff',
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  packingChipTextDone: {
+    color: '#076b4d',
+  },
+  packingChipLabel: {
+    color: '#0a2540',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  packingAddRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  packingInput: {
+    flex: 1,
+    minWidth: 180,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d8e5f2',
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    color: '#0a2540',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    fontSize: 13,
+    fontWeight: '700',
   },
   advancedEditorGrid: {
     flexDirection: 'row',
