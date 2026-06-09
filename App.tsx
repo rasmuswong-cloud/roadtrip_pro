@@ -1372,7 +1372,7 @@ export default function App() {
         <View style={[styles.header, isDark && styles.headerDark]}>
           <View style={styles.brandLockup}>
             <Text style={[styles.kicker, isDark && styles.textMutedDark]}>ReseApp</Text>
-            <Text style={[styles.title, isDark && styles.textDark]}>{demoTrip.name}</Text>
+            <Text style={[styles.title, isDark && styles.textDark]}>Roadtrip-planerare</Text>
           </View>
           <View style={styles.navLinks}>
             {['Rutt', 'Budget', 'Dagar'].map((item) => (
@@ -1415,16 +1415,16 @@ export default function App() {
             <View style={styles.heroPlaneThree} />
             <View style={styles.tripHeroCopy}>
               <Text style={styles.heroEyebrow}>Roadtrip 2026</Text>
-              <Text style={styles.heroTitle}>En snygg reseplan med rutt, dagar och budget på samma plats.</Text>
+              <Text style={styles.heroTitle}>{demoTrip.name}</Text>
               <Text style={styles.heroBody}>
-                Importerad från vår planering, synkad i molnet och redo att justeras tillsammans.
+                Planera stopp, tider, kostnader och packning i samma vy. Allt sparas när resan är ansluten.
               </Text>
               <View style={styles.heroCtas}>
                 <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={connectSupabaseTrip} disabled={isLoading}>
-                  <Text style={styles.commandButtonText}>{activeTripId ? 'Synka resa' : 'Anslut resa'}</Text>
+                  <Text style={styles.commandButtonText}>{activeTripId ? 'Synka nu' : 'Anslut resa'}</Text>
                 </Pressable>
-                <Pressable style={styles.heroSecondaryButton} onPress={parseAiCommand} disabled={isLoading}>
-                  <Text style={styles.heroSecondaryText}>Fråga AI</Text>
+                <Pressable style={[styles.heroSecondaryButton, isEditMode && styles.heroSecondaryButtonActive]} onPress={toggleEditMode} disabled={isLoading}>
+                  <Text style={[styles.heroSecondaryText, isEditMode && styles.heroSecondaryTextActive]}>{isEditMode ? 'Redigerar' : 'Öppna redigering'}</Text>
                 </Pressable>
               </View>
             </View>
@@ -1451,8 +1451,8 @@ export default function App() {
 
           <View style={styles.demoActionBar}>
             <View>
-              <Text style={styles.demoActionTitle}>Redo att visa</Text>
-              <Text style={styles.demoActionText}>{activeTripId ? 'Planen är ansluten. Ladda resplanen om den inte syns än.' : 'Tryck Anslut innan du laddar den riktiga resplanen.'}</Text>
+              <Text style={styles.demoActionTitle}>{activeTripId ? 'Resan är ansluten' : 'Kom igång'}</Text>
+              <Text style={styles.demoActionText}>{activeTripId ? 'Du kan redigera tider, platser och kostnader. Använd Spara app om du vill spara hela vyn direkt.' : 'Anslut resan för att spara online och hämta din plan.'}</Text>
             </View>
             <View style={styles.demoActionButtons}>
               <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={connectSupabaseTrip} disabled={isLoading}>
@@ -1538,7 +1538,7 @@ export default function App() {
                 <View style={styles.routeStageHeader}>
                   <View>
                     <Text style={styles.routeStageKicker}>Interaktiv ruttkarta</Text>
-                    <Text style={styles.routeStageTitle}>Övningskarta</Text>
+                    <Text style={styles.routeStageTitle}>Ruttkarta</Text>
                   </View>
                   <View style={styles.routeBadge}>
                     <Text style={styles.routeBadgeText}>{displayedNodes.length} stopp</Text>
@@ -1547,7 +1547,7 @@ export default function App() {
                 <View style={styles.mapShell}>
                   <NavigationMap nodes={displayedNodes} activeRoute={routeSummary.geometry ? routeSummary : demoRoute} followUser={false} />
                   <View style={styles.mapOverlayPanel}>
-                    <Text style={styles.mapOverlayKicker}>Reselager</Text>
+                    <Text style={styles.mapOverlayKicker}>Aktuell plan</Text>
                     <Text style={styles.mapOverlayTitle}>{demoTrip.name}</Text>
                     <Text style={styles.mapOverlayMeta}>{formatDistance(routeSummary.distanceMeters)} / {formatDuration(routeSummary.durationSeconds)}</Text>
                   </View>
@@ -1582,7 +1582,7 @@ export default function App() {
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
                 <View style={styles.sectionHeaderRow}>
                   <SectionTitle title="Reseöversikt" dark={isDark} />
-                  <Text style={styles.overviewMeta}>{dayPlans.length} dagar / {budgetSummary.warnings.length} smarta flaggor</Text>
+                  <Text style={styles.overviewMeta}>{dayPlans.length} dagar / {displayedNodes.length} stopp</Text>
                 </View>
                 <View style={styles.dayOverviewGrid}>
                   {dayPlans.map((dayPlan) => (
@@ -1629,7 +1629,7 @@ export default function App() {
 
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
                 <View style={styles.sectionHeaderRow}>
-                  <SectionTitle title="Dagplanering" dark={isDark} />
+                  <SectionTitle title="Planering dag för dag" dark={isDark} />
                   {!isDemoMode ? (
                     <View style={styles.dayHeaderActions}>
                       <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={() => startPlaceSearch('unscheduled', 'camping')} disabled={isLoading}>
@@ -2599,7 +2599,7 @@ function cryptoRandomId(): string {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#f6f9fc',
+    backgroundColor: '#f5f7fa',
   },
   screenDark: {
     backgroundColor: '#050505',
@@ -2609,8 +2609,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 24,
-    paddingHorizontal: 36,
-    paddingVertical: 16,
+    paddingHorizontal: 28,
+    paddingVertical: 14,
     backgroundColor: '#ffffff',
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#e6edf5',
@@ -2627,7 +2627,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#0a2540',
-    fontSize: 25,
+    fontSize: 22,
     fontWeight: '900',
   },
   brandLockup: {
@@ -2759,10 +2759,10 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   mapShell: {
-    height: 520,
+    height: 460,
     overflow: 'hidden',
     position: 'relative',
-    borderRadius: 20,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: '#111827',
     backgroundColor: '#101820',
@@ -2774,24 +2774,25 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 1500,
     alignSelf: 'center',
-    padding: 28,
-    gap: 20,
+    padding: 24,
+    gap: 16,
   },
   tripHero: {
-    minHeight: 220,
+    minHeight: 150,
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'stretch',
     justifyContent: 'space-between',
-    gap: 24,
+    gap: 18,
     overflow: 'hidden',
-    borderRadius: 22,
+    borderRadius: 8,
     backgroundColor: '#ffffff',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#e6edf5',
-    padding: 28,
+    padding: 22,
   },
   heroPlaneOne: {
+    display: 'none',
     position: 'absolute',
     right: -160,
     top: -112,
@@ -2801,6 +2802,7 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '-12deg' }],
   },
   heroPlaneTwo: {
+    display: 'none',
     position: 'absolute',
     right: 10,
     bottom: -86,
@@ -2810,6 +2812,7 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '-12deg' }],
   },
   heroPlaneThree: {
+    display: 'none',
     position: 'absolute',
     right: 210,
     bottom: -110,
@@ -2822,7 +2825,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 320,
     justifyContent: 'center',
-    gap: 12,
+    gap: 8,
   },
   heroEyebrow: {
     color: '#635bff',
@@ -2833,15 +2836,15 @@ const styles = StyleSheet.create({
   heroTitle: {
     maxWidth: 760,
     color: '#0a2540',
-    fontSize: 40,
-    lineHeight: 46,
+    fontSize: 30,
+    lineHeight: 36,
     fontWeight: '900',
   },
   heroBody: {
     maxWidth: 660,
     color: '#425466',
-    fontSize: 17,
-    lineHeight: 26,
+    fontSize: 15,
+    lineHeight: 22,
     fontWeight: '700',
   },
   heroCtas: {
@@ -2859,23 +2862,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 10,
   },
+  heroSecondaryButtonActive: {
+    backgroundColor: '#ecfdf5',
+  },
   heroSecondaryText: {
     color: '#635bff',
     fontSize: 13,
     fontWeight: '900',
   },
+  heroSecondaryTextActive: {
+    color: '#0f766e',
+  },
   heroStats: {
-    width: 380,
+    width: 360,
     maxWidth: '100%',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
     alignItems: 'stretch',
     justifyContent: 'center',
   },
   heroStat: {
+    flex: 1,
+    minWidth: 105,
     justifyContent: 'center',
     gap: 6,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderRadius: 8,
+    backgroundColor: '#f6f9fc',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#d7e1ea',
     padding: 16,
@@ -2894,22 +2907,22 @@ const styles = StyleSheet.create({
   dashboardGrid: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 18,
+    gap: 16,
     flexWrap: 'wrap',
   },
   sidebarColumn: {
-    width: 300,
-    gap: 14,
+    width: 320,
+    gap: 12,
   },
   mainColumn: {
     flex: 1,
-    minWidth: 620,
-    gap: 16,
+    minWidth: 520,
+    gap: 14,
   },
   routeStage: {
-    gap: 14,
+    gap: 12,
     overflow: 'hidden',
-    borderRadius: 26,
+    borderRadius: 8,
     backgroundColor: '#0a2540',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#0a2540',
@@ -2966,7 +2979,7 @@ const styles = StyleSheet.create({
     left: 18,
     top: 18,
     minWidth: 240,
-    borderRadius: 18,
+    borderRadius: 8,
     backgroundColor: 'rgba(255,255,255,0.94)',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(215,225,234,0.9)',
@@ -3045,12 +3058,12 @@ const styles = StyleSheet.create({
   panelSection: {
     flex: 1,
     minWidth: 300,
-    gap: 10,
+    gap: 12,
     backgroundColor: '#ffffff',
-    borderRadius: 14,
+    borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#e6edf5',
-    padding: 18,
+    padding: 16,
   },
   statsRow: {
     flexDirection: 'row',
@@ -3062,7 +3075,7 @@ const styles = StyleSheet.create({
     minWidth: 150,
     minHeight: 78,
     backgroundColor: '#ffffff',
-    borderRadius: 14,
+    borderRadius: 8,
     borderTopWidth: 3,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#e6edf5',
@@ -3131,7 +3144,7 @@ const styles = StyleSheet.create({
     minWidth: 170,
     minHeight: 78,
     justifyContent: 'space-between',
-    borderRadius: 14,
+    borderRadius: 8,
     borderTopWidth: 3,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#e6edf5',
@@ -3181,7 +3194,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 240,
     gap: 10,
-    borderRadius: 16,
+    borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#e6edf5',
     backgroundColor: '#f6f9fc',
@@ -3313,16 +3326,16 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   dayGroup: {
-    gap: 10,
+    gap: 12,
     backgroundColor: '#f6f9fc',
-    borderRadius: 14,
+    borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#e6edf5',
-    padding: 12,
+    padding: 14,
   },
   dayInlineEditor: {
     gap: 10,
-    borderRadius: 14,
+    borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#d7e1ea',
     backgroundColor: '#ffffff',
@@ -3330,7 +3343,7 @@ const styles = StyleSheet.create({
   },
   dayPlaceSearch: {
     gap: 10,
-    borderRadius: 14,
+    borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#d7e1ea',
     backgroundColor: '#ffffff',
@@ -3347,7 +3360,7 @@ const styles = StyleSheet.create({
   dayInsightCard: {
     flex: 1,
     minWidth: 150,
-    borderRadius: 12,
+    borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#d7e1ea',
     backgroundColor: '#ffffff',
@@ -3379,7 +3392,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '900',
     lineHeight: 18,
-    borderRadius: 12,
+    borderRadius: 8,
     backgroundColor: '#f2f4ff',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#dfe3ff',
@@ -3522,12 +3535,12 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   timelineItem: {
-    minHeight: 68,
+    minHeight: 76,
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    alignItems: 'flex-start',
+    gap: 14,
     backgroundColor: '#ffffff',
-    borderRadius: 12,
+    borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#e6edf5',
     padding: 12,
