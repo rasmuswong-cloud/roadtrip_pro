@@ -41,6 +41,11 @@ type PersistedAppState = {
 
 type OnlineSaveState = 'idle' | 'saving' | 'saved' | 'error';
 
+type UndoSnapshot = {
+  label: string;
+  itineraryNodes: ItineraryNode[];
+};
+
 const demoTrip: Trip = {
   id: '11111111-1111-4111-8111-111111111111',
   ownerId: '22222222-2222-4222-8222-222222222222',
@@ -287,6 +292,7 @@ export default function App() {
   const [hasLoadedPersistentState, setHasLoadedPersistentState] = useState(false);
   const [onlineSaveState, setOnlineSaveState] = useState<OnlineSaveState>('idle');
   const [lastOnlineSavedAt, setLastOnlineSavedAt] = useState<string | null>(null);
+  const [undoSnapshot, setUndoSnapshot] = useState<UndoSnapshot | null>(null);
   const { activeTripId, setActiveTrip, upsertTrip, upsertPoi: upsertPoiInStore } = useTripStore();
 
   const displayedNodes = itineraryNodes.length > 0 ? itineraryNodes : demoNodes;
@@ -407,6 +413,74 @@ export default function App() {
       })));
       markOnlineSaveSuccess();
       return cleanedNodes;
+    } catch (error) {
+      markOnlineSaveError();
+      throw error;
+    }
+  }
+
+  function rememberUndo(label: string) {
+    setUndoSnapshot({
+      label,
+      itineraryNodes: itineraryNodes.map(cloneItineraryNode),
+    });
+  }
+
+  async function undoLastChange() {
+    if (!undoSnapshot || isLoading) {
+      return;
+    }
+
+    setIsLoading(true);
+    setStatusMessage(`Ångrar: ${undoSnapshot.label}...`);
+
+    try {
+      await restoreUndoSnapshotOnline(undoSnapshot.itineraryNodes);
+      const restoredNodes = sortNodes(undoSnapshot.itineraryNodes.map(cloneItineraryNode));
+      setItineraryNodes(restoredNodes);
+      setUndoSnapshot(null);
+      if (selectedPlannerNodeId && !restoredNodes.some((node) => node.id === selectedPlannerNodeId)) {
+        clearPlannerEditor();
+      }
+      setStatusMessage(`Ångrat: ${undoSnapshot.label}.`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function restoreUndoSnapshotOnline(previousNodes: ItineraryNode[]): Promise<void> {
+    if (!activeTripId) {
+      return;
+    }
+
+    markOnlineSaveStart();
+    const now = new Date().toISOString();
+    const previousById = new Map(previousNodes.map((node) => [node.id, node]));
+    const currentById = new Map(itineraryNodes.map((node) => [node.id, node]));
+    const restoredNodes = previousNodes.map((node) => ({
+      ...node,
+      deletedAt: null,
+      updatedAt: now,
+      version: node.version + 1,
+    }));
+    const nodesToDelete = itineraryNodes
+      .filter((node) => !previousById.has(node.id))
+      .map((node) => ({
+        ...node,
+        deletedAt: now,
+        updatedAt: now,
+        version: node.version + 1,
+      }));
+    const changedRestoredNodes = restoredNodes.filter((node) => {
+      const currentNode = currentById.get(node.id);
+      return !currentNode || JSON.stringify({ ...node, version: 0, updatedAt: '' }) !== JSON.stringify({ ...currentNode, deletedAt: null, version: 0, updatedAt: '' });
+    });
+
+    try {
+      await Promise.all([...changedRestoredNodes, ...nodesToDelete].map(upsertItineraryNode));
+      markOnlineSaveSuccess();
     } catch (error) {
       markOnlineSaveError();
       throw error;
@@ -575,6 +649,7 @@ export default function App() {
       return;
     }
 
+    rememberUndo('lägg till plats');
     setIsLoading(true);
     setStatusMessage(`Sparar ${poi.name}...`);
 
@@ -656,6 +731,7 @@ export default function App() {
       return;
     }
 
+    rememberUndo('AI-plan');
     setIsLoading(true);
     setStatusMessage('Sparar AI-plan...');
 
@@ -698,6 +774,7 @@ export default function App() {
   }
 
   async function removeStop(nodeId: string) {
+    rememberUndo('ta bort stopp');
     setIsLoading(true);
     setStatusMessage('Tar bort stopp...');
 
@@ -721,6 +798,7 @@ export default function App() {
       return;
     }
 
+    rememberUndo('ändra tid');
     setIsLoading(true);
     setStatusMessage(`Schemalägger ${node.title}...`);
 
@@ -762,6 +840,7 @@ export default function App() {
       return;
     }
 
+    rememberUndo('flytta stopp');
     setIsLoading(true);
     setStatusMessage(`Flyttar ${currentNode.title}...`);
 
@@ -914,6 +993,7 @@ export default function App() {
       return;
     }
 
+    rememberUndo('packlista');
     setIsLoading(true);
     try {
       const packedItems = readPackedItems(targetNode);
@@ -955,6 +1035,7 @@ export default function App() {
       return;
     }
 
+    rememberUndo('packlista');
     setIsLoading(true);
     try {
       const existingEquipment = targetNode.equipment ?? [];
@@ -995,6 +1076,7 @@ export default function App() {
       return;
     }
 
+    rememberUndo(`ändra ${quickCellLabel(field)}`);
     setIsLoading(true);
     try {
       const nextMetadata = { ...node.metadata };
@@ -1089,6 +1171,7 @@ export default function App() {
       return;
     }
 
+    rememberUndo('redigera stopp');
     setIsLoading(true);
     setStatusMessage('Sparar steg...');
 
@@ -1155,6 +1238,7 @@ export default function App() {
       return;
     }
 
+    rememberUndo('lägg till stopp');
     setIsLoading(true);
     setStatusMessage('Lägger till steg...');
 
@@ -1302,6 +1386,7 @@ export default function App() {
       return;
     }
 
+    rememberUndo('ladda resplan');
     setIsLoading(true);
     setStatusMessage('Laddar resplan...');
 
@@ -1398,6 +1483,9 @@ export default function App() {
             </View>
             <Pressable style={[styles.modeButton, isEditMode && styles.modeButtonActive]} onPress={toggleEditMode}>
               <Text style={[styles.modeButtonText, isEditMode && styles.modeButtonTextActive]}>{isEditMode ? 'Redigerar' : 'Redigera'}</Text>
+            </Pressable>
+            <Pressable style={[styles.undoButton, (!undoSnapshot || isLoading) && styles.disabledButton]} onPress={() => void undoLastChange()} disabled={!undoSnapshot || isLoading}>
+              <Text style={styles.undoButtonText}>Ångra</Text>
             </Pressable>
             <Pressable style={[styles.saveAppButton, isLoading && styles.disabledButton]} onPress={saveAppSnapshot} disabled={isLoading}>
               <Text style={styles.saveAppButtonText}>Spara app</Text>
@@ -2584,6 +2672,10 @@ function setNodeTime(node: ItineraryNode, hour: number): string {
   return baseDate.toISOString();
 }
 
+function cloneItineraryNode(node: ItineraryNode): ItineraryNode {
+  return JSON.parse(JSON.stringify(node)) as ItineraryNode;
+}
+
 function cryptoRandomId(): string {
   if ('crypto' in globalThis && 'randomUUID' in globalThis.crypto) {
     return globalThis.crypto.randomUUID();
@@ -2744,6 +2836,21 @@ const styles = StyleSheet.create({
   },
   modeButtonTextActive: {
     color: '#0f766e',
+  },
+  undoButton: {
+    minHeight: 40,
+    justifyContent: 'center',
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d7e1ea',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  undoButtonText: {
+    color: '#0a2540',
+    fontSize: 13,
+    fontWeight: '900',
   },
   saveAppButton: {
     minHeight: 40,
