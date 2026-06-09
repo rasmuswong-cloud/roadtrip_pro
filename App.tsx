@@ -160,6 +160,7 @@ export default function App() {
   const [plannerCost, setPlannerCost] = useState('');
   const [plannerHotelNote, setPlannerHotelNote] = useState('');
   const [plannerNotes, setPlannerNotes] = useState('');
+  const [travelerCountText, setTravelerCountText] = useState('2');
   const { activeTripId, setActiveTrip, upsertTrip, upsertPoi: upsertPoiInStore } = useTripStore();
 
   const displayedNodes = itineraryNodes.length > 0 ? itineraryNodes : demoNodes;
@@ -168,6 +169,9 @@ export default function App() {
   const dayPlans = useMemo(() => buildDayPlans(displayedNodes), [displayedNodes]);
   const budgetSummary = useMemo(() => buildBudgetSummary(displayedNodes), [displayedNodes]);
   const totalSpend = budgetSummary.total;
+  const travelerCount = parseTravelerCount(travelerCountText);
+  const costPerTraveler = travelerCount > 0 ? totalSpend / travelerCount : totalSpend;
+  const costPerDay = dayPlans.length > 0 ? totalSpend / dayPlans.length : totalSpend;
 
   async function connectSupabaseTrip() {
     setIsLoading(true);
@@ -1101,7 +1105,7 @@ export default function App() {
                 <Metric label="Stopp" value={`${displayedNodes.length}`} accent="#0f766e" dark={isDark} />
                 <Metric label="Rutt" value={formatDistance(routeSummary.distanceMeters)} accent="#2563eb" dark={isDark} />
                 <Metric label="Körning" value={formatDuration(routeSummary.durationSeconds)} accent="#d97706" dark={isDark} />
-                <Metric label="Kostnad" value={formatSek(totalSpend)} accent="#7c3aed" dark={isDark} />
+                <Metric label="Per person" value={formatSek(costPerTraveler)} accent="#7c3aed" dark={isDark} />
               </View>
 
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
@@ -1119,14 +1123,32 @@ export default function App() {
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
                 <View style={styles.sectionHeaderRow}>
                   <SectionTitle title="Budget" dark={isDark} />
-                  <Text style={styles.budgetTotal}>{formatSek(totalSpend)}</Text>
+                  <View style={styles.budgetHeaderTools}>
+                    <Text style={styles.budgetTotal}>{formatSek(totalSpend)}</Text>
+                    <View style={styles.travelerControl}>
+                      <Text style={styles.travelerLabel}>Personer</Text>
+                      <TextInput
+                        value={travelerCountText}
+                        onChangeText={setTravelerCountText}
+                        placeholder="2"
+                        placeholderTextColor={isDark ? '#737373' : '#78716c'}
+                        style={[styles.travelerInput, isDark && styles.inputDark]}
+                        inputMode="numeric"
+                      />
+                    </View>
+                  </View>
                 </View>
                 <View style={styles.budgetGrid}>
-                  <BudgetCard label="Boende" value={budgetSummary.categories.lodging} accent="#2563eb" />
-                  <BudgetCard label="Aktiviteter" value={budgetSummary.categories.activity} accent="#d97706" />
-                  <BudgetCard label="Transport" value={budgetSummary.categories.transport} accent="#00d4ff" />
-                  <BudgetCard label="Mat/övrigt" value={budgetSummary.categories.food + budgetSummary.categories.other} accent="#635bff" />
+                  <BudgetCard label="Totalt per person" value={costPerTraveler} detail={`${travelerCount} personer`} accent="#7c3aed" />
+                  <BudgetCard label="Snitt per dag" value={costPerDay} detail={`${dayPlans.length} dagar`} accent="#0f766e" />
+                  <BudgetCard label="Boende" value={budgetSummary.categories.lodging} detail={formatBudgetShare(budgetSummary.categories.lodging, totalSpend)} accent="#2563eb" />
+                  <BudgetCard label="Aktiviteter" value={budgetSummary.categories.activity} detail={formatBudgetShare(budgetSummary.categories.activity, totalSpend)} accent="#d97706" />
+                  <BudgetCard label="Transport" value={budgetSummary.categories.transport} detail={formatBudgetShare(budgetSummary.categories.transport, totalSpend)} accent="#00d4ff" />
+                  <BudgetCard label="Mat/övrigt" value={budgetSummary.categories.food + budgetSummary.categories.other} detail={formatBudgetShare(budgetSummary.categories.food + budgetSummary.categories.other, totalSpend)} accent="#635bff" />
                 </View>
+                {budgetSummary.missingCostCount > 0 ? (
+                  <Text style={styles.budgetMissingText}>{budgetSummary.missingCostCount} steg saknar kostnad, så totalsumman är troligen för låg.</Text>
+                ) : null}
                 <View style={styles.warningList}>
                   {budgetSummary.warnings.map((warning) => (
                     <Text key={warning} style={styles.warningText}>{warning}</Text>
@@ -1263,11 +1285,12 @@ function Metric({ label, value, accent, dark }: { label: string; value: string; 
   );
 }
 
-function BudgetCard({ label, value, accent }: { label: string; value: number; accent: string }) {
+function BudgetCard({ label, value, detail, accent }: { label: string; value: number; detail: string; accent: string }) {
   return (
     <View style={[styles.budgetCard, { borderTopColor: accent }]}>
       <Text style={styles.budgetLabel}>{label}</Text>
       <Text style={styles.budgetValue}>{formatSek(value)}</Text>
+      <Text style={styles.budgetDetail}>{detail}</Text>
     </View>
   );
 }
@@ -1673,6 +1696,23 @@ function parseCostPart(value: string): number {
 
 function formatSek(value: number): string {
   return `${Math.round(value).toLocaleString('sv-SE')} SEK`;
+}
+
+function parseTravelerCount(value: string): number {
+  const parsed = Number.parseInt(value.replace(/\D/g, ''), 10);
+  if (Number.isNaN(parsed) || parsed <= 0) {
+    return 1;
+  }
+
+  return Math.min(parsed, 20);
+}
+
+function formatBudgetShare(value: number, total: number): string {
+  if (total <= 0 || value <= 0) {
+    return '0 % av budget';
+  }
+
+  return `${Math.round((value / total) * 100)} % av budget`;
 }
 
 function formatRawNodeCost(node: ItineraryNode): string {
@@ -2233,6 +2273,42 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '900',
   },
+  budgetHeaderTools: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 12,
+    flexWrap: 'wrap',
+  },
+  travelerControl: {
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d7e1ea',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  travelerLabel: {
+    color: '#425466',
+    fontSize: 12,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  travelerInput: {
+    width: 48,
+    minHeight: 30,
+    color: '#0a2540',
+    fontSize: 16,
+    fontWeight: '900',
+    textAlign: 'center',
+    borderRadius: 999,
+    backgroundColor: '#f6f9fc',
+    paddingHorizontal: 8,
+  },
   budgetGrid: {
     flexDirection: 'row',
     gap: 12,
@@ -2260,6 +2336,24 @@ const styles = StyleSheet.create({
     color: '#0a2540',
     fontSize: 18,
     fontWeight: '900',
+  },
+  budgetDetail: {
+    color: '#425466',
+    fontSize: 12,
+    fontWeight: '800',
+    marginTop: 6,
+  },
+  budgetMissingText: {
+    color: '#7a4b00',
+    fontSize: 13,
+    fontWeight: '900',
+    lineHeight: 18,
+    borderRadius: 12,
+    backgroundColor: '#fff7df',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#ffe3a3',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   overviewMeta: {
     color: '#425466',
