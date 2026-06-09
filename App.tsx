@@ -612,6 +612,50 @@ export default function App() {
     return locatedNode?.location ?? { latitude: 46.5405, longitude: 12.1357 };
   }
 
+  function runChecklistAction(dayPlan: DayPlan, item: DayChecklistItem) {
+    if (item.done || isDemoMode) {
+      return;
+    }
+
+    const firstNode = dayPlan.nodes[0];
+    const missingCostNode = dayPlan.nodes.find((node) => nodeCostTotal(node) <= 0);
+    const missingTimeNode = dayPlan.nodes.find((node) => !node.startsAt);
+    const missingLocationNode = dayPlan.nodes.find((node) => !node.location);
+    const missingReservationNode = dayPlan.nodes.find((node) => !formatReservation(node));
+
+    switch (item.action) {
+      case 'search_lodging':
+        startPlaceSearch(dayPlan.key, 'camping eller hotell');
+        return;
+      case 'edit_cost':
+        if (missingCostNode) {
+          selectPlannerNode(missingCostNode.id);
+        }
+        return;
+      case 'set_time':
+        if (missingTimeNode) {
+          void scheduleStop(missingTimeNode, 9);
+        }
+        return;
+      case 'search_location':
+        startPlaceSearch(dayPlan.key, firstNode?.title ?? 'plats');
+        if (missingLocationNode) {
+          selectPlannerNode(missingLocationNode.id);
+        }
+        return;
+      case 'edit_booking':
+        if (missingReservationNode) {
+          selectPlannerNode(missingReservationNode.id);
+        }
+        return;
+      case 'split_drive':
+        startPlaceSearch(dayPlan.key, 'camping halvvägs');
+        return;
+      default:
+        return;
+    }
+  }
+
   async function savePlannerEdit() {
     if (!selectedPlannerNodeId) {
       setStatusMessage('Välj en rad i planeringen först.');
@@ -1217,10 +1261,16 @@ export default function App() {
                     <Text style={styles.dayNextAction}>{dayPlan.insight.nextAction}</Text>
                     <View style={styles.dayChecklist}>
                       {dayPlan.insight.checklist.map((item) => (
-                        <View key={item.label} style={[styles.checkItem, item.done && styles.checkItemDone]}>
+                        <Pressable
+                          key={item.label}
+                          style={[styles.checkItem, item.done && styles.checkItemDone, isDemoMode && styles.checkItemStatic]}
+                          onPress={() => runChecklistAction(dayPlan, item)}
+                          disabled={item.done || isDemoMode || isLoading}
+                        >
                           <Text style={[styles.checkMark, item.done && styles.checkMarkDone]}>{item.done ? 'Klar' : 'Att fixa'}</Text>
                           <Text style={styles.checkLabel}>{item.label}</Text>
-                        </View>
+                          {!item.done && !isDemoMode ? <Text style={styles.checkActionText}>Öppna</Text> : null}
+                        </Pressable>
                       ))}
                     </View>
                     {draftPlannerDayKey === dayPlan.key ? renderPlannerInlineEditor('new') : null}
@@ -1452,6 +1502,7 @@ type DayInsightSummary = {
 type DayChecklistItem = {
   label: string;
   done: boolean;
+  action: 'search_lodging' | 'edit_cost' | 'set_time' | 'search_location' | 'edit_booking' | 'split_drive';
 };
 
 type BudgetCategories = {
@@ -1538,12 +1589,12 @@ function buildDayChecklist(nodes: ItineraryNode[], route: RouteSummary, budget: 
   const driveLooksOk = route.durationSeconds / 3600 < 5;
 
   return [
-    { label: 'Boende eller camping finns', done: hasLodging },
-    { label: 'Alla kostnader ifyllda', done: allCostsKnown },
-    { label: 'Tider satta på stoppen', done: allTimesSet },
-    { label: 'Adresser/koordinater finns', done: allLocationsKnown },
-    { label: 'Bokningsnotis finns', done: hasReservationInfo },
-    { label: 'Körningen ser rimlig ut', done: driveLooksOk },
+    { label: 'Boende eller camping finns', done: hasLodging, action: 'search_lodging' },
+    { label: 'Alla kostnader ifyllda', done: allCostsKnown, action: 'edit_cost' },
+    { label: 'Tider satta på stoppen', done: allTimesSet, action: 'set_time' },
+    { label: 'Adresser/koordinater finns', done: allLocationsKnown, action: 'search_location' },
+    { label: 'Bokningsnotis finns', done: hasReservationInfo, action: 'edit_booking' },
+    { label: 'Körningen ser rimlig ut', done: driveLooksOk, action: 'split_drive' },
   ];
 }
 
@@ -2627,6 +2678,9 @@ const styles = StyleSheet.create({
     borderColor: '#b8ead1',
     backgroundColor: '#f0fbf5',
   },
+  checkItemStatic: {
+    opacity: 0.85,
+  },
   checkMark: {
     color: '#7a4b00',
     fontSize: 10,
@@ -2640,6 +2694,12 @@ const styles = StyleSheet.create({
     color: '#0a2540',
     fontSize: 12,
     fontWeight: '800',
+  },
+  checkActionText: {
+    color: '#635bff',
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
   },
   advancedEditorGrid: {
     flexDirection: 'row',
