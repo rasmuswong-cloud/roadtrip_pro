@@ -1273,6 +1273,14 @@ export default function App() {
                         </Pressable>
                       ))}
                     </View>
+                    <View style={styles.packingPanel}>
+                      <Text style={styles.packingTitle}>Packa / ta med</Text>
+                      <View style={styles.packingList}>
+                        {dayPlan.insight.packingItems.map((item) => (
+                          <Text key={item} style={styles.packingChip}>{item}</Text>
+                        ))}
+                      </View>
+                    </View>
                     {draftPlannerDayKey === dayPlan.key ? renderPlannerInlineEditor('new') : null}
                     {dayPlan.nodes.map((node, index) => (
                       <View key={node.id} style={[styles.timelineItem, isDark && styles.innerPanelDark]}>
@@ -1497,6 +1505,7 @@ type DayInsightSummary = {
   activityCount: number;
   isLongDrive: boolean;
   checklist: DayChecklistItem[];
+  packingItems: string[];
 };
 
 type DayChecklistItem = {
@@ -1577,6 +1586,7 @@ function buildDayInsight(nodes: ItineraryNode[], route: RouteSummary, budget: Bu
     activityCount: activityNodes.length,
     isLongDrive,
     checklist: buildDayChecklist(nodes, route, budget),
+    packingItems: buildDayPackingList(nodes, route),
   };
 }
 
@@ -1596,6 +1606,51 @@ function buildDayChecklist(nodes: ItineraryNode[], route: RouteSummary, budget: 
     { label: 'Bokningsnotis finns', done: hasReservationInfo, action: 'edit_booking' },
     { label: 'Körningen ser rimlig ut', done: driveLooksOk, action: 'split_drive' },
   ];
+}
+
+function buildDayPackingList(nodes: ItineraryNode[], route: RouteSummary): string[] {
+  const items = new Set<string>(['Vatten', 'Mobilladdare']);
+  const combinedText = nodes
+    .map((node) => [
+      node.type,
+      node.title,
+      node.notes,
+      Array.isArray(node.equipment) ? node.equipment.join(' ') : '',
+      JSON.stringify(node.reservation ?? {}),
+      JSON.stringify(node.facilities ?? {}),
+      JSON.stringify(node.metadata ?? {}),
+    ].join(' '))
+    .join(' ')
+    .toLowerCase();
+
+  const hasNodeType = (type: ItineraryNode['type']) => nodes.some((node) => node.type === type);
+  const textIncludes = (...needles: string[]) => needles.some((needle) => combinedText.includes(needle));
+
+  if (hasNodeType('camping') || textIncludes('camping', 'camp', 'talt', 'tält', 'stuga')) {
+    ['Tält', 'Sovsäck', 'Pannlampa', 'Kök/matlåda'].forEach((item) => items.add(item));
+  }
+
+  if (hasNodeType('lodging') || textIncludes('hotell', 'boende', 'bnb', 'lägenhet', 'lagenhet')) {
+    ['Bokningsbekräftelse', 'ID/pass'].forEach((item) => items.add(item));
+  }
+
+  if (hasNodeType('activity') || textIncludes('vandring', 'hike', 'trail', 'aktivitet', 'bad', 'strand')) {
+    ['Bekväma skor', 'Regnjacka', 'Extra tröja'].forEach((item) => items.add(item));
+  }
+
+  if (textIncludes('mtb', 'cykel', 'bike', 'e-bike', 'emtb')) {
+    ['Hjälm', 'Cykelladdare', 'Reparationskit'].forEach((item) => items.add(item));
+  }
+
+  if (hasNodeType('gastronomy') || textIncludes('restaurang', 'middag', 'lunch', 'frukost')) {
+    items.add('Bordsbokning');
+  }
+
+  if (route.durationSeconds / 3600 >= 2 || route.distanceMeters >= 100000) {
+    ['Snacks', 'Offlinekarta', 'Billaddare'].forEach((item) => items.add(item));
+  }
+
+  return Array.from(items).slice(0, 10);
 }
 
 function buildDaySmartFlags(nodes: ItineraryNode[], route: RouteSummary, budget: BudgetSummary): string[] {
@@ -2700,6 +2755,36 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '900',
     textTransform: 'uppercase',
+  },
+  packingPanel: {
+    gap: 8,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d8e5f2',
+    backgroundColor: '#f7fbff',
+    padding: 12,
+  },
+  packingTitle: {
+    color: '#425466',
+    fontSize: 12,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  packingList: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  packingChip: {
+    color: '#0a2540',
+    fontSize: 12,
+    fontWeight: '800',
+    borderRadius: 999,
+    backgroundColor: '#ffffff',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d8e5f2',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
   },
   advancedEditorGrid: {
     flexDirection: 'row',
