@@ -46,6 +46,16 @@ type UndoSnapshot = {
   itineraryNodes: ItineraryNode[];
 };
 
+type AppView = 'overview' | 'route' | 'budget' | 'days' | 'tools';
+
+const appTabs: { key: AppView; label: string }[] = [
+  { key: 'overview', label: 'Översikt' },
+  { key: 'route', label: 'Rutt' },
+  { key: 'budget', label: 'Budget' },
+  { key: 'days', label: 'Dagar' },
+  { key: 'tools', label: 'Verktyg' },
+];
+
 const demoTrip: Trip = {
   id: '11111111-1111-4111-8111-111111111111',
   ownerId: '22222222-2222-4222-8222-222222222222',
@@ -273,6 +283,7 @@ export default function App() {
   const [placeQuery, setPlaceQuery] = useState('camping nära Cortina');
   const [activePlaceDayKey, setActivePlaceDayKey] = useState<string | null>(null);
   const [placeResults, setPlaceResults] = useState<GooglePlace[]>([]);
+  const [activeView, setActiveView] = useState<AppView>('overview');
   const [itineraryNodes, setItineraryNodes] = useState<ItineraryNode[]>(() => initialPersistedState?.itineraryNodes ?? []);
   const [latestAiPlan, setLatestAiPlan] = useState<ItineraryMutationPlan | null>(null);
   const [selectedPlannerNodeId, setSelectedPlannerNodeId] = useState<string | null>(null);
@@ -1463,8 +1474,14 @@ export default function App() {
             <Text style={[styles.title, isDark && styles.textDark]}>Roadtrip-planerare</Text>
           </View>
           <View style={styles.navLinks}>
-            {['Rutt', 'Budget', 'Dagar'].map((item) => (
-              <Text key={item} style={styles.navLink}>{item}</Text>
+            {appTabs.map((tab) => (
+              <Pressable
+                key={tab.key}
+                style={[styles.navTab, activeView === tab.key && styles.navTabActive]}
+                onPress={() => setActiveView(tab.key)}
+              >
+                <Text style={[styles.navLink, activeView === tab.key && styles.navLinkActive]}>{tab.label}</Text>
+              </Pressable>
             ))}
           </View>
           <View style={styles.headerActions}>
@@ -1556,7 +1573,7 @@ export default function App() {
           </View>
 
           <View style={styles.dashboardGrid}>
-            {!isDemoMode ? (
+            {!isDemoMode && activeView === 'tools' ? (
             <View style={styles.sidebarColumn}>
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
                 <SectionTitle title="Konto" dark={isDark} />
@@ -1625,6 +1642,13 @@ export default function App() {
             ) : null}
 
             <View style={styles.mainColumn}>
+              {activeView === 'tools' ? (
+                <View style={[styles.panelSection, isDark && styles.panelDark]}>
+                  <SectionTitle title="Verktyg" dark={isDark} />
+                  <Text style={styles.emptySearchText}>Här finns konto, delning och AI-assistent när redigering är aktiv.</Text>
+                </View>
+              ) : null}
+              {activeView === 'overview' || activeView === 'route' ? (
               <View style={styles.routeStage}>
                 <View style={styles.routeStageHeader}>
                   <View>
@@ -1662,14 +1686,18 @@ export default function App() {
                   <Text style={styles.routeStageMeta}>{formatSek(totalSpend)} kostnad</Text>
                 </View>
               </View>
+              ) : null}
 
+              {activeView === 'overview' || activeView === 'route' ? (
               <View style={styles.statsRow}>
                 <Metric label="Stopp" value={`${displayedNodes.length}`} accent="#0f766e" dark={isDark} />
                 <Metric label="Rutt" value={formatDistance(routeSummary.distanceMeters)} accent="#2563eb" dark={isDark} />
                 <Metric label="Körning" value={formatDuration(routeSummary.durationSeconds)} accent="#d97706" dark={isDark} />
                 <Metric label="Per person" value={formatSek(costPerTraveler)} accent="#7c3aed" dark={isDark} />
               </View>
+              ) : null}
 
+              {activeView === 'overview' ? (
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
                 <View style={styles.sectionHeaderRow}>
                   <SectionTitle title="Reseöversikt" dark={isDark} />
@@ -1681,7 +1709,9 @@ export default function App() {
                   ))}
                 </View>
               </View>
+              ) : null}
 
+              {activeView === 'budget' ? (
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
                 <View style={styles.sectionHeaderRow}>
                   <SectionTitle title="Budget" dark={isDark} />
@@ -1717,7 +1747,9 @@ export default function App() {
                   ))}
                 </View>
               </View>
+              ) : null}
 
+              {activeView === 'days' ? (
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
                 <View style={styles.sectionHeaderRow}>
                   <SectionTitle title="Planering dag för dag" dark={isDark} />
@@ -1965,6 +1997,7 @@ export default function App() {
                   </View>
                 ))}
               </View>
+              ) : null}
             </View>
           </View>
         </ScrollView>
@@ -2805,13 +2838,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 26,
+    gap: 8,
     flexWrap: 'wrap',
+  },
+  navTab: {
+    minHeight: 36,
+    justifyContent: 'center',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  navTabActive: {
+    backgroundColor: '#0a2540',
   },
   navLink: {
     color: '#425466',
-    fontSize: 14,
-    fontWeight: '800',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  navLinkActive: {
+    color: '#ffffff',
   },
   headerActions: {
     flexDirection: 'row',
