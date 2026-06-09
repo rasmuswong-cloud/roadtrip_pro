@@ -733,7 +733,7 @@ export default function App() {
     }
   }
 
-  async function saveQuickCell(node: ItineraryNode, field: 'title' | 'time' | 'place' | 'cost', value: string) {
+  async function saveQuickCell(node: ItineraryNode, field: QuickCellField, value: string) {
     if (isDemoMode || isLoading || itineraryNodes.length === 0) {
       return;
     }
@@ -754,9 +754,14 @@ export default function App() {
       const nextMetadata = { ...node.metadata };
       let nextStartsAt = node.startsAt ?? null;
       let nextTitle = node.title;
+      let nextType = node.type;
 
       if (field === 'title') {
         nextTitle = trimmedValue;
+      }
+
+      if (field === 'date') {
+        nextStartsAt = buildIsoFromInputs(trimmedValue, node.startsAt ? toTimeInput(node.startsAt) : '');
       }
 
       if (field === 'time') {
@@ -786,8 +791,18 @@ export default function App() {
         }
       }
 
+      if (field === 'type') {
+        const nextNodeType = parseInlineNodeType(trimmedValue);
+        if (!nextNodeType) {
+          setStatusMessage('Okänd typ.');
+          return;
+        }
+        nextType = nextNodeType;
+      }
+
       const savedNode = await upsertItineraryNode({
         ...node,
+        type: nextType,
         title: nextTitle,
         startsAt: nextStartsAt,
         metadata: nextMetadata,
@@ -1493,6 +1508,14 @@ export default function App() {
                                     style={[styles.quickCell, styles.quickCellSmall, isDark && styles.inputDark]}
                                   />
                                   <TextInput
+                                    key={`${node.id}-${node.updatedAt}-date`}
+                                    defaultValue={quickCellValue(node, 'date')}
+                                    onEndEditing={(event) => void saveQuickCell(node, 'date', event.nativeEvent.text)}
+                                    placeholder="ÅÅÅÅ-MM-DD"
+                                    placeholderTextColor={isDark ? '#737373' : '#78716c'}
+                                    style={[styles.quickCell, styles.quickCellDate, isDark && styles.inputDark]}
+                                  />
+                                  <TextInput
                                     key={`${node.id}-${node.updatedAt}-place`}
                                     defaultValue={quickCellValue(node, 'place')}
                                     onEndEditing={(event) => void saveQuickCell(node, 'place', event.nativeEvent.text)}
@@ -1508,6 +1531,20 @@ export default function App() {
                                     placeholderTextColor={isDark ? '#737373' : '#78716c'}
                                     style={[styles.quickCell, styles.quickCellSmall, isDark && styles.inputDark]}
                                   />
+                                  <View style={styles.quickTypeRow}>
+                                    {inlineNodeTypes.map((type) => (
+                                      <Pressable
+                                        key={type}
+                                        style={[styles.quickTypeChip, node.type === type && styles.quickTypeChipActive]}
+                                        onPress={() => void saveQuickCell(node, 'type', type)}
+                                        disabled={isLoading}
+                                      >
+                                        <Text style={[styles.quickTypeChipText, node.type === type && styles.quickTypeChipTextActive]}>
+                                          {formatNodeType(type)}
+                                        </Text>
+                                      </Pressable>
+                                    ))}
+                                  </View>
                                 </View>
                               ) : (
                                 <>
@@ -1657,34 +1694,48 @@ function formatNodeCostSummary(node: ItineraryNode): string {
   return parts.join(' / ');
 }
 
-function quickCellValue(node: ItineraryNode, field: 'title' | 'time' | 'place' | 'cost'): string {
+type QuickCellField = 'title' | 'date' | 'time' | 'place' | 'cost' | 'type';
+
+function quickCellValue(node: ItineraryNode, field: QuickCellField): string {
   switch (field) {
     case 'title':
       return node.title;
+    case 'date':
+      return node.startsAt ? node.startsAt.slice(0, 10) : '';
     case 'time':
       return node.startsAt ? toTimeInput(node.startsAt) : '';
     case 'place':
       return typeof node.metadata.place === 'string' ? node.metadata.place : '';
     case 'cost':
       return formatRawNodeCost(node);
+    case 'type':
+      return node.type;
     default:
       return '';
   }
 }
 
-function quickCellLabel(field: 'title' | 'time' | 'place' | 'cost'): string {
+function quickCellLabel(field: QuickCellField): string {
   switch (field) {
     case 'title':
       return 'titel';
+    case 'date':
+      return 'datum';
     case 'time':
       return 'tid';
     case 'place':
       return 'plats';
     case 'cost':
       return 'kostnad';
+    case 'type':
+      return 'typ';
     default:
       return 'fält';
   }
+}
+
+function parseInlineNodeType(value: string): ItineraryNodeType | null {
+  return inlineNodeTypes.includes(value as ItineraryNodeType) ? value as ItineraryNodeType : null;
 }
 
 function buildNodeInfoPills(node: ItineraryNode): string[] {
@@ -3202,6 +3253,37 @@ const styles = StyleSheet.create({
     minWidth: 90,
     maxWidth: 130,
     flexGrow: 0,
+  },
+  quickCellDate: {
+    minWidth: 130,
+    maxWidth: 155,
+    flexGrow: 0,
+  },
+  quickTypeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  quickTypeChip: {
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d8e5f2',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+  },
+  quickTypeChipActive: {
+    borderColor: '#635bff',
+    backgroundColor: '#eef4ff',
+  },
+  quickTypeChipText: {
+    color: '#425466',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  quickTypeChipTextActive: {
+    color: '#635bff',
   },
   nodeInfoPill: {
     color: '#425466',
