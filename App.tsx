@@ -733,6 +733,79 @@ export default function App() {
     }
   }
 
+  async function saveQuickCell(node: ItineraryNode, field: 'title' | 'time' | 'place' | 'cost', value: string) {
+    if (isDemoMode || isLoading || itineraryNodes.length === 0) {
+      return;
+    }
+
+    const trimmedValue = value.trim();
+    if (field === 'title' && !trimmedValue) {
+      setStatusMessage('Titeln kan inte vara tom.');
+      return;
+    }
+
+    const currentValue = quickCellValue(node, field);
+    if (trimmedValue === currentValue) {
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const nextMetadata = { ...node.metadata };
+      let nextStartsAt = node.startsAt ?? null;
+      let nextTitle = node.title;
+
+      if (field === 'title') {
+        nextTitle = trimmedValue;
+      }
+
+      if (field === 'time') {
+        if (!trimmedValue) {
+          nextStartsAt = null;
+        } else if (node.startsAt) {
+          nextStartsAt = buildIsoFromInputs(node.startsAt.slice(0, 10), trimmedValue);
+        } else {
+          setStatusMessage('Sätt datum via Redigera innan du ändrar tid direkt i raden.');
+          return;
+        }
+      }
+
+      if (field === 'place') {
+        if (trimmedValue) {
+          nextMetadata.place = trimmedValue;
+        } else {
+          delete nextMetadata.place;
+        }
+      }
+
+      if (field === 'cost') {
+        if (trimmedValue) {
+          nextMetadata.cost = trimmedValue;
+        } else {
+          delete nextMetadata.cost;
+        }
+      }
+
+      const savedNode = await upsertItineraryNode({
+        ...node,
+        title: nextTitle,
+        startsAt: nextStartsAt,
+        metadata: nextMetadata,
+        updatedAt: new Date().toISOString(),
+      });
+
+      setItineraryNodes((current) => sortNodes(current.map((candidate) => (candidate.id === savedNode.id ? savedNode : candidate))));
+      if (selectedPlannerNodeId === savedNode.id) {
+        populatePlannerEditor(savedNode);
+      }
+      setStatusMessage(`Sparade ${quickCellLabel(field)}: ${trimmedValue || 'tomt'}`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   async function savePlannerEdit() {
     if (!selectedPlannerNodeId) {
       setStatusMessage('Välj en rad i planeringen först.');
@@ -1400,10 +1473,50 @@ export default function App() {
                         ) : (
                           <>
                             <View style={styles.timelineCopy}>
-                              <Text style={[styles.itemTitle, isDark && styles.textDark]}>{index + 1}. {node.title}</Text>
-                              <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
-                                {formatNodeType(node.type)} / {formatNodeCostSummary(node)}
-                              </Text>
+                              <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>{index + 1}. {formatNodeType(node.type)}</Text>
+                              {itineraryNodes.length > 0 && !isDemoMode ? (
+                                <View style={styles.quickCellGrid}>
+                                  <TextInput
+                                    key={`${node.id}-${node.updatedAt}-title`}
+                                    defaultValue={node.title}
+                                    onEndEditing={(event) => void saveQuickCell(node, 'title', event.nativeEvent.text)}
+                                    placeholder="Titel"
+                                    placeholderTextColor={isDark ? '#737373' : '#78716c'}
+                                    style={[styles.quickCell, styles.quickCellTitle, isDark && styles.inputDark]}
+                                  />
+                                  <TextInput
+                                    key={`${node.id}-${node.updatedAt}-time`}
+                                    defaultValue={quickCellValue(node, 'time')}
+                                    onEndEditing={(event) => void saveQuickCell(node, 'time', event.nativeEvent.text)}
+                                    placeholder="TT:MM"
+                                    placeholderTextColor={isDark ? '#737373' : '#78716c'}
+                                    style={[styles.quickCell, styles.quickCellSmall, isDark && styles.inputDark]}
+                                  />
+                                  <TextInput
+                                    key={`${node.id}-${node.updatedAt}-place`}
+                                    defaultValue={quickCellValue(node, 'place')}
+                                    onEndEditing={(event) => void saveQuickCell(node, 'place', event.nativeEvent.text)}
+                                    placeholder="Plats"
+                                    placeholderTextColor={isDark ? '#737373' : '#78716c'}
+                                    style={[styles.quickCell, isDark && styles.inputDark]}
+                                  />
+                                  <TextInput
+                                    key={`${node.id}-${node.updatedAt}-cost`}
+                                    defaultValue={quickCellValue(node, 'cost')}
+                                    onEndEditing={(event) => void saveQuickCell(node, 'cost', event.nativeEvent.text)}
+                                    placeholder="Kostnad"
+                                    placeholderTextColor={isDark ? '#737373' : '#78716c'}
+                                    style={[styles.quickCell, styles.quickCellSmall, isDark && styles.inputDark]}
+                                  />
+                                </View>
+                              ) : (
+                                <>
+                                  <Text style={[styles.itemTitle, isDark && styles.textDark]}>{node.title}</Text>
+                                  <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
+                                    {formatNodeCostSummary(node)}
+                                  </Text>
+                                </>
+                              )}
                               <View style={styles.nodeInfoPills}>
                                 {buildNodeInfoPills(node).map((pill) => (
                                   <Text key={pill} style={styles.nodeInfoPill}>{pill}</Text>
@@ -1542,6 +1655,36 @@ function formatNodeType(type: ItineraryNode['type']): string {
 function formatNodeCostSummary(node: ItineraryNode): string {
   const parts = [formatRawNodeCost(node), formatReservation(node), node.notes ?? node.timezone ?? 'lokal tid'].filter(Boolean);
   return parts.join(' / ');
+}
+
+function quickCellValue(node: ItineraryNode, field: 'title' | 'time' | 'place' | 'cost'): string {
+  switch (field) {
+    case 'title':
+      return node.title;
+    case 'time':
+      return node.startsAt ? toTimeInput(node.startsAt) : '';
+    case 'place':
+      return typeof node.metadata.place === 'string' ? node.metadata.place : '';
+    case 'cost':
+      return formatRawNodeCost(node);
+    default:
+      return '';
+  }
+}
+
+function quickCellLabel(field: 'title' | 'time' | 'place' | 'cost'): string {
+  switch (field) {
+    case 'title':
+      return 'titel';
+    case 'time':
+      return 'tid';
+    case 'place':
+      return 'plats';
+    case 'cost':
+      return 'kostnad';
+    default:
+      return 'fält';
+  }
 }
 
 function buildNodeInfoPills(node: ItineraryNode): string[] {
@@ -3029,6 +3172,36 @@ const styles = StyleSheet.create({
     gap: 6,
     flexWrap: 'wrap',
     marginTop: 8,
+  },
+  quickCellGrid: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+    marginTop: 7,
+  },
+  quickCell: {
+    minWidth: 150,
+    flexGrow: 1,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d8e5f2',
+    borderRadius: 8,
+    backgroundColor: '#f7fbff',
+    color: '#0a2540',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  quickCellTitle: {
+    minWidth: 220,
+    fontSize: 15,
+    backgroundColor: '#ffffff',
+  },
+  quickCellSmall: {
+    minWidth: 90,
+    maxWidth: 130,
+    flexGrow: 0,
   },
   nodeInfoPill: {
     color: '#425466',
