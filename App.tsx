@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -30,6 +30,16 @@ import { googlePlaceToPoi, searchGooglePlaces, type GooglePlace } from '@/servic
 import { estimateRouteSummary } from '@/services/routing/routeEstimate';
 import { useTripStore } from '@/store/tripStore';
 import { formatDistance, formatDuration } from '@/utils/formatters';
+
+const PERSISTED_APP_STATE_KEY = 'roadtrip:persisted-app-state:v1';
+
+type PersistedAppState = {
+  itineraryNodes: ItineraryNode[];
+  travelerCountText: string;
+  isEditMode: boolean;
+};
+
+type OnlineSaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 const demoTrip: Trip = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -133,12 +143,124 @@ const demoExpenses: Expense[] = [
   },
 ];
 
+function readPersistedAppState(): PersistedAppState | null {
+  const storage = getLocalStorage();
+  if (!storage) {
+    return null;
+  }
+
+  try {
+    const rawState = storage.getItem(PERSISTED_APP_STATE_KEY);
+    if (!rawState) {
+      return null;
+    }
+
+    const parsedState: unknown = JSON.parse(rawState);
+    if (!isPersistedAppState(parsedState)) {
+      return null;
+    }
+
+    return {
+      itineraryNodes: sortNodes(parsedState.itineraryNodes),
+      travelerCountText: parsedState.travelerCountText,
+      isEditMode: parsedState.isEditMode === true,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function savePersistedAppState(state: PersistedAppState): void {
+  const storage = getLocalStorage();
+  if (!storage) {
+    return;
+  }
+
+  try {
+    storage.setItem(PERSISTED_APP_STATE_KEY, JSON.stringify(state));
+  } catch {
+    // Local persistence should never block the planner if storage is unavailable or full.
+  }
+}
+
+function getLocalStorage(): Storage | null {
+  try {
+    if (!('localStorage' in globalThis)) {
+      return null;
+    }
+
+    return globalThis.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+function isPersistedAppState(value: unknown): value is PersistedAppState {
+  if (
+    !isRecord(value)
+    || !Array.isArray(value.itineraryNodes)
+    || typeof value.travelerCountText !== 'string'
+    || (value.isEditMode !== undefined && typeof value.isEditMode !== 'boolean')
+  ) {
+    return false;
+  }
+
+  return value.itineraryNodes.every(isPersistedItineraryNode);
+}
+
+function isPersistedItineraryNode(value: unknown): value is ItineraryNode {
+  return (
+    isRecord(value)
+    && typeof value.id === 'string'
+    && typeof value.tripId === 'string'
+    && typeof value.createdBy === 'string'
+    && typeof value.type === 'string'
+    && typeof value.title === 'string'
+    && typeof value.sortOrder === 'number'
+    && isRecord(value.metadata)
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function formatOnlineSaveLabel(state: OnlineSaveState, lastSavedAt: string | null, hasActiveTrip: boolean): string {
+  if (!hasActiveTrip) {
+    return 'Lokalt sparat';
+  }
+
+  if (state === 'saving') {
+    return 'Sparar online...';
+  }
+
+  if (state === 'error') {
+    return 'Ej sparat online';
+  }
+
+  if (state === 'saved' && lastSavedAt) {
+    return `Sparat online ${formatShortTime(lastSavedAt)}`;
+  }
+
+  return 'Online redo';
+}
+
+function formatShortTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(date);
+}
+
 export default function App() {
   const isDark = false;
+  const initialPersistedState = useMemo(() => readPersistedAppState(), []);
   const [command, setCommand] = useState('');
   const [statusMessage, setStatusMessage] = useState('Redo att ansluta resan.');
   const [isLoading, setIsLoading] = useState(false);
-  const [isEditMode, setIsEditMode] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(() => initialPersistedState?.isEditMode ?? false);
   const [userId, setUserId] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [shareCode, setShareCode] = useState('');
@@ -146,7 +268,7 @@ export default function App() {
   const [placeQuery, setPlaceQuery] = useState('camping nära Cortina');
   const [activePlaceDayKey, setActivePlaceDayKey] = useState<string | null>(null);
   const [placeResults, setPlaceResults] = useState<GooglePlace[]>([]);
-  const [itineraryNodes, setItineraryNodes] = useState<ItineraryNode[]>([]);
+  const [itineraryNodes, setItineraryNodes] = useState<ItineraryNode[]>(() => initialPersistedState?.itineraryNodes ?? []);
   const [latestAiPlan, setLatestAiPlan] = useState<ItineraryMutationPlan | null>(null);
   const [selectedPlannerNodeId, setSelectedPlannerNodeId] = useState<string | null>(null);
   const [draftPlannerDayKey, setDraftPlannerDayKey] = useState<string | null>(null);
@@ -160,8 +282,11 @@ export default function App() {
   const [plannerCost, setPlannerCost] = useState('');
   const [plannerHotelNote, setPlannerHotelNote] = useState('');
   const [plannerNotes, setPlannerNotes] = useState('');
-  const [travelerCountText, setTravelerCountText] = useState('2');
+  const [travelerCountText, setTravelerCountText] = useState(() => initialPersistedState?.travelerCountText ?? '2');
   const [packingDraftByDay, setPackingDraftByDay] = useState<Record<string, string>>({});
+  const [hasLoadedPersistentState, setHasLoadedPersistentState] = useState(false);
+  const [onlineSaveState, setOnlineSaveState] = useState<OnlineSaveState>('idle');
+  const [lastOnlineSavedAt, setLastOnlineSavedAt] = useState<string | null>(null);
   const { activeTripId, setActiveTrip, upsertTrip, upsertPoi: upsertPoiInStore } = useTripStore();
 
   const displayedNodes = itineraryNodes.length > 0 ? itineraryNodes : demoNodes;
@@ -173,6 +298,97 @@ export default function App() {
   const travelerCount = parseTravelerCount(travelerCountText);
   const costPerTraveler = travelerCount > 0 ? totalSpend / travelerCount : totalSpend;
   const costPerDay = dayPlans.length > 0 ? totalSpend / dayPlans.length : totalSpend;
+  const onlineSaveLabel = formatOnlineSaveLabel(onlineSaveState, lastOnlineSavedAt, Boolean(activeTripId));
+
+  useEffect(() => {
+    setHasLoadedPersistentState(true);
+    if (initialPersistedState?.itineraryNodes.length) {
+      setStatusMessage(`Återställde ${initialPersistedState.itineraryNodes.length} sparade stopp från denna enhet.`);
+    }
+  }, [initialPersistedState]);
+
+  useEffect(() => {
+    if (!hasLoadedPersistentState) {
+      return;
+    }
+
+    savePersistedAppState({
+      itineraryNodes,
+      travelerCountText,
+      isEditMode,
+    });
+  }, [hasLoadedPersistentState, itineraryNodes, travelerCountText, isEditMode]);
+
+  useEffect(() => {
+    void connectSupabaseTrip();
+  }, []);
+
+  function toggleEditMode() {
+    setIsEditMode((current) => {
+      const next = !current;
+      savePersistedAppState({
+        itineraryNodes,
+        travelerCountText,
+        isEditMode: next,
+      });
+      setStatusMessage(next ? 'Redigeringsläge på. Ändringar sparas när du sparar fälten.' : 'Redigeringsläge av.');
+      return next;
+    });
+  }
+
+  async function saveAppSnapshot() {
+    if (selectedPlannerNodeId && !isLoading && !isDemoMode) {
+      await savePlannerEdit();
+      return;
+    }
+
+    savePersistedAppState({
+      itineraryNodes,
+      travelerCountText,
+      isEditMode,
+    });
+    setStatusMessage('Appen sparad. Nästa gång öppnas samma plan och läge.');
+  }
+
+  function markOnlineSaveStart() {
+    if (activeTripId) {
+      setOnlineSaveState('saving');
+    }
+  }
+
+  function markOnlineSaveSuccess() {
+    setOnlineSaveState('saved');
+    setLastOnlineSavedAt(new Date().toISOString());
+  }
+
+  function markOnlineSaveError() {
+    setOnlineSaveState('error');
+  }
+
+  async function saveItineraryNodeOnline(node: ItineraryNode): Promise<ItineraryNode> {
+    markOnlineSaveStart();
+
+    try {
+      const savedNode = await upsertItineraryNode(node);
+      markOnlineSaveSuccess();
+      return savedNode;
+    } catch (error) {
+      markOnlineSaveError();
+      throw error;
+    }
+  }
+
+  async function deleteItineraryNodeOnline(nodeId: string): Promise<void> {
+    markOnlineSaveStart();
+
+    try {
+      await deleteItineraryNode(nodeId);
+      markOnlineSaveSuccess();
+    } catch (error) {
+      markOnlineSaveError();
+      throw error;
+    }
+  }
 
   async function connectSupabaseTrip() {
     setIsLoading(true);
@@ -190,6 +406,7 @@ export default function App() {
       upsertTrip(trip);
       setActiveTrip(trip.id);
       setItineraryNodes(nodes);
+      markOnlineSaveSuccess();
       setStatusMessage(`Ansluten: ${trip.name}`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
@@ -276,6 +493,7 @@ export default function App() {
       upsertTrip(trip);
       setActiveTrip(trip.id);
       setItineraryNodes(nodes);
+      markOnlineSaveSuccess();
       setStatusMessage(`Gick med i: ${trip.name}`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
@@ -417,6 +635,7 @@ export default function App() {
     setStatusMessage('Sparar AI-plan...');
 
     try {
+      markOnlineSaveStart();
       const result = await applyConfirmedMutationPlan(latestAiPlan, userId, {
         confirmed: true,
         existingNodes: itineraryNodes,
@@ -441,10 +660,12 @@ export default function App() {
         result.pois.forEach(upsertPoiInStore);
       }
 
+      markOnlineSaveSuccess();
       setLatestAiPlan(null);
       const warningText = result.warnings.length > 0 ? ` Varningar: ${result.warnings.join(' ')}` : '';
       setStatusMessage(`AI-plan sparad: ${result.itineraryNodes.length} stopp, ${result.expenses.length} kostnader, ${result.pois.length} platser.${warningText}`);
     } catch (error) {
+      markOnlineSaveError();
       setStatusMessage(error instanceof Error ? error.message : String(error));
     } finally {
       setIsLoading(false);
@@ -456,7 +677,7 @@ export default function App() {
     setStatusMessage('Tar bort stopp...');
 
     try {
-      await deleteItineraryNode(nodeId);
+      await deleteItineraryNodeOnline(nodeId);
       setItineraryNodes((current) => current.filter((node) => node.id !== nodeId));
       if (selectedPlannerNodeId === nodeId) {
         clearPlannerEditor();
@@ -480,7 +701,7 @@ export default function App() {
 
     try {
       const scheduledAt = setNodeTime(node, hour);
-      const savedNode = await upsertItineraryNode({
+      const savedNode = await saveItineraryNodeOnline({
         ...node,
         startsAt: scheduledAt,
         updatedAt: new Date().toISOString(),
@@ -521,13 +742,13 @@ export default function App() {
 
     try {
       const now = new Date().toISOString();
-      const updatedCurrent = await upsertItineraryNode({
+      const updatedCurrent = await saveItineraryNodeOnline({
         ...currentNode,
         sortOrder: targetNode.sortOrder,
         updatedAt: now,
         version: currentNode.version + 1,
       });
-      const updatedTarget = await upsertItineraryNode({
+      const updatedTarget = await saveItineraryNodeOnline({
         ...targetNode,
         sortOrder: currentNode.sortOrder,
         updatedAt: now,
@@ -674,7 +895,7 @@ export default function App() {
       const nextPackedItems = packedItems.includes(item)
         ? packedItems.filter((candidate) => candidate !== item)
         : [...packedItems, item];
-      const savedNode = await upsertItineraryNode({
+      const savedNode = await saveItineraryNodeOnline({
         ...targetNode,
         metadata: {
           ...targetNode.metadata,
@@ -717,7 +938,7 @@ export default function App() {
         return;
       }
 
-      const savedNode = await upsertItineraryNode({
+      const savedNode = await saveItineraryNodeOnline({
         ...targetNode,
         equipment: [...existingEquipment, { name: item, quantity: 1 }],
         updatedAt: new Date().toISOString(),
@@ -800,7 +1021,7 @@ export default function App() {
         nextType = nextNodeType;
       }
 
-      const savedNode = await upsertItineraryNode({
+      const savedNode = await saveItineraryNodeOnline({
         ...node,
         type: nextType,
         title: nextTitle,
@@ -875,7 +1096,7 @@ export default function App() {
         delete nextMetadata.place;
       }
 
-      const savedNode = await upsertItineraryNode({
+      const savedNode = await saveItineraryNodeOnline({
         ...node,
         type: plannerType,
         title: plannerTitle.trim(),
@@ -922,7 +1143,7 @@ export default function App() {
       }
 
       const now = new Date().toISOString();
-      const savedNode = await upsertItineraryNode({
+      const savedNode = await saveItineraryNodeOnline({
         id: cryptoRandomId(),
         tripId: activeTripId,
         createdBy: userId,
@@ -1074,7 +1295,7 @@ export default function App() {
 
       const importedNodes: ItineraryNode[] = [];
       for (const row of rowsToImport) {
-        importedNodes.push(await upsertItineraryNode(buildNodeFromSeedRow(row, activeTripId, userId)));
+        importedNodes.push(await saveItineraryNodeOnline(buildNodeFromSeedRow(row, activeTripId, userId)));
       }
 
       setItineraryNodes((current) => sortNodes([...current, ...importedNodes]));
@@ -1094,7 +1315,7 @@ export default function App() {
     const now = new Date().toISOString();
     const startsAt = dayKey === 'unscheduled' ? null : buildIsoFromInputs(dayKey, '');
 
-    return upsertItineraryNode({
+    return saveItineraryNodeOnline({
       id: cryptoRandomId(),
       tripId: activeTripId,
       poiId: poi.id,
@@ -1137,8 +1358,24 @@ export default function App() {
             <View style={[styles.tripStatePill, activeTripId ? styles.tripStatePillActive : null]}>
               <Text style={[styles.tripStateText, activeTripId ? styles.tripStateTextActive : null]}>{activeTripId ? 'Synkad' : 'Lokal'}</Text>
             </View>
-            <Pressable style={styles.modeButton} onPress={() => setIsEditMode((current) => !current)}>
-              <Text style={styles.modeButtonText}>{isEditMode ? 'Demovy' : 'Redigera'}</Text>
+            <View style={[
+              styles.saveStatePill,
+              onlineSaveState === 'saving' && styles.saveStatePillSaving,
+              onlineSaveState === 'saved' && styles.saveStatePillSaved,
+              onlineSaveState === 'error' && styles.saveStatePillError,
+            ]}>
+              <Text style={[
+                styles.saveStateText,
+                onlineSaveState === 'saving' && styles.saveStateTextSaving,
+                onlineSaveState === 'saved' && styles.saveStateTextSaved,
+                onlineSaveState === 'error' && styles.saveStateTextError,
+              ]}>{onlineSaveLabel}</Text>
+            </View>
+            <Pressable style={[styles.modeButton, isEditMode && styles.modeButtonActive]} onPress={toggleEditMode}>
+              <Text style={[styles.modeButtonText, isEditMode && styles.modeButtonTextActive]}>{isEditMode ? 'Redigerar' : 'Redigera'}</Text>
+            </Pressable>
+            <Pressable style={[styles.saveAppButton, isLoading && styles.disabledButton]} onPress={saveAppSnapshot} disabled={isLoading}>
+              <Text style={styles.saveAppButtonText}>Spara app</Text>
             </Pressable>
             <Pressable style={[styles.syncButton, isLoading && styles.disabledButton]} onPress={connectSupabaseTrip} disabled={isLoading}>
               <Text style={styles.syncButtonText}>{isLoading ? 'Vänta' : activeTripId ? 'Uppdatera' : 'Anslut'}</Text>
@@ -2379,6 +2616,41 @@ const styles = StyleSheet.create({
   tripStateTextActive: {
     color: '#0073e6',
   },
+  saveStatePill: {
+    minHeight: 34,
+    justifyContent: 'center',
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d7e1ea',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 14,
+  },
+  saveStatePillSaving: {
+    borderColor: '#f59e0b',
+    backgroundColor: '#fff7ed',
+  },
+  saveStatePillSaved: {
+    borderColor: '#22c55e',
+    backgroundColor: '#ecfdf3',
+  },
+  saveStatePillError: {
+    borderColor: '#ef4444',
+    backgroundColor: '#fff1f2',
+  },
+  saveStateText: {
+    color: '#425466',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  saveStateTextSaving: {
+    color: '#92400e',
+  },
+  saveStateTextSaved: {
+    color: '#166534',
+  },
+  saveStateTextError: {
+    color: '#b91c1c',
+  },
   syncButton: {
     backgroundColor: '#0a2540',
     borderRadius: 999,
@@ -2402,8 +2674,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
+  modeButtonActive: {
+    borderColor: '#0f766e',
+    backgroundColor: '#ecfdf5',
+  },
   modeButtonText: {
     color: '#0a2540',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  modeButtonTextActive: {
+    color: '#0f766e',
+  },
+  saveAppButton: {
+    minHeight: 40,
+    justifyContent: 'center',
+    borderRadius: 999,
+    backgroundColor: '#0f766e',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  saveAppButtonText: {
+    color: '#ffffff',
     fontSize: 13,
     fontWeight: '900',
   },
