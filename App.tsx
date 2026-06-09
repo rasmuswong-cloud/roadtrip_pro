@@ -1209,6 +1209,13 @@ export default function App() {
                         </Pressable>
                       ) : null}
                     </View>
+                    <View style={styles.dayInsightGrid}>
+                      <DayInsight label="Boende" value={dayPlan.insight.lodgingLabel} tone={dayPlan.insight.hasLodging ? 'good' : 'warn'} />
+                      <DayInsight label="Aktiviteter" value={dayPlan.insight.activitiesLabel} tone={dayPlan.insight.activityCount > 0 ? 'good' : 'neutral'} />
+                      <DayInsight label="Körning" value={dayPlan.insight.driveLabel} tone={dayPlan.insight.isLongDrive ? 'warn' : 'neutral'} />
+                      <DayInsight label="Budget" value={dayPlan.insight.costLabel} tone={dayPlan.budget.missingCostCount > 0 ? 'warn' : 'good'} />
+                    </View>
+                    <Text style={styles.dayNextAction}>{dayPlan.insight.nextAction}</Text>
                     {draftPlannerDayKey === dayPlan.key ? renderPlannerInlineEditor('new') : null}
                     {dayPlan.nodes.map((node, index) => (
                       <View key={node.id} style={[styles.timelineItem, isDark && styles.innerPanelDark]}>
@@ -1227,6 +1234,11 @@ export default function App() {
                               <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
                                 {formatNodeType(node.type)} / {formatNodeCostSummary(node)}
                               </Text>
+                              <View style={styles.nodeInfoPills}>
+                                {buildNodeInfoPills(node).map((pill) => (
+                                  <Text key={pill} style={styles.nodeInfoPill}>{pill}</Text>
+                                ))}
+                              </View>
                             </View>
                             {itineraryNodes.length > 0 && !isDemoMode ? (
                               <View style={styles.stopActions}>
@@ -1283,6 +1295,15 @@ function BudgetCard({ label, value, accent }: { label: string; value: number; ac
   );
 }
 
+function DayInsight({ label, value, tone }: { label: string; value: string; tone: 'good' | 'warn' | 'neutral' }) {
+  return (
+    <View style={[styles.dayInsightCard, tone === 'good' && styles.dayInsightGood, tone === 'warn' && styles.dayInsightWarn]}>
+      <Text style={styles.dayInsightLabel}>{label}</Text>
+      <Text style={styles.dayInsightValue}>{value}</Text>
+    </View>
+  );
+}
+
 function DayOverviewCard({ dayPlan }: { dayPlan: DayPlan }) {
   const primaryStop = dayPlan.nodes[0]?.title ?? 'Inga stopp än';
   const flags = dayPlan.smartFlags.length > 0 ? dayPlan.smartFlags : ['Ser planerad ut'];
@@ -1294,6 +1315,7 @@ function DayOverviewCard({ dayPlan }: { dayPlan: DayPlan }) {
         <Text style={styles.dayOverviewCost}>{formatSek(dayPlan.budget.total)}</Text>
       </View>
       <Text style={styles.dayOverviewPrimary}>{primaryStop}</Text>
+      <Text style={styles.dayOverviewAction}>{dayPlan.insight.nextAction}</Text>
       <View style={styles.dayOverviewStats}>
         <Text style={styles.dayOverviewStat}>{dayPlan.nodes.length} stopp</Text>
         <Text style={styles.dayOverviewStat}>{formatDistance(dayPlan.route.distanceMeters)}</Text>
@@ -1351,6 +1373,31 @@ function formatNodeCostSummary(node: ItineraryNode): string {
   return parts.join(' / ');
 }
 
+function buildNodeInfoPills(node: ItineraryNode): string[] {
+  const pills: string[] = [];
+  const place = typeof node.metadata.place === 'string' ? node.metadata.place : null;
+  const cost = formatRawNodeCost(node);
+  const reservation = formatReservation(node);
+
+  if (place) {
+    pills.push(place);
+  } else if (node.location) {
+    pills.push(`${node.location.latitude.toFixed(2)}, ${node.location.longitude.toFixed(2)}`);
+  }
+
+  pills.push(cost || 'Kostnad saknas');
+
+  if (reservation) {
+    pills.push(reservation);
+  }
+
+  if (node.notes) {
+    pills.push(node.notes);
+  }
+
+  return pills.slice(0, 4);
+}
+
 const inlineNodeTypes: ItineraryNodeType[] = ['lodging', 'camping', 'activity', 'gastronomy', 'transport', 'custom'];
 
 function sortNodes(nodes: ItineraryNode[]): ItineraryNode[] {
@@ -1379,6 +1426,18 @@ type DayPlan = {
   route: RouteSummary;
   budget: BudgetSummary;
   smartFlags: string[];
+  insight: DayInsightSummary;
+};
+
+type DayInsightSummary = {
+  lodgingLabel: string;
+  activitiesLabel: string;
+  driveLabel: string;
+  costLabel: string;
+  nextAction: string;
+  hasLodging: boolean;
+  activityCount: number;
+  isLongDrive: boolean;
 };
 
 type BudgetCategories = {
@@ -1408,6 +1467,7 @@ function buildDayPlans(nodes: ItineraryNode[]): DayPlan[] {
   return Array.from(groups.entries()).map(([key, groupNodes], index) => {
     const route = estimateRouteSummary(groupNodes);
     const budget = buildBudgetSummary(groupNodes);
+    const insight = buildDayInsight(groupNodes, route, budget);
     const title = key === 'unscheduled' ? 'Oschemalagt' : `Dag ${index + 1} / ${formatDateLabel(key)}`;
 
     return {
@@ -1418,8 +1478,40 @@ function buildDayPlans(nodes: ItineraryNode[]): DayPlan[] {
       route,
       budget,
       smartFlags: buildDaySmartFlags(groupNodes, route, budget),
+      insight,
     };
   });
+}
+
+function buildDayInsight(nodes: ItineraryNode[], route: RouteSummary, budget: BudgetSummary): DayInsightSummary {
+  const lodgingNode = nodes.find((node) => node.type === 'lodging' || node.type === 'camping');
+  const activityNodes = nodes.filter((node) => node.type === 'activity' || node.type === 'gastronomy' || node.type === 'custom');
+  const hasTimedStop = nodes.some((node) => Boolean(node.startsAt));
+  const isLongDrive = route.durationSeconds / 3600 >= 5;
+
+  let nextAction = 'Ser planerad ut';
+  if (nodes.length === 0) {
+    nextAction = 'Lägg till dagens första stopp';
+  } else if (!lodgingNode) {
+    nextAction = 'Lägg till eller bekräfta boende';
+  } else if (budget.missingCostCount > 0) {
+    nextAction = 'Fyll i saknade kostnader';
+  } else if (!hasTimedStop) {
+    nextAction = 'Sätt tider på dagens stopp';
+  } else if (isLongDrive) {
+    nextAction = 'Kontrollera om körningen bör delas upp';
+  }
+
+  return {
+    lodgingLabel: lodgingNode ? lodgingNode.title : 'Saknas',
+    activitiesLabel: activityNodes.length > 0 ? `${activityNodes.length} planerade` : 'Inga än',
+    driveLabel: route.distanceMeters > 0 ? `${formatDistance(route.distanceMeters)} / ${formatDuration(route.durationSeconds)}` : 'Ingen rutt',
+    costLabel: budget.missingCostCount > 0 ? `${formatSek(budget.total)} + saknas` : formatSek(budget.total),
+    nextAction,
+    hasLodging: Boolean(lodgingNode),
+    activityCount: activityNodes.length,
+    isLongDrive,
+  };
 }
 
 function buildDaySmartFlags(nodes: ItineraryNode[], route: RouteSummary, budget: BudgetSummary): string[] {
@@ -2236,6 +2328,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '900',
   },
+  dayOverviewAction: {
+    color: '#425466',
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 17,
+  },
   dayOverviewStats: {
     flexDirection: 'row',
     gap: 8,
@@ -2349,6 +2447,53 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     padding: 12,
   },
+  dayInsightGrid: {
+    flexDirection: 'row',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  dayInsightCard: {
+    flex: 1,
+    minWidth: 150,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d7e1ea',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  dayInsightGood: {
+    borderColor: '#b8ead1',
+    backgroundColor: '#f0fbf5',
+  },
+  dayInsightWarn: {
+    borderColor: '#ffe3a3',
+    backgroundColor: '#fff9eb',
+  },
+  dayInsightLabel: {
+    color: '#425466',
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  dayInsightValue: {
+    color: '#0a2540',
+    fontSize: 14,
+    fontWeight: '900',
+    marginTop: 5,
+  },
+  dayNextAction: {
+    color: '#635bff',
+    fontSize: 13,
+    fontWeight: '900',
+    lineHeight: 18,
+    borderRadius: 12,
+    backgroundColor: '#f2f4ff',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#dfe3ff',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
   advancedEditorGrid: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2413,6 +2558,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     marginTop: 4,
+  },
+  nodeInfoPills: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+    marginTop: 8,
+  },
+  nodeInfoPill: {
+    color: '#425466',
+    fontSize: 11,
+    fontWeight: '800',
+    borderRadius: 999,
+    backgroundColor: '#f6f9fc',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d7e1ea',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
   },
   commandInput: {
     minHeight: 88,
