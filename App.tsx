@@ -161,7 +161,7 @@ function readPersistedAppState(): PersistedAppState | null {
     }
 
     return {
-      itineraryNodes: sortNodes(parsedState.itineraryNodes),
+      itineraryNodes: sortNodes(parsedState.itineraryNodes.map(cleanItineraryNodeImportNotes)),
       travelerCountText: parsedState.travelerCountText,
       isEditMode: parsedState.isEditMode === true,
     };
@@ -390,6 +390,29 @@ export default function App() {
     }
   }
 
+  async function cleanLoadedNodesOnline(nodes: ItineraryNode[]): Promise<ItineraryNode[]> {
+    const cleanedNodes = nodes.map(cleanItineraryNodeImportNotes);
+    const nodesToUpdate = cleanedNodes.filter((node, index) => node.notes !== nodes[index]?.notes);
+
+    if (nodesToUpdate.length === 0) {
+      return cleanedNodes;
+    }
+
+    markOnlineSaveStart();
+    try {
+      await Promise.all(nodesToUpdate.map((node) => upsertItineraryNode({
+        ...node,
+        updatedAt: new Date().toISOString(),
+        version: node.version + 1,
+      })));
+      markOnlineSaveSuccess();
+      return cleanedNodes;
+    } catch (error) {
+      markOnlineSaveError();
+      throw error;
+    }
+  }
+
   async function connectSupabaseTrip() {
     setIsLoading(true);
     setStatusMessage('Ansluter resan...');
@@ -402,10 +425,11 @@ export default function App() {
       await ensureUserProfile(user.id, user.email ?? 'Reseplanerare');
       const trip = await ensureFirstTrip(user.id);
       const nodes = await listItineraryNodes(trip.id);
+      const cleanedNodes = await cleanLoadedNodesOnline(nodes);
 
       upsertTrip(trip);
       setActiveTrip(trip.id);
-      setItineraryNodes(nodes);
+      setItineraryNodes(cleanedNodes);
       markOnlineSaveSuccess();
       setStatusMessage(`Ansluten: ${trip.name}`);
     } catch (error) {
@@ -489,10 +513,11 @@ export default function App() {
       await ensureUserProfile(user.id, user.email ?? 'Reseplanerare');
       const trip = await joinTripByShareCode(shareCode);
       const nodes = await listItineraryNodes(trip.id);
+      const cleanedNodes = await cleanLoadedNodesOnline(nodes);
       setUserId(user.id);
       upsertTrip(trip);
       setActiveTrip(trip.id);
-      setItineraryNodes(nodes);
+      setItineraryNodes(cleanedNodes);
       markOnlineSaveSuccess();
       setStatusMessage(`Gick med i: ${trip.name}`);
     } catch (error) {
@@ -793,7 +818,7 @@ export default function App() {
     setPlannerLongitude(node.location ? String(node.location.longitude) : '');
     setPlannerCost(formatRawNodeCost(node));
     setPlannerHotelNote(formatReservation(node));
-    setPlannerNotes(node.notes ?? '');
+    setPlannerNotes(cleanImportedNoteLines(node.notes) ?? '');
     setStatusMessage(`Redigerar: ${node.title}`);
   }
 
@@ -1102,7 +1127,7 @@ export default function App() {
         title: plannerTitle.trim(),
         startsAt: buildIsoFromInputs(plannerDate, plannerTime),
         location: latitude !== null && longitude !== null ? { latitude, longitude } : null,
-        notes: plannerNotes.trim() || null,
+        notes: cleanImportedNoteLines(plannerNotes) ?? null,
         reservation: nextReservation,
         metadata: nextMetadata,
         updatedAt: new Date().toISOString(),
@@ -1927,7 +1952,9 @@ function formatNodeType(type: ItineraryNode['type']): string {
 }
 
 function formatNodeCostSummary(node: ItineraryNode): string {
-  const parts = [formatRawNodeCost(node), formatReservation(node), node.notes ?? node.timezone ?? 'lokal tid'].filter(Boolean);
+  const reservation = formatReservation(node);
+  const fallback = cleanImportedNoteLines(node.notes) ?? node.timezone ?? 'lokal tid';
+  const parts = [formatRawNodeCost(node), reservation || fallback].filter(Boolean);
   return parts.join(' / ');
 }
 
@@ -2432,10 +2459,47 @@ function formatReservation(node: ItineraryNode): string {
     node.reservation.reference,
     node.reservation.siteNumber ? `Site ${node.reservation.siteNumber}` : null,
     node.reservation.accessDetails,
-    node.notes,
+    cleanImportedNoteLines(node.notes),
   ].filter(Boolean);
 
   return details.join(' / ');
+}
+
+function cleanImportedNoteLines(value?: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const cleanedLines = value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !isImportedNoteLine(line));
+
+  return cleanedLines.length > 0 ? cleanedLines.join('\n') : null;
+}
+
+function isImportedNoteLine(value: string): boolean {
+  const normalized = value.toLowerCase();
+  return (
+    normalized.includes('imported from')
+    || normalized.includes('cost from')
+    || normalized.includes('excel')
+    || normalized.includes('reseplanrare')
+    || normalized.includes('laddad fr')
+    || normalized.includes('kostnad fr')
+  );
+}
+
+function cleanItineraryNodeImportNotes(node: ItineraryNode): ItineraryNode {
+  const cleanedNotes = cleanImportedNoteLines(node.notes);
+  if ((node.notes ?? null) === cleanedNotes) {
+    return node;
+  }
+
+  return {
+    ...node,
+    notes: cleanedNotes,
+  };
 }
 
 function formatDateLabel(dateKey: string): string {
@@ -2452,12 +2516,7 @@ function buildNodeFromSeedRow(row: ReseplanrareSeedRow, tripId: string, userId: 
   const title = row.activity ? row.activity : row.hotel ? row.hotel : row.place;
   const startsAt = row.date ? new Date(`${row.date}T09:00:00`).toISOString() : null;
   const costParts = [row.lodgingCost, row.activityCost].filter(Boolean);
-  const notes = [
-    row.activity && row.place !== row.activity ? `Plats: ${row.place}` : null,
-    row.hotel ? `Hotell/notis: ${row.hotel}` : null,
-    costParts.length ? `Kostnad från underlag: ${costParts.join(' + ')} SEK` : null,
-    `Laddad från resplanens underlag rad ${row.sourceRow}`,
-  ].filter(Boolean).join('\n');
+  const notes = row.activity && row.place !== row.activity ? row.place : null;
 
   return {
     id: cryptoRandomId(),
