@@ -1215,6 +1215,14 @@ export default function App() {
                       <DayInsight label="Budget" value={dayPlan.insight.costLabel} tone={dayPlan.budget.missingCostCount > 0 ? 'warn' : 'good'} />
                     </View>
                     <Text style={styles.dayNextAction}>{dayPlan.insight.nextAction}</Text>
+                    <View style={styles.dayChecklist}>
+                      {dayPlan.insight.checklist.map((item) => (
+                        <View key={item.label} style={[styles.checkItem, item.done && styles.checkItemDone]}>
+                          <Text style={[styles.checkMark, item.done && styles.checkMarkDone]}>{item.done ? 'Klar' : 'Att fixa'}</Text>
+                          <Text style={styles.checkLabel}>{item.label}</Text>
+                        </View>
+                      ))}
+                    </View>
                     {draftPlannerDayKey === dayPlan.key ? renderPlannerInlineEditor('new') : null}
                     {dayPlan.nodes.map((node, index) => (
                       <View key={node.id} style={[styles.timelineItem, isDark && styles.innerPanelDark]}>
@@ -1438,6 +1446,12 @@ type DayInsightSummary = {
   hasLodging: boolean;
   activityCount: number;
   isLongDrive: boolean;
+  checklist: DayChecklistItem[];
+};
+
+type DayChecklistItem = {
+  label: string;
+  done: boolean;
 };
 
 type BudgetCategories = {
@@ -1511,7 +1525,26 @@ function buildDayInsight(nodes: ItineraryNode[], route: RouteSummary, budget: Bu
     hasLodging: Boolean(lodgingNode),
     activityCount: activityNodes.length,
     isLongDrive,
+    checklist: buildDayChecklist(nodes, route, budget),
   };
+}
+
+function buildDayChecklist(nodes: ItineraryNode[], route: RouteSummary, budget: BudgetSummary): DayChecklistItem[] {
+  const hasLodging = nodes.some((node) => node.type === 'lodging' || node.type === 'camping');
+  const allCostsKnown = nodes.length > 0 && budget.missingCostCount === 0;
+  const allTimesSet = nodes.length > 0 && nodes.every((node) => Boolean(node.startsAt));
+  const allLocationsKnown = nodes.length > 0 && nodes.every((node) => Boolean(node.location));
+  const hasReservationInfo = nodes.some((node) => Boolean(formatReservation(node)));
+  const driveLooksOk = route.durationSeconds / 3600 < 5;
+
+  return [
+    { label: 'Boende eller camping finns', done: hasLodging },
+    { label: 'Alla kostnader ifyllda', done: allCostsKnown },
+    { label: 'Tider satta på stoppen', done: allTimesSet },
+    { label: 'Adresser/koordinater finns', done: allLocationsKnown },
+    { label: 'Bokningsnotis finns', done: hasReservationInfo },
+    { label: 'Körningen ser rimlig ut', done: driveLooksOk },
+  ];
 }
 
 function buildDaySmartFlags(nodes: ItineraryNode[], route: RouteSummary, budget: BudgetSummary): string[] {
@@ -2573,6 +2606,40 @@ const styles = StyleSheet.create({
     borderColor: '#dfe3ff',
     paddingHorizontal: 12,
     paddingVertical: 9,
+  },
+  dayChecklist: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  checkItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#ffe3a3',
+    backgroundColor: '#fff9eb',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  checkItemDone: {
+    borderColor: '#b8ead1',
+    backgroundColor: '#f0fbf5',
+  },
+  checkMark: {
+    color: '#7a4b00',
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  checkMarkDone: {
+    color: '#076b4d',
+  },
+  checkLabel: {
+    color: '#0a2540',
+    fontSize: 12,
+    fontWeight: '800',
   },
   advancedEditorGrid: {
     flexDirection: 'row',
