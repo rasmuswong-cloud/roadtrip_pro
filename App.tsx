@@ -287,6 +287,7 @@ export default function App() {
   const [plannerCost, setPlannerCost] = useState('');
   const [plannerHotelNote, setPlannerHotelNote] = useState('');
   const [plannerNotes, setPlannerNotes] = useState('');
+  const [plannerSearchText, setPlannerSearchText] = useState('');
   const [travelerCountText, setTravelerCountText] = useState(() => initialPersistedState?.travelerCountText ?? '2');
   const [packingDraftByDay, setPackingDraftByDay] = useState<Record<string, string>>({});
   const [hasLoadedPersistentState, setHasLoadedPersistentState] = useState(false);
@@ -299,6 +300,8 @@ export default function App() {
   const isDemoMode = !isEditMode;
   const routeSummary = useMemo(() => estimateRouteSummary(displayedNodes), [displayedNodes]);
   const dayPlans = useMemo(() => buildDayPlans(displayedNodes), [displayedNodes]);
+  const filteredDayPlans = useMemo(() => filterDayPlans(dayPlans, plannerSearchText), [dayPlans, plannerSearchText]);
+  const filteredStopCount = useMemo(() => filteredDayPlans.reduce((count, dayPlan) => count + dayPlan.nodes.length, 0), [filteredDayPlans]);
   const budgetSummary = useMemo(() => buildBudgetSummary(displayedNodes), [displayedNodes]);
   const totalSpend = budgetSummary.total;
   const travelerCount = parseTravelerCount(travelerCountText);
@@ -1718,6 +1721,20 @@ export default function App() {
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
                 <View style={styles.sectionHeaderRow}>
                   <SectionTitle title="Planering dag för dag" dark={isDark} />
+                  <View style={styles.plannerSearchWrap}>
+                    <TextInput
+                      value={plannerSearchText}
+                      onChangeText={setPlannerSearchText}
+                      placeholder="Sök stopp, plats, datum, pris..."
+                      placeholderTextColor={isDark ? '#737373' : '#78716c'}
+                      style={[styles.plannerSearchInput, isDark && styles.inputDark]}
+                    />
+                    {plannerSearchText.trim() ? (
+                      <Pressable style={styles.clearSearchButton} onPress={() => setPlannerSearchText('')}>
+                        <Text style={styles.clearSearchText}>Rensa</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
                   {!isDemoMode ? (
                     <View style={styles.dayHeaderActions}>
                       <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={() => startPlaceSearch('unscheduled', 'camping')} disabled={isLoading}>
@@ -1741,7 +1758,16 @@ export default function App() {
                     {renderPlannerInlineEditor('new')}
                   </View>
                 ) : null}
-                {dayPlans.map((dayPlan) => (
+                {plannerSearchText.trim() ? (
+                  <Text style={styles.searchResultText}>{filteredStopCount} av {displayedNodes.length} stopp matchar sökningen.</Text>
+                ) : null}
+                {filteredDayPlans.length === 0 ? (
+                  <View style={styles.emptySearchState}>
+                    <Text style={styles.emptySearchTitle}>Inga stopp hittades</Text>
+                    <Text style={styles.emptySearchText}>Testa ett annat ord, datum, plats eller pris.</Text>
+                  </View>
+                ) : null}
+                {filteredDayPlans.map((dayPlan) => (
                   <View key={dayPlan.key} style={[styles.dayGroup, isDark && styles.innerPanelDark]}>
                     <View style={styles.dayHeader}>
                       <View>
@@ -2207,6 +2233,55 @@ function buildDayPlans(nodes: ItineraryNode[]): DayPlan[] {
       insight,
     };
   });
+}
+
+function filterDayPlans(dayPlans: DayPlan[], searchText: string): DayPlan[] {
+  const normalizedSearch = normalizeSearchText(searchText);
+  if (!normalizedSearch) {
+    return dayPlans;
+  }
+
+  return dayPlans
+    .map((dayPlan) => {
+      const filteredNodes = dayPlan.nodes.filter((node) => nodeMatchesSearch(node, dayPlan, normalizedSearch));
+      const route = estimateRouteSummary(filteredNodes);
+      const budget = buildBudgetSummary(filteredNodes);
+      return {
+        ...dayPlan,
+        nodes: filteredNodes,
+        route,
+        budget,
+        smartFlags: buildDaySmartFlags(filteredNodes, route, budget),
+        insight: buildDayInsight(filteredNodes, route, budget),
+      };
+    })
+    .filter((dayPlan) => dayPlan.nodes.length > 0);
+}
+
+function nodeMatchesSearch(node: ItineraryNode, dayPlan: DayPlan, normalizedSearch: string): boolean {
+  const searchableParts = [
+    node.title,
+    formatNodeType(node.type),
+    dayPlan.title,
+    dayPlan.shortTitle,
+    node.startsAt ? node.startsAt.slice(0, 10) : null,
+    node.startsAt ? formatTime(node.startsAt) : null,
+    typeof node.metadata.place === 'string' ? node.metadata.place : null,
+    formatRawNodeCost(node),
+    formatReservation(node),
+    cleanImportedNoteLines(node.notes),
+    node.timezone,
+  ];
+
+  return normalizeSearchText(searchableParts.filter(Boolean).join(' ')).includes(normalizedSearch);
+}
+
+function normalizeSearchText(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
 }
 
 function buildDayInsight(nodes: ItineraryNode[], route: RouteSummary, budget: BudgetSummary): DayInsightSummary {
@@ -3431,6 +3506,66 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
     flexWrap: 'wrap',
+  },
+  plannerSearchWrap: {
+    flex: 1,
+    minWidth: 260,
+    maxWidth: 520,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  plannerSearchInput: {
+    flex: 1,
+    minHeight: 40,
+    color: '#0a2540',
+    fontSize: 14,
+    fontWeight: '700',
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d7e1ea',
+    backgroundColor: '#f6f9fc',
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+  },
+  clearSearchButton: {
+    minHeight: 38,
+    justifyContent: 'center',
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d7e1ea',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 13,
+  },
+  clearSearchText: {
+    color: '#425466',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  searchResultText: {
+    color: '#425466',
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 18,
+  },
+  emptySearchState: {
+    gap: 6,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d7e1ea',
+    backgroundColor: '#f6f9fc',
+    padding: 16,
+  },
+  emptySearchTitle: {
+    color: '#0a2540',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  emptySearchText: {
+    color: '#425466',
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
   },
   dayGroup: {
     gap: 12,
