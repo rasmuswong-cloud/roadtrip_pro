@@ -314,6 +314,9 @@ export default function App() {
   const filteredDayPlans = useMemo(() => filterDayPlans(dayPlans, plannerSearchText), [dayPlans, plannerSearchText]);
   const filteredStopCount = useMemo(() => filteredDayPlans.reduce((count, dayPlan) => count + dayPlan.nodes.length, 0), [filteredDayPlans]);
   const budgetSummary = useMemo(() => buildBudgetSummary(displayedNodes), [displayedNodes]);
+  const upcomingNodes = useMemo(() => buildUpcomingNodes(displayedNodes), [displayedNodes]);
+  const nextNode = upcomingNodes[0] ?? displayedNodes[0] ?? null;
+  const nextDayPlan = dayPlans.find((dayPlan) => dayPlan.nodes.some((node) => node.id === nextNode?.id)) ?? dayPlans[0] ?? null;
   const totalSpend = budgetSummary.total;
   const travelerCount = parseTravelerCount(travelerCountText);
   const costPerTraveler = travelerCount > 0 ? totalSpend / travelerCount : totalSpend;
@@ -1649,7 +1652,7 @@ export default function App() {
                   <Text style={styles.emptySearchText}>Här finns konto, delning och AI-assistent när redigering är aktiv.</Text>
                 </View>
               ) : null}
-              {activeView === 'overview' || activeView === 'route' ? (
+              {activeView === 'route' ? (
               <View style={styles.routeStage}>
                 <View style={styles.routeStageHeader}>
                   <View>
@@ -1689,7 +1692,7 @@ export default function App() {
               </View>
               ) : null}
 
-              {activeView === 'overview' || activeView === 'route' ? (
+              {activeView === 'route' ? (
               <View style={styles.statsRow}>
                 <Metric label="Stopp" value={`${displayedNodes.length}`} accent="#0f766e" dark={isDark} />
                 <Metric label="Rutt" value={formatDistance(routeSummary.distanceMeters)} accent="#2563eb" dark={isDark} />
@@ -1704,8 +1707,48 @@ export default function App() {
                   <SectionTitle title="Reseöversikt" dark={isDark} />
                   <Text style={styles.overviewMeta}>{dayPlans.length} dagar / {displayedNodes.length} stopp</Text>
                 </View>
+                <View style={styles.overviewFocusGrid}>
+                  <OverviewFocusCard
+                    label="Nästa stopp"
+                    title={nextNode?.title ?? 'Lägg till första stoppet'}
+                    detail={nextNode ? `${formatDateLabel(nextNode.startsAt?.slice(0, 10) ?? 'unscheduled')} / ${formatTime(nextNode.startsAt)}` : 'Planera ett stopp i Dagar.'}
+                    accent="#635bff"
+                  />
+                  <OverviewFocusCard
+                    label="Rutt"
+                    title={formatDistance(routeSummary.distanceMeters)}
+                    detail={`${formatDuration(routeSummary.durationSeconds)} körning / ${displayedNodes.length} stopp`}
+                    accent="#2563eb"
+                  />
+                  <OverviewFocusCard
+                    label="Budget"
+                    title={formatSek(totalSpend)}
+                    detail={budgetSummary.missingCostCount > 0 ? `${budgetSummary.missingCostCount} stopp saknar kostnad` : `${formatSek(costPerTraveler)} per person`}
+                    accent={budgetSummary.missingCostCount > 0 ? '#d97706' : '#0f766e'}
+                  />
+                </View>
+                {nextDayPlan ? (
+                  <View style={styles.overviewNextPanel}>
+                    <View style={styles.dayOverviewHeader}>
+                      <Text style={styles.dayOverviewTitle}>{nextDayPlan.title}</Text>
+                      <Text style={styles.dayOverviewCost}>{formatSek(nextDayPlan.budget.total)}</Text>
+                    </View>
+                    <Text style={styles.dayOverviewAction}>{nextDayPlan.insight.nextAction}</Text>
+                    <View style={styles.upcomingList}>
+                      {upcomingNodes.slice(0, 5).map((node) => (
+                        <View key={node.id} style={styles.upcomingItem}>
+                          <View style={[styles.upcomingDot, { backgroundColor: nodeColor(node.type) }]} />
+                          <View style={styles.upcomingCopy}>
+                            <Text style={styles.upcomingTitle}>{node.title}</Text>
+                            <Text style={styles.upcomingMeta}>{formatNodeType(node.type)} / {formatTime(node.startsAt)} / {formatNodeCostSummary(node)}</Text>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                ) : null}
                 <View style={styles.dayOverviewGrid}>
-                  {dayPlans.map((dayPlan) => (
+                  {dayPlans.slice(0, 3).map((dayPlan) => (
                     <DayOverviewCard key={dayPlan.key} dayPlan={dayPlan} />
                   ))}
                 </View>
@@ -2035,6 +2078,16 @@ function DayInsight({ label, value, tone }: { label: string; value: string; tone
   );
 }
 
+function OverviewFocusCard({ label, title, detail, accent }: { label: string; title: string; detail: string; accent: string }) {
+  return (
+    <View style={[styles.overviewFocusCard, { borderTopColor: accent }]}>
+      <Text style={styles.overviewFocusLabel}>{label}</Text>
+      <Text style={styles.overviewFocusTitle}>{title}</Text>
+      <Text style={styles.overviewFocusDetail}>{detail}</Text>
+    </View>
+  );
+}
+
 function DayOverviewCard({ dayPlan }: { dayPlan: DayPlan }) {
   const primaryStop = dayPlan.nodes[0]?.title ?? 'Inga stopp än';
   const flags = dayPlan.smartFlags.length > 0 ? dayPlan.smartFlags : ['Ser planerad ut'];
@@ -2188,6 +2241,14 @@ function sortNodes(nodes: ItineraryNode[]): ItineraryNode[] {
 
     return a.sortOrder - b.sortOrder;
   });
+}
+
+function buildUpcomingNodes(nodes: ItineraryNode[]): ItineraryNode[] {
+  const now = Date.now();
+  const sortedNodes = sortNodes(nodes);
+  const upcomingNodes = sortedNodes.filter((node) => !node.startsAt || new Date(node.startsAt).getTime() >= now);
+
+  return upcomingNodes.length > 0 ? upcomingNodes : sortedNodes;
 }
 
 function nextSortOrder(nodes: ItineraryNode[]): number {
@@ -3304,6 +3365,81 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     flexWrap: 'wrap',
+  },
+  overviewFocusGrid: {
+    flexDirection: 'row',
+    gap: 12,
+    flexWrap: 'wrap',
+  },
+  overviewFocusCard: {
+    flex: 1,
+    minWidth: 190,
+    minHeight: 116,
+    justifyContent: 'space-between',
+    borderRadius: 8,
+    borderTopWidth: 3,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e6edf5',
+    backgroundColor: '#f6f9fc',
+    padding: 14,
+  },
+  overviewFocusLabel: {
+    color: '#425466',
+    fontSize: 12,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  overviewFocusTitle: {
+    color: '#0a2540',
+    fontSize: 19,
+    fontWeight: '900',
+  },
+  overviewFocusDetail: {
+    color: '#425466',
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  overviewNextPanel: {
+    gap: 12,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d7e1ea',
+    backgroundColor: '#ffffff',
+    padding: 14,
+  },
+  upcomingList: {
+    gap: 8,
+  },
+  upcomingItem: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 8,
+    backgroundColor: '#f6f9fc',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  upcomingDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+  },
+  upcomingCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  upcomingTitle: {
+    color: '#0a2540',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  upcomingMeta: {
+    color: '#425466',
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 3,
   },
   metric: {
     flex: 1,
