@@ -582,8 +582,29 @@ export default function App() {
     }
   }
 
+  async function copyShareCode() {
+    if (!generatedShareCode) {
+      setStatusMessage('Skapa en delningskod först.');
+      return;
+    }
+
+    try {
+      if ('navigator' in globalThis && globalThis.navigator?.clipboard?.writeText) {
+        await globalThis.navigator.clipboard.writeText(generatedShareCode);
+        setStatusMessage(`Kopierade delningskod: ${generatedShareCode}`);
+        return;
+      }
+
+      setStatusMessage(`Markera och kopiera koden: ${generatedShareCode}`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   async function joinSharedTrip() {
-    if (!shareCode.trim()) {
+    const normalizedShareCode = normalizeShareCode(shareCode);
+
+    if (!normalizedShareCode) {
       setStatusMessage('Klistra in en delningskod först.');
       return;
     }
@@ -599,13 +620,14 @@ export default function App() {
       }
 
       await ensureUserProfile(user.id, user.email ?? 'Reseplanerare');
-      const trip = await joinTripByShareCode(shareCode);
+      const trip = await joinTripByShareCode(normalizedShareCode);
       const nodes = await listItineraryNodes(trip.id);
       const cleanedNodes = await cleanLoadedNodesOnline(nodes);
       setUserId(user.id);
       upsertTrip(trip);
       setActiveTrip(trip.id);
       setItineraryNodes(cleanedNodes);
+      setShareCode('');
       markOnlineSaveSuccess();
       setStatusMessage(`Gick med i: ${trip.name}`);
     } catch (error) {
@@ -1485,21 +1507,9 @@ export default function App() {
             ))}
           </View>
           <View style={styles.headerActions}>
-            <View style={[styles.tripStatePill, activeTripId ? styles.tripStatePillActive : null]}>
-              <Text style={[styles.tripStateText, activeTripId ? styles.tripStateTextActive : null]}>{activeTripId ? 'Synkad' : 'Lokal'}</Text>
-            </View>
-            <View style={[
-              styles.saveStatePill,
-              onlineSaveState === 'saving' && styles.saveStatePillSaving,
-              onlineSaveState === 'saved' && styles.saveStatePillSaved,
-              onlineSaveState === 'error' && styles.saveStatePillError,
-            ]}>
-              <Text style={[
-                styles.saveStateText,
-                onlineSaveState === 'saving' && styles.saveStateTextSaving,
-                onlineSaveState === 'saved' && styles.saveStateTextSaved,
-                onlineSaveState === 'error' && styles.saveStateTextError,
-              ]}>{onlineSaveLabel}</Text>
+            <View style={[styles.headerStatusSummary, isDark && styles.headerStatusSummaryDark]}>
+              <Text style={[styles.headerStatusTitle, isDark && styles.textDark]}>{activeTripId ? 'Resan är ansluten' : 'Lokal resa'}</Text>
+              <Text style={[styles.headerStatusMeta, isDark && styles.textMutedDark]} numberOfLines={1}>{statusMessage || onlineSaveLabel}</Text>
             </View>
             <Pressable style={[styles.modeButton, isEditMode && styles.modeButtonActive]} onPress={toggleEditMode}>
               <Text style={[styles.modeButtonText, isEditMode && styles.modeButtonTextActive]}>{isEditMode ? 'Redigerar' : 'Redigera'}</Text>
@@ -1527,14 +1537,6 @@ export default function App() {
               <Text style={styles.heroBody}>
                 Planera stopp, tider, kostnader och packning i samma vy. Allt sparas när resan är ansluten.
               </Text>
-              <View style={styles.heroCtas}>
-                <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={connectSupabaseTrip} disabled={isLoading}>
-                  <Text style={styles.commandButtonText}>{activeTripId ? 'Synka nu' : 'Anslut resa'}</Text>
-                </Pressable>
-                <Pressable style={[styles.heroSecondaryButton, isEditMode && styles.heroSecondaryButtonActive]} onPress={toggleEditMode} disabled={isLoading}>
-                  <Text style={[styles.heroSecondaryText, isEditMode && styles.heroSecondaryTextActive]}>{isEditMode ? 'Redigerar' : 'Öppna redigering'}</Text>
-                </Pressable>
-              </View>
             </View>
             <View style={styles.heroStats}>
               <View style={styles.heroStat}>
@@ -1549,26 +1551,6 @@ export default function App() {
                 <Text style={styles.heroStatValue}>{formatDuration(routeSummary.durationSeconds)}</Text>
                 <Text style={styles.heroStatLabel}>Körning</Text>
               </View>
-            </View>
-          </View>
-
-          <View style={[styles.statusPanel, isDark && styles.panelDark]}>
-            <View style={styles.statusDot} />
-            <Text style={[styles.statusText, isDark && styles.textMutedDark]}>{statusMessage}</Text>
-          </View>
-
-          <View style={styles.demoActionBar}>
-            <View>
-              <Text style={styles.demoActionTitle}>{activeTripId ? 'Resan är ansluten' : 'Kom igång'}</Text>
-              <Text style={styles.demoActionText}>{activeTripId ? 'Du kan redigera tider, platser och kostnader. Använd Spara app om du vill spara hela vyn direkt.' : 'Anslut resan för att spara online och hämta din plan.'}</Text>
-            </View>
-            <View style={styles.demoActionButtons}>
-              <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={connectSupabaseTrip} disabled={isLoading}>
-                <Text style={styles.secondaryButtonText}>{activeTripId ? 'Uppdatera' : 'Anslut'}</Text>
-              </Pressable>
-              <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={importReseplanrarePlan} disabled={isLoading || !activeTripId}>
-                <Text style={styles.commandButtonText}>Ladda resplan</Text>
-              </Pressable>
             </View>
           </View>
 
@@ -1602,18 +1584,31 @@ export default function App() {
                   <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={createShareCode} disabled={isLoading}>
                     <Text style={styles.commandButtonText}>Skapa kod</Text>
                   </Pressable>
-                  <Text style={[styles.codeText, isDark && styles.textDark]}>{generatedShareCode || 'Ingen kod än'}</Text>
+                  <View style={[styles.shareCodeBox, isDark && styles.shareCodeBoxDark]}>
+                    <Text style={[styles.codeText, isDark && styles.textDark]} selectable>{generatedShareCode || 'Ingen kod än'}</Text>
+                  </View>
+                  <Pressable style={[styles.secondaryButton, (!generatedShareCode || isLoading) && styles.disabledButton]} onPress={copyShareCode} disabled={!generatedShareCode || isLoading}>
+                    <Text style={styles.secondaryButtonText}>Kopiera</Text>
+                  </Pressable>
                 </View>
                 <TextInput
                   value={shareCode}
-                  onChangeText={setShareCode}
+                  onChangeText={(value) => setShareCode(normalizeShareCode(value))}
                   placeholder="Klistra in kod"
                   placeholderTextColor={isDark ? '#737373' : '#78716c'}
                   style={[styles.singleLineInput, isDark && styles.inputDark]}
                   autoCapitalize="characters"
+                  maxLength={12}
                 />
                 <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={joinSharedTrip} disabled={isLoading}>
                   <Text style={styles.commandButtonText}>Gå med</Text>
+                </Pressable>
+              </View>
+
+              <View style={[styles.panelSection, isDark && styles.panelDark]}>
+                <SectionTitle title="Resplan" dark={isDark} />
+                <Pressable style={[styles.commandButton, (isLoading || !activeTripId) && styles.disabledButton]} onPress={importReseplanrarePlan} disabled={isLoading || !activeTripId}>
+                  <Text style={styles.commandButtonText}>Ladda resplan</Text>
                 </Pressable>
               </View>
 
@@ -2317,6 +2312,10 @@ function normalizeSearchText(value: string): string {
     .trim();
 }
 
+function normalizeShareCode(value: string): string {
+  return value.replace(/\s+/g, '').toUpperCase();
+}
+
 function buildDayInsight(nodes: ItineraryNode[], route: RouteSummary, budget: BudgetSummary): DayInsightSummary {
   const lodgingNode = nodes.find((node) => node.type === 'lodging' || node.type === 'camping');
   const activityNodes = nodes.filter((node) => node.type === 'activity' || node.type === 'gastronomy' || node.type === 'custom');
@@ -2865,6 +2864,34 @@ const styles = StyleSheet.create({
     gap: 10,
     flexWrap: 'wrap',
     justifyContent: 'flex-end',
+    maxWidth: 620,
+  },
+  headerStatusSummary: {
+    minHeight: 42,
+    minWidth: 220,
+    maxWidth: 280,
+    justifyContent: 'center',
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d7e1ea',
+    backgroundColor: '#f6f9fc',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  headerStatusSummaryDark: {
+    borderColor: '#334155',
+    backgroundColor: '#111827',
+  },
+  headerStatusTitle: {
+    color: '#0a2540',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  headerStatusMeta: {
+    color: '#425466',
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 2,
   },
   tripStatePill: {
     minHeight: 34,
@@ -3074,32 +3101,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     fontWeight: '700',
-  },
-  heroCtas: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flexWrap: 'wrap',
-    marginTop: 6,
-  },
-  heroSecondaryButton: {
-    minHeight: 40,
-    justifyContent: 'center',
-    borderRadius: 999,
-    backgroundColor: '#e7ecff',
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-  },
-  heroSecondaryButtonActive: {
-    backgroundColor: '#ecfdf5',
-  },
-  heroSecondaryText: {
-    color: '#635bff',
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  heroSecondaryTextActive: {
-    color: '#0f766e',
   },
   heroStats: {
     width: 360,
@@ -4011,6 +4012,20 @@ const styles = StyleSheet.create({
     gap: 10,
     flexWrap: 'wrap',
   },
+  shareCodeBox: {
+    minHeight: 40,
+    minWidth: 132,
+    justifyContent: 'center',
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d7e1ea',
+    backgroundColor: '#f6f9fc',
+    paddingHorizontal: 12,
+  },
+  shareCodeBoxDark: {
+    borderColor: '#334155',
+    backgroundColor: '#111827',
+  },
   codeText: {
     color: '#0a2540',
     fontSize: 18,
@@ -4021,61 +4036,6 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 13,
     fontWeight: '800',
-  },
-  statusPanel: {
-    minHeight: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: '#ffffff',
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#e6edf5',
-    paddingHorizontal: 16,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#00d4ff',
-  },
-  statusText: {
-    color: '#425466',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  demoActionBar: {
-    minHeight: 88,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 16,
-    flexWrap: 'wrap',
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d7e1ea',
-    backgroundColor: '#ffffff',
-    padding: 18,
-  },
-  demoActionTitle: {
-    color: '#0a2540',
-    fontSize: 18,
-    fontWeight: '900',
-  },
-  demoActionText: {
-    maxWidth: 720,
-    color: '#425466',
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: '700',
-    marginTop: 4,
-  },
-  demoActionButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 10,
-    flexWrap: 'wrap',
   },
   placeItem: {
     minHeight: 68,
