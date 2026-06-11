@@ -1514,12 +1514,6 @@ export default function App() {
             <Pressable style={[styles.modeButton, isEditMode && styles.modeButtonActive]} onPress={toggleEditMode}>
               <Text style={[styles.modeButtonText, isEditMode && styles.modeButtonTextActive]}>{isEditMode ? 'Redigerar' : 'Redigera'}</Text>
             </Pressable>
-            <Pressable style={[styles.undoButton, (!undoSnapshot || isLoading) && styles.disabledButton]} onPress={() => void undoLastChange()} disabled={!undoSnapshot || isLoading}>
-              <Text style={styles.undoButtonText}>Ångra</Text>
-            </Pressable>
-            <Pressable style={[styles.saveAppButton, isLoading && styles.disabledButton]} onPress={saveAppSnapshot} disabled={isLoading}>
-              <Text style={styles.saveAppButtonText}>Spara app</Text>
-            </Pressable>
             <Pressable style={[styles.syncButton, isLoading && styles.disabledButton]} onPress={connectSupabaseTrip} disabled={isLoading}>
               <Text style={styles.syncButtonText}>{isLoading ? 'Vänta' : activeTripId ? 'Uppdatera' : 'Anslut'}</Text>
             </Pressable>
@@ -1557,6 +1551,18 @@ export default function App() {
           <View style={styles.dashboardGrid}>
             {!isDemoMode && activeView === 'tools' ? (
             <View style={styles.sidebarColumn}>
+              <View style={[styles.panelSection, isDark && styles.panelDark]}>
+                <SectionTitle title="Arbetsläge" dark={isDark} />
+                <View style={styles.actionRow}>
+                  <Pressable style={[styles.undoButton, (!undoSnapshot || isLoading) && styles.disabledButton]} onPress={() => void undoLastChange()} disabled={!undoSnapshot || isLoading}>
+                    <Text style={styles.undoButtonText}>Ångra</Text>
+                  </Pressable>
+                  <Pressable style={[styles.saveAppButton, isLoading && styles.disabledButton]} onPress={saveAppSnapshot} disabled={isLoading}>
+                    <Text style={styles.saveAppButtonText}>Spara app</Text>
+                  </Pressable>
+                </View>
+              </View>
+
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
                 <SectionTitle title="Konto" dark={isDark} />
                 <TextInput
@@ -2861,15 +2867,15 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
     flexWrap: 'wrap',
     justifyContent: 'flex-end',
-    maxWidth: 620,
+    maxWidth: 500,
   },
   headerStatusSummary: {
-    minHeight: 42,
-    minWidth: 220,
-    maxWidth: 280,
+    minHeight: 38,
+    minWidth: 190,
+    maxWidth: 240,
     justifyContent: 'center',
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
@@ -2953,10 +2959,10 @@ const styles = StyleSheet.create({
   syncButton: {
     backgroundColor: '#0a2540',
     borderRadius: 999,
-    minHeight: 40,
+    minHeight: 38,
     justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
   },
   syncButtonText: {
     color: '#ffffff',
@@ -2964,14 +2970,14 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   modeButton: {
-    minHeight: 40,
+    minHeight: 38,
     justifyContent: 'center',
     borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#d7e1ea',
     backgroundColor: '#f6f9fc',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
   },
   modeButtonActive: {
     borderColor: '#0f766e',
