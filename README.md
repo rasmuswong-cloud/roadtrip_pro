@@ -1,74 +1,289 @@
-# ReseApp
+# Roadtrip Pro
 
-Initial production scaffold for a private travel planning and navigation app.
+Roadtrip Pro är en webbaserad reseplanerare för roadtrips. Appen samlar resans dagar, destinationer, aktiviteter, boenden, kostnader, bokningsinformation och anteckningar i en gemensam plan.
 
-This first slice includes:
+**Liveversion:**
+https://roadtrip-pro-sy5y.vercel.app/
 
-- Supabase PostgreSQL schema for trips, profiles, itinerary nodes, POIs, expenses, budgets, route cache, and sync metadata.
-- Core TypeScript domain models.
-- Zustand store architecture with optimistic mutations and sync queue support.
-- Supabase client helpers and realtime subscription wiring.
-- Mapbox navigation component skeleton for React Native.
-- AI itinerary mutation parser with JSON-schema validation.
-- Expo app entry screen with map, timeline, budget metrics, and AI command surface.
-- Offline SQLite mirror schema for cached entities, pending mutations, routes, and FX rates.
-- Repository/mapping layer between Supabase rows and TypeScript domain models.
-- Client-side waypoint optimization using nearest-neighbor plus 2-opt improvement.
+## Projektets mål
 
-## Structure
+Målet är att skapa en lättanvänd app där en roadtrip kan planeras före avresa.
+
+Appen ska hjälpa användaren att:
+
+* planera resan dag för dag
+* lägga till destinationer, aktiviteter och boenden
+* hålla reda på tider, bokningar och kostnader
+* se resans stopp och rutt på en karta
+* dela en resa med andra användare
+* upptäcka problem som saknade boenden, långa kördagar och budgetavvikelser
+* använda planeringen på både mobil och dator
+
+## Nuvarande status
+
+Roadtrip Pro är en fungerande MVP under aktiv utveckling.
+
+Det centrala planeringsflödet finns på plats:
+
+1. Användaren kan logga in eller använda appens tillgängliga resläge.
+2. En resa kan skapas eller öppnas.
+3. Resan visas som en dag-för-dag-planering.
+4. Stopp kan skapas, redigeras, flyttas och tas bort.
+5. Resedata kan sparas i Supabase.
+6. Dagkort visar sammanfattningar, aktiviteter, boende, körning, kostnader och planeringsvarningar.
+
+Projektet är ännu inte färdigt för generell produktion. Framför allt behöver dataflöden, mobilupplevelse, routing, offlinefunktioner och samarbete mellan flera användare verifieras ytterligare.
+
+## Funktioner
+
+### Dag-för-dag-planering
+
+* schemalagda och oschemalagda stopp
+* aktiviteter, boenden och transportstopp
+* tider, platser, kostnader och anteckningar
+* snabbredigering direkt i dagplaneringen
+* flytt av stopp uppåt och nedåt
+* borttagning av stopp
+* dagsammanfattning med antal stopp, körning och kostnad
+* checklistor och packningsinformation
+
+Dagkortets presentation är utbruten till:
 
 ```text
-supabase/schema.sql          PostgreSQL DDL and RLS policies
-src/models                   Shared TypeScript domain models
-src/store                    Zustand trip store and optimistic sync queue
-src/services                 Supabase, sync, FX, and AI service helpers
-src/components/map           Mapbox navigation component
-src/services/database        Supabase repositories and row mappers
-src/services/offline         SQLite cache schema and helpers
-src/services/routing         Waypoint optimization utilities
+src/components/planning/DayCard.tsx
 ```
 
-## Run Locally
+### Smart daganalys
 
-Install dependencies, then start Expo:
+Planeringslogiken finns i:
+
+```text
+src/services/planning/dayAnalysis.ts
+```
+
+Den innehåller testbar logik för bland annat:
+
+* dagsammanfattning
+* beräkning av dagskostnad
+* sorteringsordning
+* flytt av stopp mellan dagar
+* formulärvalidering
+* smarta planeringsvarningar
+* rollback-hjälpare för lokal state
+
+Rollback-hjälparen är testad isolerat men är ännu inte en ersättning för atomiska databastransaktioner.
+
+### Budget
+
+* kostnader per stopp
+* dagskostnad
+* kostnadskategorier
+* markering av stopp som saknar kostnad
+* budgetöversikt
+
+### Karta och routing
+
+* kartkomponent
+* koordinater för stopp
+* lokalt stöd för waypoint-optimering
+* struktur för extern routing och ruttcache
+
+Den lokala optimeringen är en fallback. Faktiska restider, vägsträckor och väggeometrier behöver hämtas från en extern routingtjänst för ett fullständigt produktionsflöde.
+
+### Delning och synkronisering
+
+Projektet innehåller struktur för:
+
+* Supabase-inloggning
+* delade resor och delningskoder
+* realtime-uppdateringar
+* repositories för datalagring
+* kö för väntande synkronisering
+* versionsbaserad konflikthantering
+
+Dessa flöden behöver fortsatt integrationstestning mellan flera samtidiga användare.
+
+### Offline
+
+Projektet innehåller grundstruktur för:
+
+* lokal SQLite-cache
+* väntande mutationer
+* lagrade rutter
+* återuppspelning av ändringar efter återanslutning
+
+Offlineflödet är inte ännu fullständigt verifierat som ett komplett användarflöde.
+
+### AI-stöd
+
+Användaren kan skicka naturliga språkkommandon som omvandlas till validerade ändringsförslag.
+
+AI-flödet går genom:
+
+```text
+src/services/ai/agent.ts
+supabase/functions/parse-itinerary-command/
+```
+
+Privata AI-nycklar ska endast finnas som Supabase Edge Function-secrets och får inte exponeras i Expo- eller Vercel-klienten.
+
+## Teknik
+
+* React Native
+* Expo
+* TypeScript
+* React Native Web
+* Zustand
+* Supabase
+* PostgreSQL
+* SQLite
+* Zod
+* ESLint
+* Node test runner
+* Vercel
+
+## Projektstruktur
+
+```text
+App.tsx
+src/
+  components/
+    map/                 Kartkomponenter
+    planning/            Dagkort och planeringskomponenter
+  data/                  Seed- och demodata
+  models/                Domänmodeller och delade TypeScript-typer
+  services/
+    ai/                  AI-tolkning och mutationsplaner
+    auth/                Inloggning och användarsession
+    database/            Supabase repositories och mappers
+    offline/             Lokal SQLite-cache
+    planning/            Dagsammanfattning, validering och varningar
+    routing/             Rutt- och waypointlogik
+    sync/                Synkroniseringskö
+  store/                 Zustand-store
+supabase/
+  functions/             Supabase Edge Functions
+  schema.sql             Databasschema och RLS
+tests/                   Automatiserade tester
+```
+
+## Lokal installation
+
+### 1. Installera beroenden
 
 ```bash
 npm install
-npm run start
 ```
 
-Run type checking:
+### 2. Skapa miljöfil
 
-```bash
-npm run typecheck
-```
+Skapa en lokal `.env` baserad på `.env.example`.
 
-## Supabase Setup
+Exempel:
 
-1. Create a Supabase project.
-2. Run `supabase/schema.sql` in the SQL editor.
-3. Run `supabase/rls_fix.sql` if upgrading an existing local database.
-4. Run `supabase/share_codes.sql` to enable couple/shared-trip invite codes.
-5. Enable Realtime for the collaborative tables: `trips`, `pois`, `itinerary_nodes`, `expenses`, and `budgets`.
-6. Add the Expo public Supabase values to your environment.
-
-For hosted web usage, enable Supabase email login and set the production Site URL to your hosted app URL.
-
-## Implementation Notes
-
-- `src/services/sync/syncQueue.ts` implements a Last-Write-Wins compatible queue with version checks for conflict detection.
-- `src/services/offline/offlineStore.ts` is the local cache foundation for offline reads and replaying pending mutations.
-- `src/services/ai/agent.ts` parses natural language into a Zod-validated mutation plan. In production, call this through a trusted backend or Supabase Edge Function.
-- `src/services/routing/waypointOptimizer.ts` provides a local fallback optimizer. Production routing should still hydrate final travel times and geometries from Mapbox Directions or OSRM.
-
-## Environment
-
-Create an Expo app around this scaffold and provide these values:
-
-```bash
+```env
 EXPO_PUBLIC_SUPABASE_URL=
 EXPO_PUBLIC_SUPABASE_ANON_KEY=
 EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN=
 ```
 
-Set `GEMINI_API_KEY` as a Supabase Edge Function secret for `supabase/functions/parse-itinerary-command`; do not expose AI provider keys through Expo or Vercel client environment variables.
+Lägg aldrig privata AI-nycklar i klientens miljöfil.
+
+### 3. Starta appen
+
+```bash
+npm run start
+```
+
+För webbversionen:
+
+```bash
+npx expo start --web
+```
+
+## Kvalitetskontroller
+
+TypeScript:
+
+```bash
+npm run typecheck
+```
+
+Lint:
+
+```bash
+npm run lint
+```
+
+Tester:
+
+```bash
+npm test
+```
+
+Webbexport:
+
+```bash
+npx expo export --platform web
+```
+
+Den nuvarande automatiserade testsviten täcker bland annat:
+
+* dagsammanfattning
+* dagskostnad
+* sorteringsordning
+* smarta varningar
+* flytt av stopp mellan dagar
+* formulärvalidering
+* lokal rollback-hjälpare
+
+## Supabase
+
+1. Skapa ett Supabase-projekt.
+2. Kör relevanta SQL-filer i `supabase/`.
+3. Aktivera RLS för användardata.
+4. Aktivera Realtime för de tabeller som ska synkroniseras.
+5. Konfigurera tillåtna Site URL- och redirect-adresser.
+6. Lägg `GEMINI_API_KEY` som en Supabase Edge Function-secret.
+
+Exempel:
+
+```bash
+supabase secrets set GEMINI_API_KEY=...
+```
+
+## Säkerhet
+
+* privata API-nycklar får inte committas
+* `.env` och relaterade lokala filer ignoreras av Git och Vercel
+* AI-nycklar ska endast finnas i en betrodd servermiljö
+* Supabase RLS ska begränsa åtkomst till resor som användaren äger eller delar
+* användardata ska valideras innan den sparas
+* klienten får inte betraktas som en betrodd säkerhetsgräns
+
+Att en `.env`-fil är ignorerad av Git innebär inte att en nyckel är säker om den används eller bäddas in i klientkoden.
+
+## Kända begränsningar
+
+* `moveStop` använder ännu inte en atomisk Supabase RPC-transaktion
+* en flytt som kräver flera databasuppdateringar kan därför bli delvis genomförd om ett anrop misslyckas
+* inline-redigeringen saknar fortfarande separata fullständiga fält för sluttid, valuta och bokningsreferens
+* fullständig visuell QA på mobil återstår
+* delar av UI- och applikationslogiken ligger fortfarande i den stora `App.tsx`
+* offline- och realtimeflöden behöver fler integrationstester
+* faktisk körsträcka och körtid behöver hämtas från en routingtjänst
+* end-to-end-tester och CI återstår
+
+## Nästa prioriterade steg
+
+1. Gör flytt av stopp atomisk via Supabase RPC.
+2. Slutför inline-redigeringens återstående fält.
+3. Genomför visuell QA på mobil, surfplatta och desktop.
+4. Bryt ut fler avgränsade UI-delar ur `App.tsx`.
+5. Lägg till integrationstester och end-to-end-tester.
+
+Se [ROADMAP.md](./ROADMAP.md) för den fullständiga utvecklingsplanen.
+
+## Produktionsstatus
+
+Roadtrip Pro är en fungerande MVP under utveckling. Appen kan användas och testas, men bör inte betraktas som fullt produktionsklar förrän de kvarstående data-, säkerhets- och kvalitetsstegen har genomförts.
