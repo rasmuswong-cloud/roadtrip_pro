@@ -10,8 +10,9 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { NavigationMap } from '@/components/map/NavigationMap';
+import DayCard from '@/components/planning/DayCard';
 import { reseplanrareIdeaPlaces, reseplanrareSeedRows, type ReseplanrareSeedRow } from '@/data/reseplanrareSeed';
-import type { Expense, ItineraryNode, ItineraryNodeType, Poi, RouteSummary, Trip } from '@/models';
+import type { BudgetCategories, BudgetSummary, DayChecklistItem, DayInsightSummary, DayPlan, Expense, ItineraryNode, ItineraryNodeType, Poi, RouteSummary, Trip } from '@/models';
 import { getCurrentUser, getOrCreateAnonymousUser, sendMagicLink, signOut } from '@/services/auth/authService';
 import { applyConfirmedMutationPlan } from '@/services/ai/applyMutationPlan';
 import { parseItineraryCommand } from '@/services/ai/agent';
@@ -1855,201 +1856,31 @@ export default function App() {
                   </View>
                 ) : null}
                 {filteredDayPlans.map((dayPlan) => (
-                  <View key={dayPlan.key} style={[styles.dayGroup, isDark && styles.innerPanelDark]}>
-                    <View style={styles.dayHeader}>
-                      <View>
-                        <Text style={[styles.dayTitle, isDark && styles.textDark]}>{dayPlan.title}</Text>
-                        <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
-                          {dayPlan.nodes.length} stopp / {formatDistance(dayPlan.route.distanceMeters)} / {formatDuration(dayPlan.route.durationSeconds)} / {formatSek(dayPlan.budget.total)}
-                        </Text>
-                        <View style={styles.smartFlagList}>
-                          {(dayPlan.smartFlags.length > 0 ? dayPlan.smartFlags : ['Ser planerad ut']).map((flag) => (
-                            <Text key={flag} style={[styles.smartFlag, flag === 'Ser planerad ut' && styles.smartFlagGood]}>{flag}</Text>
-                          ))}
-                        </View>
-                      </View>
-                      {!isDemoMode ? (
-                        <View style={styles.dayHeaderActions}>
-                          <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={() => startPlaceSearch(dayPlan.key, dayPlan.insight.hasLodging ? 'restaurang eller aktivitet' : 'camping eller hotell')} disabled={isLoading}>
-                            <Text style={styles.secondaryButtonText}>Lägg till plats</Text>
-                          </Pressable>
-                          <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={() => startNewPlannerStep(dayPlan.key)} disabled={isLoading}>
-                            <Text style={styles.commandButtonText}>Nytt steg</Text>
-                          </Pressable>
-                        </View>
-                      ) : null}
-                    </View>
-                    {renderDayPlaceSearch(dayPlan.key)}
-                    <View style={styles.dayInsightGrid}>
-                      <DayInsight label="Boende" value={dayPlan.insight.lodgingLabel} tone={dayPlan.insight.hasLodging ? 'good' : 'warn'} />
-                      <DayInsight label="Aktiviteter" value={dayPlan.insight.activitiesLabel} tone={dayPlan.insight.activityCount > 0 ? 'good' : 'neutral'} />
-                      <DayInsight label="Körning" value={dayPlan.insight.driveLabel} tone={dayPlan.insight.isLongDrive ? 'warn' : 'neutral'} />
-                      <DayInsight label="Budget" value={dayPlan.insight.costLabel} tone={dayPlan.budget.missingCostCount > 0 ? 'warn' : 'good'} />
-                    </View>
-                    <Text style={styles.dayNextAction}>{dayPlan.insight.nextAction}</Text>
-                    <View style={styles.dayChecklist}>
-                      {dayPlan.insight.checklist.map((item) => (
-                        <Pressable
-                          key={item.label}
-                          style={[styles.checkItem, item.done && styles.checkItemDone, isDemoMode && styles.checkItemStatic]}
-                          onPress={() => runChecklistAction(dayPlan, item)}
-                          disabled={item.done || isDemoMode || isLoading}
-                        >
-                          <Text style={[styles.checkMark, item.done && styles.checkMarkDone]}>{item.done ? 'Klar' : 'Att fixa'}</Text>
-                          <Text style={styles.checkLabel}>{item.label}</Text>
-                          {!item.done && !isDemoMode ? <Text style={styles.checkActionText}>Öppna</Text> : null}
-                        </Pressable>
-                      ))}
-                    </View>
-                    <View style={styles.packingPanel}>
-                      <Text style={styles.packingTitle}>Packa / ta med</Text>
-                      <View style={styles.packingList}>
-                        {dayPlan.insight.packingItems.map((item) => (
-                          <Pressable
-                            key={item}
-                            style={[
-                              styles.packingChip,
-                              dayPlan.insight.packedItems.includes(item) && styles.packingChipDone,
-                              isDemoMode && styles.checkItemStatic,
-                            ]}
-                            onPress={() => void togglePackingItem(dayPlan, item)}
-                            disabled={isDemoMode || isLoading}
-                          >
-                            <Text style={[styles.packingChipText, dayPlan.insight.packedItems.includes(item) && styles.packingChipTextDone]}>
-                              {dayPlan.insight.packedItems.includes(item) ? 'Packad' : 'Ta med'}
-                            </Text>
-                            <Text style={styles.packingChipLabel}>{item}</Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                      {!isDemoMode ? (
-                        <View style={styles.packingAddRow}>
-                          <TextInput
-                            value={packingDraftByDay[dayPlan.key] ?? ''}
-                            onChangeText={(text) => setPackingDraftByDay((current) => ({ ...current, [dayPlan.key]: text }))}
-                            placeholder="Lägg till egen sak"
-                            placeholderTextColor={isDark ? '#737373' : '#78716c'}
-                            style={[styles.packingInput, isDark && styles.inputDark]}
-                          />
-                          <Pressable style={[styles.secondarySmallButton, isLoading && styles.disabledButton]} onPress={() => void addPackingItem(dayPlan)} disabled={isLoading}>
-                            <Text style={styles.secondarySmallButtonText}>Lägg till</Text>
-                          </Pressable>
-                        </View>
-                      ) : null}
-                    </View>
-                    {draftPlannerDayKey === dayPlan.key ? renderPlannerInlineEditor('new') : null}
-                    {dayPlan.nodes.map((node, index) => (
-                      <View key={node.id} style={[styles.timelineItem, isDark && styles.innerPanelDark]}>
-                        <View style={styles.timeRail}>
-                          <Text style={[styles.timeText, isDark && styles.textDark]}>{formatTime(node.startsAt)}</Text>
-                          <View style={[styles.nodeDot, { backgroundColor: nodeColor(node.type) }]} />
-                        </View>
-                        {selectedPlannerNodeId === node.id && !isDemoMode ? (
-                          <View style={styles.timelineCopy}>
-                            {renderPlannerInlineEditor('edit')}
-                          </View>
-                        ) : (
-                          <>
-                            <View style={styles.timelineCopy}>
-                              <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>{index + 1}. {formatNodeType(node.type)}</Text>
-                              {itineraryNodes.length > 0 && !isDemoMode ? (
-                                <View style={styles.quickCellGrid}>
-                                  <TextInput
-                                    key={`${node.id}-${node.updatedAt}-title`}
-                                    defaultValue={node.title}
-                                    onEndEditing={(event) => void saveQuickCell(node, 'title', event.nativeEvent.text)}
-                                    placeholder="Titel"
-                                    placeholderTextColor={isDark ? '#737373' : '#78716c'}
-                                    style={[styles.quickCell, styles.quickCellTitle, isDark && styles.inputDark]}
-                                  />
-                                  <TextInput
-                                    key={`${node.id}-${node.updatedAt}-time`}
-                                    defaultValue={quickCellValue(node, 'time')}
-                                    onEndEditing={(event) => void saveQuickCell(node, 'time', event.nativeEvent.text)}
-                                    placeholder="TT:MM"
-                                    placeholderTextColor={isDark ? '#737373' : '#78716c'}
-                                    style={[styles.quickCell, styles.quickCellSmall, isDark && styles.inputDark]}
-                                  />
-                                  <TextInput
-                                    key={`${node.id}-${node.updatedAt}-date`}
-                                    defaultValue={quickCellValue(node, 'date')}
-                                    onEndEditing={(event) => void saveQuickCell(node, 'date', event.nativeEvent.text)}
-                                    placeholder="ÅÅÅÅ-MM-DD"
-                                    placeholderTextColor={isDark ? '#737373' : '#78716c'}
-                                    style={[styles.quickCell, styles.quickCellDate, isDark && styles.inputDark]}
-                                  />
-                                  <TextInput
-                                    key={`${node.id}-${node.updatedAt}-place`}
-                                    defaultValue={quickCellValue(node, 'place')}
-                                    onEndEditing={(event) => void saveQuickCell(node, 'place', event.nativeEvent.text)}
-                                    placeholder="Plats"
-                                    placeholderTextColor={isDark ? '#737373' : '#78716c'}
-                                    style={[styles.quickCell, isDark && styles.inputDark]}
-                                  />
-                                  <TextInput
-                                    key={`${node.id}-${node.updatedAt}-cost`}
-                                    defaultValue={quickCellValue(node, 'cost')}
-                                    onEndEditing={(event) => void saveQuickCell(node, 'cost', event.nativeEvent.text)}
-                                    placeholder="Kostnad"
-                                    placeholderTextColor={isDark ? '#737373' : '#78716c'}
-                                    style={[styles.quickCell, styles.quickCellSmall, isDark && styles.inputDark]}
-                                  />
-                                  <View style={styles.quickTypeRow}>
-                                    {inlineNodeTypes.map((type) => (
-                                      <Pressable
-                                        key={type}
-                                        style={[styles.quickTypeChip, node.type === type && styles.quickTypeChipActive]}
-                                        onPress={() => void saveQuickCell(node, 'type', type)}
-                                        disabled={isLoading}
-                                      >
-                                        <Text style={[styles.quickTypeChipText, node.type === type && styles.quickTypeChipTextActive]}>
-                                          {formatNodeType(type)}
-                                        </Text>
-                                      </Pressable>
-                                    ))}
-                                  </View>
-                                </View>
-                              ) : (
-                                <>
-                                  <Text style={[styles.itemTitle, isDark && styles.textDark]}>{node.title}</Text>
-                                  <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
-                                    {formatNodeCostSummary(node)}
-                                  </Text>
-                                </>
-                              )}
-                              <View style={styles.nodeInfoPills}>
-                                {buildNodeInfoPills(node).map((pill) => (
-                                  <Text key={pill} style={styles.nodeInfoPill}>{pill}</Text>
-                                ))}
-                              </View>
-                            </View>
-                            {itineraryNodes.length > 0 && !isDemoMode ? (
-                              <View style={styles.stopActions}>
-                                <Pressable style={styles.secondarySmallButton} onPress={() => selectPlannerNode(node.id)} disabled={isLoading}>
-                                  <Text style={styles.secondarySmallButtonText}>Redigera</Text>
-                                </Pressable>
-                                <Pressable style={styles.secondarySmallButton} onPress={() => void moveStop(node.id, -1)} disabled={isLoading}>
-                                  <Text style={styles.secondarySmallButtonText}>Upp</Text>
-                                </Pressable>
-                                <Pressable style={styles.secondarySmallButton} onPress={() => void moveStop(node.id, 1)} disabled={isLoading}>
-                                  <Text style={styles.secondarySmallButtonText}>Ner</Text>
-                                </Pressable>
-                                <Pressable style={styles.smallButton} onPress={() => void scheduleStop(node, 9)} disabled={isLoading}>
-                                  <Text style={styles.smallButtonText}>AM</Text>
-                                </Pressable>
-                                <Pressable style={styles.smallButton} onPress={() => void scheduleStop(node, 18)} disabled={isLoading}>
-                                  <Text style={styles.smallButtonText}>PM</Text>
-                                </Pressable>
-                                <Pressable style={styles.dangerButton} onPress={() => void removeStop(node.id)} disabled={isLoading}>
-                                  <Text style={styles.smallButtonText}>Ta bort</Text>
-                                </Pressable>
-                              </View>
-                            ) : null}
-                          </>
-                        )}
-                      </View>
-                    ))}
-                  </View>
+                  <DayCard
+                    key={dayPlan.key}
+                    dayPlan={dayPlan}
+                    isDark={isDark}
+                    isDemoMode={isDemoMode}
+                    isLoading={isLoading}
+                    selectedPlannerNodeId={selectedPlannerNodeId}
+                    itineraryNodesLength={itineraryNodes.length}
+                    packingDraft={packingDraftByDay[dayPlan.key] ?? ''}
+                    draftPlannerDayKey={draftPlannerDayKey}
+                    styles={styles}
+                    renderDayPlaceSearch={renderDayPlaceSearch}
+                    renderPlannerInlineEditor={renderPlannerInlineEditor}
+                    onStartPlaceSearch={startPlaceSearch}
+                    onStartNewPlannerStep={startNewPlannerStep}
+                    onRunChecklistAction={runChecklistAction}
+                    onTogglePackingItem={togglePackingItem}
+                    onAddPackingItem={addPackingItem}
+                    onSetPackingDraft={(dayKey: string, text: string) => setPackingDraftByDay((current) => ({ ...current, [dayKey]: text }))}
+                    onSelectPlannerNode={selectPlannerNode}
+                    onSaveQuickCell={saveQuickCell}
+                    onScheduleStop={scheduleStop}
+                    onMoveStop={moveStop}
+                    onRemoveStop={removeStop}
+                  />
                 ))}
               </View>
               ) : null}
@@ -2269,53 +2100,6 @@ function nextSortOrder(nodes: ItineraryNode[]): number {
   const maxSortOrder = nodes.reduce((max, node) => Math.max(max, node.sortOrder), 0);
   return maxSortOrder + 100;
 }
-
-type DayPlan = {
-  key: string;
-  title: string;
-  shortTitle: string;
-  nodes: ItineraryNode[];
-  route: RouteSummary;
-  budget: BudgetSummary;
-  summary: DaySummary;
-  smartFlags: string[];
-  insight: DayInsightSummary;
-};
-
-type DayInsightSummary = {
-  lodgingLabel: string;
-  activitiesLabel: string;
-  driveLabel: string;
-  costLabel: string;
-  nextAction: string;
-  hasLodging: boolean;
-  activityCount: number;
-  isLongDrive: boolean;
-  checklist: DayChecklistItem[];
-  packingItems: string[];
-  packedItems: string[];
-};
-
-type DayChecklistItem = {
-  label: string;
-  done: boolean;
-  action: 'search_lodging' | 'edit_cost' | 'set_time' | 'search_location' | 'edit_booking' | 'split_drive';
-};
-
-type BudgetCategories = {
-  lodging: number;
-  activity: number;
-  transport: number;
-  food: number;
-  other: number;
-};
-
-type BudgetSummary = {
-  total: number;
-  categories: BudgetCategories;
-  missingCostCount: number;
-  warnings: string[];
-};
 
 function buildDayPlans(nodes: ItineraryNode[]): DayPlan[] {
   const sortedNodes = sortNodes(nodes);
