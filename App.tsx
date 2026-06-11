@@ -27,6 +27,7 @@ import {
   upsertItineraryNode,
 } from '@/services/database/tripRepository';
 import { googlePlaceToPoi, searchGooglePlaces, type GooglePlace } from '@/services/google/googlePlaces';
+import { analyzeDayWarnings, summarizeDay, validatePlannerDraft, type DaySummary } from '@/services/planning/dayAnalysis';
 import { estimateRouteSummary } from '@/services/routing/routeEstimate';
 import { useTripStore } from '@/store/tripStore';
 import { formatDistance, formatDuration } from '@/utils/formatters';
@@ -1205,8 +1206,18 @@ export default function App() {
       return;
     }
 
-    if (!plannerTitle.trim()) {
-      setStatusMessage('Raden behöver en titel.');
+    const validation = validatePlannerDraft({
+      title: plannerTitle,
+      type: plannerType,
+      date: plannerDate,
+      startTime: plannerTime,
+      cost: plannerCost,
+      latitude: plannerLatitude,
+      longitude: plannerLongitude,
+    });
+
+    if (!validation.valid) {
+      setStatusMessage(validation.errors[0] ?? 'Kontrollera formuläret.');
       return;
     }
 
@@ -1217,11 +1228,6 @@ export default function App() {
     try {
       const latitude = plannerLatitude.trim() ? Number(plannerLatitude.replace(',', '.')) : null;
       const longitude = plannerLongitude.trim() ? Number(plannerLongitude.replace(',', '.')) : null;
-
-      if ((latitude === null) !== (longitude === null) || (latitude !== null && (Number.isNaN(latitude) || Number.isNaN(longitude)))) {
-        setStatusMessage('Ange både giltig latitud och longitud, eller lämna båda tomma.');
-        return;
-      }
 
       const nextReservation = { ...node.reservation };
       if (plannerHotelNote.trim()) {
@@ -1272,8 +1278,18 @@ export default function App() {
       return;
     }
 
-    if (!plannerTitle.trim()) {
-      setStatusMessage('Nytt steg behöver en titel.');
+    const validation = validatePlannerDraft({
+      title: plannerTitle,
+      type: plannerType,
+      date: plannerDate,
+      startTime: plannerTime,
+      cost: plannerCost,
+      latitude: plannerLatitude,
+      longitude: plannerLongitude,
+    });
+
+    if (!validation.valid) {
+      setStatusMessage(validation.errors[0] ?? 'Kontrollera formuläret.');
       return;
     }
 
@@ -1284,11 +1300,6 @@ export default function App() {
     try {
       const latitude = plannerLatitude.trim() ? Number(plannerLatitude.replace(',', '.')) : null;
       const longitude = plannerLongitude.trim() ? Number(plannerLongitude.replace(',', '.')) : null;
-
-      if ((latitude === null) !== (longitude === null) || (latitude !== null && (Number.isNaN(latitude) || Number.isNaN(longitude)))) {
-        setStatusMessage('Ange både giltig latitud och longitud, eller lämna båda tomma.');
-        return;
-      }
 
       const now = new Date().toISOString();
       const savedNode = await saveItineraryNodeOnline({
@@ -2099,9 +2110,12 @@ function DayOverviewCard({ dayPlan }: { dayPlan: DayPlan }) {
         <Text style={styles.dayOverviewCost}>{formatSek(dayPlan.budget.total)}</Text>
       </View>
       <Text style={styles.dayOverviewPrimary}>{primaryStop}</Text>
+      <Text style={styles.dayOverviewMetaLine}>{dayPlan.summary.startPlace} till {dayPlan.summary.endPlace}</Text>
+      <Text style={styles.dayOverviewMetaLine}>Boende: {dayPlan.summary.lodging}</Text>
       <Text style={styles.dayOverviewAction}>{dayPlan.insight.nextAction}</Text>
       <View style={styles.dayOverviewStats}>
         <Text style={styles.dayOverviewStat}>{dayPlan.nodes.length} stopp</Text>
+        <Text style={styles.dayOverviewStat}>{dayPlan.summary.activityCount} aktiviteter</Text>
         <Text style={styles.dayOverviewStat}>{formatDistance(dayPlan.route.distanceMeters)}</Text>
         <Text style={styles.dayOverviewStat}>{formatDuration(dayPlan.route.durationSeconds)}</Text>
       </View>
@@ -2263,6 +2277,7 @@ type DayPlan = {
   nodes: ItineraryNode[];
   route: RouteSummary;
   budget: BudgetSummary;
+  summary: DaySummary;
   smartFlags: string[];
   insight: DayInsightSummary;
 };
@@ -2316,6 +2331,7 @@ function buildDayPlans(nodes: ItineraryNode[]): DayPlan[] {
     const budget = buildBudgetSummary(groupNodes);
     const insight = buildDayInsight(groupNodes, route, budget);
     const title = key === 'unscheduled' ? 'Oschemalagt' : `Dag ${index + 1} / ${formatDateLabel(key)}`;
+    const summary = summarizeDay(groupNodes, key, index + 1);
 
     return {
       key,
@@ -2324,6 +2340,7 @@ function buildDayPlans(nodes: ItineraryNode[]): DayPlan[] {
       nodes: groupNodes,
       route,
       budget,
+      summary,
       smartFlags: buildDaySmartFlags(groupNodes, route, budget),
       insight,
     };
@@ -2346,6 +2363,7 @@ function filterDayPlans(dayPlans: DayPlan[], searchText: string): DayPlan[] {
         nodes: filteredNodes,
         route,
         budget,
+        summary: summarizeDay(filteredNodes, dayPlan.key, dayPlan.summary.dayNumber),
         smartFlags: buildDaySmartFlags(filteredNodes, route, budget),
         insight: buildDayInsight(filteredNodes, route, budget),
       };
@@ -2502,36 +2520,19 @@ function readPackedItems(node: ItineraryNode): string[] {
 }
 
 function buildDaySmartFlags(nodes: ItineraryNode[], route: RouteSummary, budget: BudgetSummary): string[] {
-  const flags: string[] = [];
-  const hasLodging = nodes.some((node) => node.type === 'lodging' || node.type === 'camping');
-  const hasTimedStop = nodes.some((node) => Boolean(node.startsAt));
-  const driveHours = route.durationSeconds / 3600;
+  const warningFlags = analyzeDayWarnings(nodes, route)
+    .map((warning) => warning.message)
+    .slice(0, 5);
 
   if (nodes.length === 0) {
-    flags.push('Tom dag');
+    return ['Tom dag'];
   }
 
-  if (!hasLodging && nodes.length > 0) {
-    flags.push('Saknar boende');
+  if (warningFlags.length === 0 && budget.total > 0) {
+    return ['Ser planerad ut'];
   }
 
-  if (budget.missingCostCount > 0) {
-    flags.push(`${budget.missingCostCount} kostnader saknas`);
-  }
-
-  if (driveHours >= 5) {
-    flags.push('Lång kördag');
-  }
-
-  if (budget.total >= 3000) {
-    flags.push('Dyr dag');
-  }
-
-  if (!hasTimedStop) {
-    flags.push('Saknar tider');
-  }
-
-  return flags;
+  return warningFlags;
 }
 
 function buildBudgetSummary(nodes: ItineraryNode[]): BudgetSummary {
@@ -3592,6 +3593,12 @@ const styles = StyleSheet.create({
     color: '#0a2540',
     fontSize: 16,
     fontWeight: '900',
+  },
+  dayOverviewMetaLine: {
+    color: '#425466',
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 17,
   },
   dayOverviewAction: {
     color: '#425466',
