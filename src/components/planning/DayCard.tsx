@@ -1,6 +1,8 @@
 ﻿import React, { useRef, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
+import { dayCardStyles } from './DayCard.styles';
+
 import type { DayChecklistItem, DayPlan } from '@/models';
 import type { ItineraryNode } from '@/models';
 import {
@@ -253,12 +255,12 @@ function InlineEditableCore(props: InlineEditorProps & { multiline: boolean }) {
       : null;
     return (
       <Pressable
-        style={[styles.inlineDisplayField, inactiveStyle, disabled && styles.disabledButton]}
+        style={[dayCardStyles.inlineDisplayField, inactiveStyle, disabled && styles.disabledButton]}
         onPress={beginEdit}
         disabled={disabled}
       >
-        {showInactiveLabel ? <Text style={[styles.inlineDisplayLabel, isDark && styles.textMutedDark]}>{label}</Text> : null}
-        <Text style={[styles.inlineDisplayValue, isDark && styles.textDark, inactiveValueStyle]}>{displayInlineFieldValue(node, field)}</Text>
+        {showInactiveLabel ? <Text style={[dayCardStyles.inlineDisplayLabel, isDark && styles.textMutedDark]}>{label}</Text> : null}
+        <Text style={[dayCardStyles.inlineDisplayValue, isDark && styles.textDark, inactiveValueStyle]}>{displayInlineFieldValue(node, field)}</Text>
         {warning ? <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>{warning}</Text> : null}
       </Pressable>
     );
@@ -374,12 +376,12 @@ function InlineEditableSelect(props: InlineEditorProps & { options: InlineOption
   if (!isActive) {
     return (
       <Pressable
-        style={[styles.inlineDisplayField, inactiveStyle, disabled && styles.disabledButton]}
+        style={[dayCardStyles.inlineDisplayField, inactiveStyle, disabled && styles.disabledButton]}
         onPress={beginEdit}
         disabled={disabled}
       >
-        {showInactiveLabel ? <Text style={[styles.inlineDisplayLabel, isDark && styles.textMutedDark]}>{label}</Text> : null}
-        <Text style={[styles.inlineDisplayValue, isDark && styles.textDark, inactiveValueStyle]}>{displayInlineFieldValue(node, field)}</Text>
+        {showInactiveLabel ? <Text style={[dayCardStyles.inlineDisplayLabel, isDark && styles.textMutedDark]}>{label}</Text> : null}
+        <Text style={[dayCardStyles.inlineDisplayValue, isDark && styles.textDark, inactiveValueStyle]}>{displayInlineFieldValue(node, field)}</Text>
       </Pressable>
     );
   }
@@ -473,8 +475,8 @@ export default function DayCard(props: DayCardProps) {
               <Text key={flag} style={[styles.smartFlag, flag === 'Ser planerad ut' && styles.smartFlagGood]}>{flag}</Text>
             ))}
             {visibleFlags.length > 3 ? (
-              <Pressable style={styles.smartFlagMore} onPress={() => setExpandedFlags((current) => !current)}>
-                <Text style={styles.smartFlagMoreText}>{expandedFlags ? 'Visa fÃ¤rre' : `+${visibleFlags.length - 3} fler`}</Text>
+              <Pressable style={dayCardStyles.smartFlagMore} onPress={() => setExpandedFlags((current) => !current)}>
+                <Text style={dayCardStyles.smartFlagMoreText}>{expandedFlags ? 'Visa färre' : `+${visibleFlags.length - 3} fler`}</Text>
               </Pressable>
             ) : null}
           </View>
@@ -518,8 +520,8 @@ export default function DayCard(props: DayCardProps) {
         </View>
       </View>
       <Text style={styles.dayNextAction}>{dayPlan.insight.nextAction}</Text>
-      <View style={styles.collapsiblePanel}>
-        <Pressable style={styles.collapsibleHeader} onPress={() => setChecklistExpanded((current) => !current)}>
+      <View style={dayCardStyles.collapsiblePanel}>
+        <Pressable style={dayCardStyles.collapsibleHeader} onPress={() => setChecklistExpanded((current) => !current)}>
           <Text style={styles.packingTitle}>Checklista</Text>
           <Text style={styles.secondarySmallButtonText}>{checklistExpanded ? 'Dölj' : `Visa ${dayPlan.insight.checklist.length}`}</Text>
         </Pressable>
@@ -541,7 +543,7 @@ export default function DayCard(props: DayCardProps) {
         ) : null}
       </View>
       <View style={styles.packingPanel}>
-        <Pressable style={styles.collapsibleHeader} onPress={() => setPackingExpanded((current) => !current)}>
+        <Pressable style={dayCardStyles.collapsibleHeader} onPress={() => setPackingExpanded((current) => !current)}>
           <Text style={styles.packingTitle}>Packa / ta med</Text>
           <Text style={styles.secondarySmallButtonText}>{packingExpanded ? 'Dölj' : `Visa ${dayPlan.insight.packingItems.length}`}</Text>
         </Pressable>
@@ -592,7 +594,7 @@ export default function DayCard(props: DayCardProps) {
 
         return (
           <View key={node.id} style={[styles.timelineItem, isDark && styles.innerPanelDark]}>
-            <View style={styles.timeRailCompact}>
+            <View style={dayCardStyles.timeRailCompact}>
               {canEdit ? (
                 <InlineEditableField
                   node={node}
@@ -609,7 +611,7 @@ export default function DayCard(props: DayCardProps) {
                   onDraftChange={onInlineDraftChange}
                   onSave={onSaveInlineField}
                   inputStyle={styles.quickCellSmall}
-                  inactiveStyle={styles.inlineTimeField}
+                  inactiveStyle={dayCardStyles.inlineTimeField}
                   inactiveValueStyle={styles.timeText}
                   showInactiveLabel={false}
                 />
@@ -619,9 +621,9 @@ export default function DayCard(props: DayCardProps) {
               <View style={[styles.nodeDot, { backgroundColor: nodeColor(node.type) }]} />
             </View>
 
-            <View style={styles.stopCompactBody}>
-              <View style={styles.stopMainRow}>
-                <View style={styles.stopTitleBlock}>
+            <View style={dayCardStyles.stopCompactBody}>
+              <View style={dayCardStyles.stopMainRow}>
+                <View style={dayCardStyles.stopTitleBlock}>
                   {canEdit ? (
                     <InlineEditableField
                       node={node}
@@ -637,14 +639,14 @@ export default function DayCard(props: DayCardProps) {
                       onDraftChange={onInlineDraftChange}
                       onSave={onSaveInlineField}
                       inputStyle={styles.quickCellTitle}
-                      inactiveStyle={styles.inlineTitleField}
+                      inactiveStyle={dayCardStyles.inlineTitleField}
                       inactiveValueStyle={styles.itemTitle}
                       showInactiveLabel={false}
                     />
                   ) : (
                     <Text style={[styles.itemTitle, isDark && styles.textDark]}>{node.title}</Text>
                   )}
-                  <View style={styles.stopMetaRow}>
+                  <View style={dayCardStyles.stopMetaRow}>
                     {canEdit ? (
                       <InlineEditableSelect
                         node={node}
@@ -660,8 +662,8 @@ export default function DayCard(props: DayCardProps) {
                         onCancel={onClearInlineEdit}
                         onDraftChange={onInlineDraftChange}
                         onSave={onSaveInlineField}
-                        inactiveStyle={styles.inlineBadgeField}
-                        inactiveValueStyle={styles.inlineBadgeText}
+                        inactiveStyle={dayCardStyles.inlineBadgeField}
+                        inactiveValueStyle={dayCardStyles.inlineBadgeText}
                         showInactiveLabel={false}
                       />
                     ) : (
@@ -681,7 +683,7 @@ export default function DayCard(props: DayCardProps) {
                         onCancel={onClearInlineEdit}
                         onDraftChange={onInlineDraftChange}
                         onSave={onSaveInlineField}
-                        inactiveStyle={styles.inlineMetaField}
+                        inactiveStyle={dayCardStyles.inlineMetaField}
                         inactiveValueStyle={styles.itemMeta}
                         showInactiveLabel={false}
                       />
@@ -691,7 +693,7 @@ export default function DayCard(props: DayCardProps) {
                   </View>
                 </View>
 
-                <View style={styles.stopRightRail}>
+                <View style={dayCardStyles.stopRightRail}>
                   {canEdit ? (
                     <InlineEditableField
                       node={node}
@@ -707,26 +709,26 @@ export default function DayCard(props: DayCardProps) {
                       onDraftChange={onInlineDraftChange}
                       onSave={onSaveInlineField}
                       inputStyle={styles.quickCellSmall}
-                      inactiveStyle={styles.inlineCostField}
-                      inactiveValueStyle={styles.inlineCostText}
+                      inactiveStyle={dayCardStyles.inlineCostField}
+                      inactiveValueStyle={dayCardStyles.inlineCostText}
                       showInactiveLabel={false}
                     />
                   ) : (
-                    <Text style={styles.inlineCostText}>{formatRawNodeCost(node) || 'Kostnad saknas'}</Text>
+                    <Text style={dayCardStyles.inlineCostText}>{formatRawNodeCost(node) || 'Kostnad saknas'}</Text>
                   )}
                   {canEdit ? (
-                    <View style={styles.stopMenuWrap}>
+                    <View style={dayCardStyles.stopMenuWrap}>
                       <Pressable
-                        style={[styles.iconMenuButton, isLoading && styles.disabledButton]}
+                        style={[dayCardStyles.iconMenuButton, isLoading && styles.disabledButton]}
                         onPress={() => setOpenMenuNodeId((current) => (current === node.id ? null : node.id))}
                         disabled={isLoading}
                       >
-                        <Text style={styles.iconMenuText}>?</Text>
+                        <Text style={dayCardStyles.iconMenuText}>?</Text>
                       </Pressable>
                       {menuOpen ? (
-                        <View style={styles.stopMenuPanel}>
+                        <View style={dayCardStyles.stopMenuPanel}>
                           <Pressable
-                            style={styles.stopMenuItem}
+                            style={dayCardStyles.stopMenuItem}
                             onPress={() => {
                               toggleNodeDetails(node.id);
                               setOpenMenuNodeId(null);
@@ -735,7 +737,7 @@ export default function DayCard(props: DayCardProps) {
                             <Text style={styles.secondarySmallButtonText}>{detailsExpanded ? 'Dölj detaljer' : 'Visa/redigera alla detaljer'}</Text>
                           </Pressable>
                           <Pressable
-                            style={styles.stopMenuDangerItem}
+                            style={dayCardStyles.stopMenuDangerItem}
                             onPress={() => {
                               setOpenMenuNodeId(null);
                               void onRemoveStop(node.id);
@@ -750,11 +752,11 @@ export default function DayCard(props: DayCardProps) {
                 </View>
               </View>
 
-              {notePreview ? <Text style={[styles.stopNotePreview, isDark && styles.textMutedDark]}>{notePreview}</Text> : null}
+              {notePreview ? <Text style={[dayCardStyles.stopNotePreview, isDark && styles.textMutedDark]}>{notePreview}</Text> : null}
               {inlineEditMessage && activeInlineEdit?.nodeId === node.id ? <Text style={styles.validationText}>{inlineEditMessage}</Text> : null}
 
               {detailsExpanded && canEdit ? (
-                <View style={styles.stopDetailsGrid}>
+                <View style={dayCardStyles.stopDetailsGrid}>
                   <InlineEditableField
                     node={node}
                     field="date"
@@ -770,7 +772,7 @@ export default function DayCard(props: DayCardProps) {
                     onDraftChange={onInlineDraftChange}
                     onSave={onSaveInlineField}
                     inputStyle={styles.quickCellDate}
-                    inactiveStyle={styles.inlineDetailField}
+                    inactiveStyle={dayCardStyles.inlineDetailField}
                   />
                   <InlineEditableField
                     node={node}
@@ -787,7 +789,7 @@ export default function DayCard(props: DayCardProps) {
                     onDraftChange={onInlineDraftChange}
                     onSave={onSaveInlineField}
                     inputStyle={styles.quickCellSmall}
-                    inactiveStyle={styles.inlineDetailField}
+                    inactiveStyle={dayCardStyles.inlineDetailField}
                   />
                   <InlineEditableSelect
                     node={node}
@@ -803,7 +805,7 @@ export default function DayCard(props: DayCardProps) {
                     onCancel={onClearInlineEdit}
                     onDraftChange={onInlineDraftChange}
                     onSave={onSaveInlineField}
-                    inactiveStyle={styles.inlineDetailField}
+                    inactiveStyle={dayCardStyles.inlineDetailField}
                   />
                   <InlineEditableSelect
                     node={node}
@@ -819,7 +821,7 @@ export default function DayCard(props: DayCardProps) {
                     onCancel={onClearInlineEdit}
                     onDraftChange={onInlineDraftChange}
                     onSave={onSaveInlineField}
-                    inactiveStyle={styles.inlineDetailField}
+                    inactiveStyle={dayCardStyles.inlineDetailField}
                   />
                   <InlineEditableField
                     node={node}
@@ -834,7 +836,7 @@ export default function DayCard(props: DayCardProps) {
                     onCancel={onClearInlineEdit}
                     onDraftChange={onInlineDraftChange}
                     onSave={onSaveInlineField}
-                    inactiveStyle={styles.inlineDetailFieldWide}
+                    inactiveStyle={dayCardStyles.inlineDetailFieldWide}
                   />
                   <InlineEditableTextArea
                     node={node}
@@ -849,13 +851,13 @@ export default function DayCard(props: DayCardProps) {
                     onCancel={onClearInlineEdit}
                     onDraftChange={onInlineDraftChange}
                     onSave={onSaveInlineField}
-                    inactiveStyle={styles.inlineDetailFieldWide}
+                    inactiveStyle={dayCardStyles.inlineDetailFieldWide}
                   />
                 </View>
               ) : null}
 
               {canEdit ? (
-                <View style={styles.stopCompactActions}>
+                <View style={dayCardStyles.stopCompactActions}>
                   <Pressable style={styles.secondarySmallButton} onPress={() => void onMoveStop(node.id, -1)} disabled={isLoading}>
                     <Text style={styles.secondarySmallButtonText}>Upp</Text>
                   </Pressable>
