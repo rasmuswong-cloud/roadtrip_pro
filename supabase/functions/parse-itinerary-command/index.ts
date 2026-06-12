@@ -139,8 +139,8 @@ Deno.serve(async (request) => {
 
     return jsonResponse(normalizeMutationPlan(JSON.parse(content)));
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return jsonResponse({ error: message }, 500);
+    console.error('parse-itinerary-command failed:', error);
+    return jsonResponse({ error: 'Internal server error' }, 500);
   }
 });
 
