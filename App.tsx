@@ -30,6 +30,15 @@ import {
 } from '@/services/database/tripRepository';
 import { googlePlaceToPoi, searchGooglePlaces, type GooglePlace } from '@/services/google/googlePlaces';
 import { analyzeDayWarnings, summarizeDay, validatePlannerDraft, type DaySummary } from '@/services/planning/dayAnalysis';
+import {
+  applyInlineFieldUpdate,
+  type ActiveInlineEdit,
+  inlineFieldLabel,
+  inlineFieldValue,
+  inlineNodeTypes,
+  type InlineFieldKey,
+  type InlineFieldValue,
+} from '@/services/planning/inlineEdit';
 import { estimateRouteSummary } from '@/services/routing/routeEstimate';
 import { useTripStore } from '@/store/tripStore';
 import { formatDistance, formatDuration } from '@/utils/formatters';
@@ -309,6 +318,10 @@ export default function App() {
   const [lastOnlineSavedAt, setLastOnlineSavedAt] = useState<string | null>(null);
   const [undoSnapshot, setUndoSnapshot] = useState<UndoSnapshot | null>(null);
   const movingStopIdsRef = useRef<Set<string>>(new Set());
+  const inlineSaveInFlightRef = useRef(false);
+  const [activeInlineEdit, setActiveInlineEdit] = useState<ActiveInlineEdit>(null);
+  const [activeInlineDraftChanged, setActiveInlineDraftChanged] = useState(false);
+  const [inlineEditMessage, setInlineEditMessage] = useState<string | null>(null);
   const { activeTripId, setActiveTrip, upsertTrip, upsertPoi: upsertPoiInStore } = useTripStore();
 
   const displayedNodes = itineraryNodes.length > 0 ? itineraryNodes : demoNodes;
@@ -1099,93 +1112,68 @@ export default function App() {
     }
   }
 
-  async function saveQuickCell(node: ItineraryNode, field: QuickCellField, value: string) {
+  async function saveInlineField(node: ItineraryNode, field: InlineFieldKey, value: InlineFieldValue) {
     if (isDemoMode || isLoading || itineraryNodes.length === 0) {
       return;
     }
 
-    const trimmedValue = value.trim();
-    if (field === 'title' && !trimmedValue) {
-      setStatusMessage('Titeln kan inte vara tom.');
+    if (inlineSaveInFlightRef.current) {
+      throw new Error('Ett fält sparas redan. Vänta tills sparningen är klar.');
+    }
+
+    if (String(value ?? '').trim() === inlineFieldValue(node, field)) {
       return;
     }
 
-    const currentValue = quickCellValue(node, field);
-    if (trimmedValue === currentValue) {
-      return;
-    }
-
-    rememberUndo(`ändra ${quickCellLabel(field)}`);
-    setIsLoading(true);
+    inlineSaveInFlightRef.current = true;
     try {
-      const nextMetadata = { ...node.metadata };
-      let nextStartsAt = node.startsAt ?? null;
-      let nextTitle = node.title;
-      let nextType = node.type;
-
-      if (field === 'title') {
-        nextTitle = trimmedValue;
-      }
-
-      if (field === 'date') {
-        nextStartsAt = buildIsoFromInputs(trimmedValue, node.startsAt ? toTimeInput(node.startsAt) : '');
-      }
-
-      if (field === 'time') {
-        if (!trimmedValue) {
-          nextStartsAt = null;
-        } else if (node.startsAt) {
-          nextStartsAt = buildIsoFromInputs(node.startsAt.slice(0, 10), trimmedValue);
-        } else {
-          setStatusMessage('Sätt datum via Redigera innan du ändrar tid direkt i raden.');
-          return;
-        }
-      }
-
-      if (field === 'place') {
-        if (trimmedValue) {
-          nextMetadata.place = trimmedValue;
-        } else {
-          delete nextMetadata.place;
-        }
-      }
-
-      if (field === 'cost') {
-        if (trimmedValue) {
-          nextMetadata.cost = trimmedValue;
-        } else {
-          delete nextMetadata.cost;
-        }
-      }
-
-      if (field === 'type') {
-        const nextNodeType = parseInlineNodeType(trimmedValue);
-        if (!nextNodeType) {
-          setStatusMessage('Okänd typ.');
-          return;
-        }
-        nextType = nextNodeType;
-      }
-
-      const savedNode = await saveItineraryNodeOnline({
-        ...node,
-        type: nextType,
-        title: nextTitle,
-        startsAt: nextStartsAt,
-        metadata: nextMetadata,
-        updatedAt: new Date().toISOString(),
-      });
+      const nextNode = applyInlineFieldUpdate(node, field, value);
+      rememberUndo(`ändra ${inlineFieldLabel(field)}`);
+      setIsLoading(true);
+      const savedNode = await saveItineraryNodeOnline(nextNode);
 
       setItineraryNodes((current) => sortNodes(current.map((candidate) => (candidate.id === savedNode.id ? savedNode : candidate))));
       if (selectedPlannerNodeId === savedNode.id) {
         populatePlannerEditor(savedNode);
       }
-      setStatusMessage(`Sparade ${quickCellLabel(field)}: ${trimmedValue || 'tomt'}`);
+      setStatusMessage(`Sparade ${inlineFieldLabel(field)}: ${String(value ?? '').trim() || 'tomt'}`);
+      setActiveInlineDraftChanged(false);
+      setInlineEditMessage(null);
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : String(error));
+      const message = error instanceof Error ? error.message : String(error);
+      setStatusMessage(message || 'Kunde inte spara fältet.');
+      throw error;
     } finally {
+      inlineSaveInFlightRef.current = false;
       setIsLoading(false);
     }
+  }
+
+  function startInlineEdit(nodeId: string, field: InlineFieldKey): boolean {
+    if (isDemoMode || isLoading || inlineSaveInFlightRef.current) {
+      return false;
+    }
+
+    const isSameEditor = activeInlineEdit?.nodeId === nodeId && activeInlineEdit.field === field;
+    if (!isSameEditor && activeInlineEdit && activeInlineDraftChanged) {
+      setInlineEditMessage('Spara eller avbryt det öppna fältet innan du redigerar ett annat.');
+      return false;
+    }
+
+    setActiveInlineEdit({ nodeId, field });
+    setActiveInlineDraftChanged(false);
+    setInlineEditMessage(null);
+    return true;
+  }
+
+  function clearInlineEdit() {
+    if (inlineSaveInFlightRef.current) {
+      return;
+    }
+
+    setActiveInlineEdit(null);
+    setActiveInlineDraftChanged(false);
+    setInlineEditMessage(null);
   }
 
   async function savePlannerEdit() {
@@ -1861,6 +1849,8 @@ export default function App() {
                     isDemoMode={isDemoMode}
                     isLoading={isLoading}
                     selectedPlannerNodeId={selectedPlannerNodeId}
+                    activeInlineEdit={activeInlineEdit}
+                    inlineEditMessage={inlineEditMessage}
                     itineraryNodesLength={itineraryNodes.length}
                     packingDraft={packingDraftByDay[dayPlan.key] ?? ''}
                     draftPlannerDayKey={draftPlannerDayKey}
@@ -1874,7 +1864,10 @@ export default function App() {
                     onAddPackingItem={addPackingItem}
                     onSetPackingDraft={(dayKey: string, text: string) => setPackingDraftByDay((current) => ({ ...current, [dayKey]: text }))}
                     onSelectPlannerNode={selectPlannerNode}
-                    onSaveQuickCell={saveQuickCell}
+                    onStartInlineEdit={startInlineEdit}
+                    onClearInlineEdit={clearInlineEdit}
+                    onInlineDraftChange={setActiveInlineDraftChanged}
+                    onSaveInlineField={saveInlineField}
                     onScheduleStop={scheduleStop}
                     onMoveStop={moveStop}
                     onRemoveStop={removeStop}
@@ -2002,50 +1995,6 @@ function formatNodeCostSummary(node: ItineraryNode): string {
   return parts.join(' / ');
 }
 
-type QuickCellField = 'title' | 'date' | 'time' | 'place' | 'cost' | 'type';
-
-function quickCellValue(node: ItineraryNode, field: QuickCellField): string {
-  switch (field) {
-    case 'title':
-      return node.title;
-    case 'date':
-      return node.startsAt ? node.startsAt.slice(0, 10) : '';
-    case 'time':
-      return node.startsAt ? toTimeInput(node.startsAt) : '';
-    case 'place':
-      return typeof node.metadata.place === 'string' ? node.metadata.place : '';
-    case 'cost':
-      return formatRawNodeCost(node);
-    case 'type':
-      return node.type;
-    default:
-      return '';
-  }
-}
-
-function quickCellLabel(field: QuickCellField): string {
-  switch (field) {
-    case 'title':
-      return 'titel';
-    case 'date':
-      return 'datum';
-    case 'time':
-      return 'tid';
-    case 'place':
-      return 'plats';
-    case 'cost':
-      return 'kostnad';
-    case 'type':
-      return 'typ';
-    default:
-      return 'fält';
-  }
-}
-
-function parseInlineNodeType(value: string): ItineraryNodeType | null {
-  return inlineNodeTypes.includes(value as ItineraryNodeType) ? value as ItineraryNodeType : null;
-}
-
 function buildNodeInfoPills(node: ItineraryNode): string[] {
   const pills: string[] = [];
   const place = typeof node.metadata.place === 'string' ? node.metadata.place : null;
@@ -2070,8 +2019,6 @@ function buildNodeInfoPills(node: ItineraryNode): string[] {
 
   return pills.slice(0, 4);
 }
-
-const inlineNodeTypes: ItineraryNodeType[] = ['lodging', 'camping', 'activity', 'gastronomy', 'transport', 'custom'];
 
 function sortNodes(nodes: ItineraryNode[]): ItineraryNode[] {
   return [...nodes].sort((a, b) => {
@@ -3447,6 +3394,13 @@ const styles = StyleSheet.create({
     borderColor: '#ffe3a3',
     paddingHorizontal: 12,
     paddingVertical: 10,
+  },
+  validationText: {
+    color: '#b42318',
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 17,
+    marginTop: 6,
   },
   editorActionRow: {
     flexDirection: 'row',

@@ -1,10 +1,22 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
 import type { DayChecklistItem, DayPlan } from '@/models';
-import type { ItineraryNode, ItineraryNodeType } from '@/models';
-
-type QuickCellField = 'title' | 'date' | 'time' | 'place' | 'cost' | 'type';
+import type { ItineraryNode } from '@/models';
+import {
+  displayInlineFieldValue,
+  formatBookingStatus,
+  formatNodeType,
+  inlineBookingStatuses,
+  inlineCurrencies,
+  inlineFieldValue,
+  inlineNodeTypes,
+  shouldSaveInlineField,
+  validateInlineFieldValue,
+  type ActiveInlineEdit,
+  type InlineFieldKey,
+  type InlineFieldValue,
+} from '@/services/planning/inlineEdit';
 
 type DayCardProps = {
   dayPlan: DayPlan;
@@ -12,6 +24,8 @@ type DayCardProps = {
   isDemoMode: boolean;
   isLoading: boolean;
   selectedPlannerNodeId: string | null;
+  activeInlineEdit: ActiveInlineEdit;
+  inlineEditMessage: string | null;
   itineraryNodesLength: number;
   packingDraft: string;
   draftPlannerDayKey: string | null;
@@ -25,13 +39,14 @@ type DayCardProps = {
   onAddPackingItem: (dayPlan: DayPlan) => Promise<void>;
   onSetPackingDraft: (dayKey: string, text: string) => void;
   onSelectPlannerNode: (nodeId: string) => void;
-  onSaveQuickCell: (node: ItineraryNode, field: QuickCellField, value: string) => Promise<void>;
+  onStartInlineEdit: (nodeId: string, field: InlineFieldKey) => boolean;
+  onClearInlineEdit: () => void;
+  onInlineDraftChange: (changed: boolean) => void;
+  onSaveInlineField: (node: ItineraryNode, field: InlineFieldKey, value: InlineFieldValue) => Promise<void>;
   onScheduleStop: (node: ItineraryNode, hour: number) => Promise<void>;
   onMoveStop: (nodeId: string, direction: -1 | 1) => Promise<void>;
   onRemoveStop: (nodeId: string) => Promise<void>;
 };
-
-const inlineNodeTypes: ItineraryNodeType[] = ['lodging', 'camping', 'activity', 'gastronomy', 'transport', 'custom'];
 
 function formatDistance(value: number): string {
   if (value >= 1000) {
@@ -62,27 +77,6 @@ function formatTime(value?: string | null): string {
   }
 
   return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(new Date(value));
-}
-
-function formatNodeType(type: ItineraryNode['type']): string {
-  switch (type) {
-    case 'lodging':
-      return 'Boende';
-    case 'camping':
-      return 'Camping';
-    case 'activity':
-      return 'Aktivitet';
-    case 'gastronomy':
-      return 'Mat';
-    case 'fuel':
-      return 'Bränsle';
-    case 'transport':
-      return 'Transport';
-    case 'note':
-      return 'Notis';
-    default:
-      return 'Övrigt';
-  }
 }
 
 function formatRawNodeCost(node: ItineraryNode): string {
@@ -180,30 +174,272 @@ function nodeColor(type: ItineraryNode['type']): string {
   }
 }
 
-function quickCellValue(node: ItineraryNode, field: QuickCellField): string {
-  switch (field) {
-    case 'title':
-      return node.title;
-    case 'date':
-      return node.startsAt ? node.startsAt.slice(0, 10) : '';
-    case 'time':
-      return node.startsAt ? toTimeInput(node.startsAt) : '';
-    case 'place':
-      return typeof node.metadata.place === 'string' ? node.metadata.place : '';
-    case 'cost':
-      return formatRawNodeCost(node);
-    case 'type':
-      return node.type;
-    default:
-      return '';
-  }
+type InlineOption = {
+  value: string;
+  label: string;
+};
+
+type InlineEditorProps = {
+  node: ItineraryNode;
+  field: InlineFieldKey;
+  activeInlineEdit: ActiveInlineEdit;
+  label: string;
+  isDark: boolean;
+  loading: boolean;
+  disabled: boolean;
+  styles: any;
+  onStart: (nodeId: string, field: InlineFieldKey) => boolean;
+  onCancel: () => void;
+  onSave: (node: ItineraryNode, field: InlineFieldKey, value: InlineFieldValue) => Promise<void>;
+  onDraftChange: (changed: boolean) => void;
+  placeholder?: string;
+  inputStyle?: unknown;
+};
+
+function InlineEditableField(props: InlineEditorProps) {
+  return <InlineEditableCore {...props} multiline={false} />;
 }
 
-function toTimeInput(value: string): string {
-  const date = new Date(value);
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  return `${hours}:${minutes}`;
+function InlineEditableTextArea(props: InlineEditorProps) {
+  return <InlineEditableCore {...props} multiline />;
+}
+
+function InlineEditableCore(props: InlineEditorProps & { multiline: boolean }) {
+  const {
+    node,
+    field,
+    activeInlineEdit,
+    label,
+    isDark,
+    loading,
+    disabled,
+    styles,
+    onStart,
+    onCancel,
+    onSave,
+    onDraftChange,
+    placeholder,
+    inputStyle,
+    multiline,
+  } = props;
+  const isActive = activeInlineEdit?.nodeId === node.id && activeInlineEdit.field === field;
+  const [draft, setDraft] = useState(inlineFieldValue(node, field));
+  const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const savingRef = useRef(false);
+
+  function beginEdit() {
+    if (!onStart(node.id, field)) {
+      return;
+    }
+
+    setDraft(inlineFieldValue(node, field));
+    setError(null);
+    onDraftChange(false);
+  }
+
+  function cancelEdit() {
+    if (savingRef.current || isSaving) {
+      return;
+    }
+
+    setDraft(inlineFieldValue(node, field));
+    setError(null);
+    onDraftChange(false);
+    onCancel();
+  }
+
+  async function saveEdit() {
+    if (savingRef.current || isSaving || loading) {
+      return;
+    }
+
+    const validation = validateInlineFieldValue(node, field, draft);
+    if (!validation.valid) {
+      setError(validation.error ?? 'Kontrollera fältet.');
+      return;
+    }
+
+    if (!shouldSaveInlineField(node, field, draft)) {
+      cancelEdit();
+      return;
+    }
+
+    savingRef.current = true;
+    setIsSaving(true);
+    setError(null);
+    try {
+      await onSave(node, field, draft);
+      onCancel();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Kunde inte spara fältet.');
+    } finally {
+      savingRef.current = false;
+      setIsSaving(false);
+    }
+  }
+
+  if (!isActive) {
+    const warning = field === 'place' && inlineFieldValue(node, 'place') && node.location
+      ? 'Platsnamnet ändras, men befintliga kartkoordinater behålls. Kontrollera kartpositionen.'
+      : null;
+    return (
+      <Pressable
+        style={[styles.quickCell, inputStyle, isDark && styles.inputDark, disabled && styles.disabledButton]}
+        onPress={beginEdit}
+        disabled={disabled}
+      >
+        <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>{label}</Text>
+        <Text style={[styles.secondarySmallButtonText, isDark && styles.textDark]}>{displayInlineFieldValue(node, field)}</Text>
+        {warning ? <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>{warning}</Text> : null}
+      </Pressable>
+    );
+  }
+
+  return (
+    <View style={[styles.quickCell, inputStyle, isDark && styles.inputDark]}>
+      <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>{label}</Text>
+      <TextInput
+        value={draft}
+        onChangeText={(text) => {
+          setDraft(text);
+          onDraftChange(shouldSaveInlineField(node, field, text));
+        }}
+        placeholder={placeholder ?? label}
+        placeholderTextColor={isDark ? '#737373' : '#78716c'}
+        multiline={multiline}
+        onKeyPress={(event) => {
+          if (event.nativeEvent.key === 'Escape') {
+            cancelEdit();
+          }
+          if (!multiline && event.nativeEvent.key === 'Enter') {
+            void saveEdit();
+          }
+        }}
+        style={[
+          styles.quickCell,
+          multiline && { minHeight: 84, textAlignVertical: 'top' },
+          isDark && styles.inputDark,
+        ]}
+        editable={!isSaving && !loading}
+      />
+      {error ? <Text style={styles.validationText}>{error}</Text> : null}
+      <View style={styles.stopActions}>
+        <Pressable style={[styles.smallButton, (isSaving || loading) && styles.disabledButton]} onPress={() => void saveEdit()} disabled={isSaving || loading}>
+          <Text style={styles.smallButtonText}>{isSaving ? 'Sparar...' : '✓'}</Text>
+        </Pressable>
+        <Pressable style={styles.secondarySmallButton} onPress={cancelEdit} disabled={isSaving}>
+          <Text style={styles.secondarySmallButtonText}>×</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function InlineEditableSelect(props: InlineEditorProps & { options: InlineOption[] }) {
+  const {
+    node,
+    field,
+    activeInlineEdit,
+    label,
+    isDark,
+    loading,
+    disabled,
+    styles,
+    onStart,
+    onCancel,
+    onSave,
+    onDraftChange,
+    options,
+  } = props;
+  const isActive = activeInlineEdit?.nodeId === node.id && activeInlineEdit.field === field;
+  const [draft, setDraft] = useState(inlineFieldValue(node, field));
+  const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const savingRef = useRef(false);
+
+  function beginEdit() {
+    if (!onStart(node.id, field)) {
+      return;
+    }
+
+    setDraft(inlineFieldValue(node, field));
+    setError(null);
+    onDraftChange(false);
+  }
+
+  async function saveEdit(value = draft) {
+    if (savingRef.current || isSaving || loading) {
+      return;
+    }
+
+    const validation = validateInlineFieldValue(node, field, value);
+    if (!validation.valid) {
+      setError(validation.error ?? 'Kontrollera fältet.');
+      return;
+    }
+
+    if (!shouldSaveInlineField(node, field, value)) {
+      onDraftChange(false);
+      onCancel();
+      return;
+    }
+
+    savingRef.current = true;
+    setIsSaving(true);
+    setError(null);
+    try {
+      await onSave(node, field, value);
+      onDraftChange(false);
+      onCancel();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Kunde inte spara fältet.');
+    } finally {
+      savingRef.current = false;
+      setIsSaving(false);
+    }
+  }
+
+  if (!isActive) {
+    return (
+      <Pressable
+        style={[styles.quickCell, isDark && styles.inputDark, disabled && styles.disabledButton]}
+        onPress={beginEdit}
+        disabled={disabled}
+      >
+        <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>{label}</Text>
+        <Text style={[styles.secondarySmallButtonText, isDark && styles.textDark]}>{displayInlineFieldValue(node, field)}</Text>
+      </Pressable>
+    );
+  }
+
+  return (
+    <View style={[styles.quickCell, isDark && styles.inputDark]}>
+      <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>{label}</Text>
+      <View style={styles.quickTypeRow}>
+        {options.map((option) => (
+          <Pressable
+            key={option.value}
+            style={[styles.quickTypeChip, draft === option.value && styles.quickTypeChipActive, (isSaving || loading) && styles.disabledButton]}
+            onPress={() => {
+              setDraft(option.value);
+              onDraftChange(shouldSaveInlineField(node, field, option.value));
+              void saveEdit(option.value);
+            }}
+            disabled={isSaving || loading}
+          >
+            <Text style={[styles.quickTypeChipText, draft === option.value && styles.quickTypeChipTextActive]}>{option.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+      {error ? <Text style={styles.validationText}>{error}</Text> : null}
+      <View style={styles.stopActions}>
+        <Pressable style={styles.secondarySmallButton} onPress={onCancel} disabled={isSaving}>
+          <Text style={styles.secondarySmallButtonText}>Avbryt</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
 }
 
 export default function DayCard(props: DayCardProps) {
@@ -213,6 +449,8 @@ export default function DayCard(props: DayCardProps) {
     isDemoMode,
     isLoading,
     selectedPlannerNodeId,
+    activeInlineEdit,
+    inlineEditMessage,
     itineraryNodesLength,
     packingDraft,
     draftPlannerDayKey,
@@ -226,7 +464,10 @@ export default function DayCard(props: DayCardProps) {
     onAddPackingItem,
     onSetPackingDraft,
     onSelectPlannerNode,
-    onSaveQuickCell,
+    onStartInlineEdit,
+    onClearInlineEdit,
+    onInlineDraftChange,
+    onSaveInlineField,
     onScheduleStop,
     onMoveStop,
     onRemoveStop,
@@ -349,62 +590,176 @@ export default function DayCard(props: DayCardProps) {
               <View style={styles.timelineCopy}>
                 <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>{index + 1}. {formatNodeType(node.type)}</Text>
                 {itineraryNodesLength > 0 && !isDemoMode ? (
+                  <>
                   <View style={styles.quickCellGrid}>
-                    <TextInput
-                      key={`${node.id}-${node.updatedAt}-title`}
-                      defaultValue={node.title}
-                      onEndEditing={(event) => void onSaveQuickCell(node, 'title', event.nativeEvent.text)}
-                      placeholder="Titel"
-                      placeholderTextColor={isDark ? '#737373' : '#78716c'}
-                      style={[styles.quickCell, styles.quickCellTitle, isDark && styles.inputDark]}
+                    <InlineEditableField
+                      node={node}
+                      field="title"
+                      activeInlineEdit={activeInlineEdit}
+                      label="Titel"
+                      isDark={isDark}
+                      loading={isLoading}
+                      disabled={isDemoMode || isLoading}
+                      styles={styles}
+                      onStart={onStartInlineEdit}
+                      onCancel={onClearInlineEdit}
+                      onDraftChange={onInlineDraftChange}
+                      onSave={onSaveInlineField}
+                      inputStyle={styles.quickCellTitle}
                     />
-                    <TextInput
-                      key={`${node.id}-${node.updatedAt}-time`}
-                      defaultValue={quickCellValue(node, 'time')}
-                      onEndEditing={(event) => void onSaveQuickCell(node, 'time', event.nativeEvent.text)}
-                      placeholder="TT:MM"
-                      placeholderTextColor={isDark ? '#737373' : '#78716c'}
-                      style={[styles.quickCell, styles.quickCellSmall, isDark && styles.inputDark]}
+                    <InlineEditableField
+                      node={node}
+                      field="place"
+                      activeInlineEdit={activeInlineEdit}
+                      label="Plats"
+                      isDark={isDark}
+                      loading={isLoading}
+                      disabled={isDemoMode || isLoading}
+                      styles={styles}
+                      onStart={onStartInlineEdit}
+                      onCancel={onClearInlineEdit}
+                      onDraftChange={onInlineDraftChange}
+                      onSave={onSaveInlineField}
                     />
-                    <TextInput
-                      key={`${node.id}-${node.updatedAt}-date`}
-                      defaultValue={quickCellValue(node, 'date')}
-                      onEndEditing={(event) => void onSaveQuickCell(node, 'date', event.nativeEvent.text)}
+                    <InlineEditableField
+                      node={node}
+                      field="date"
+                      activeInlineEdit={activeInlineEdit}
+                      label="Datum"
                       placeholder="ÅÅÅÅ-MM-DD"
-                      placeholderTextColor={isDark ? '#737373' : '#78716c'}
-                      style={[styles.quickCell, styles.quickCellDate, isDark && styles.inputDark]}
+                      isDark={isDark}
+                      loading={isLoading}
+                      disabled={isDemoMode || isLoading}
+                      styles={styles}
+                      onStart={onStartInlineEdit}
+                      onCancel={onClearInlineEdit}
+                      onDraftChange={onInlineDraftChange}
+                      onSave={onSaveInlineField}
+                      inputStyle={styles.quickCellDate}
                     />
-                    <TextInput
-                      key={`${node.id}-${node.updatedAt}-place`}
-                      defaultValue={quickCellValue(node, 'place')}
-                      onEndEditing={(event) => void onSaveQuickCell(node, 'place', event.nativeEvent.text)}
-                      placeholder="Plats"
-                      placeholderTextColor={isDark ? '#737373' : '#78716c'}
-                      style={[styles.quickCell, isDark && styles.inputDark]}
+                    <InlineEditableField
+                      node={node}
+                      field="startTime"
+                      activeInlineEdit={activeInlineEdit}
+                      label="Start"
+                      placeholder="TT:MM"
+                      isDark={isDark}
+                      loading={isLoading}
+                      disabled={isDemoMode || isLoading}
+                      styles={styles}
+                      onStart={onStartInlineEdit}
+                      onCancel={onClearInlineEdit}
+                      onDraftChange={onInlineDraftChange}
+                      onSave={onSaveInlineField}
+                      inputStyle={styles.quickCellSmall}
                     />
-                    <TextInput
-                      key={`${node.id}-${node.updatedAt}-cost`}
-                      defaultValue={quickCellValue(node, 'cost')}
-                      onEndEditing={(event) => void onSaveQuickCell(node, 'cost', event.nativeEvent.text)}
-                      placeholder="Kostnad"
-                      placeholderTextColor={isDark ? '#737373' : '#78716c'}
-                      style={[styles.quickCell, styles.quickCellSmall, isDark && styles.inputDark]}
+                    <InlineEditableField
+                      node={node}
+                      field="endTime"
+                      activeInlineEdit={activeInlineEdit}
+                      label="Slut"
+                      placeholder="TT:MM"
+                      isDark={isDark}
+                      loading={isLoading}
+                      disabled={isDemoMode || isLoading}
+                      styles={styles}
+                      onStart={onStartInlineEdit}
+                      onCancel={onClearInlineEdit}
+                      onDraftChange={onInlineDraftChange}
+                      onSave={onSaveInlineField}
+                      inputStyle={styles.quickCellSmall}
                     />
-                    <View style={styles.quickTypeRow}>
-                      {inlineNodeTypes.map((type) => (
-                        <Pressable
-                          key={type}
-                          style={[styles.quickTypeChip, node.type === type && styles.quickTypeChipActive]}
-                          onPress={() => void onSaveQuickCell(node, 'type', type)}
-                          disabled={isLoading}
-                        >
-                          <Text style={[styles.quickTypeChipText, node.type === type && styles.quickTypeChipTextActive]}>
-                            {formatNodeType(type)}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </View>
+                    <InlineEditableSelect
+                      node={node}
+                      field="type"
+                      activeInlineEdit={activeInlineEdit}
+                      label="Typ"
+                      options={inlineNodeTypes.map((type) => ({ value: type, label: formatNodeType(type) }))}
+                      isDark={isDark}
+                      loading={isLoading}
+                      disabled={isDemoMode || isLoading}
+                      styles={styles}
+                      onStart={onStartInlineEdit}
+                      onCancel={onClearInlineEdit}
+                      onDraftChange={onInlineDraftChange}
+                      onSave={onSaveInlineField}
+                    />
+                    <InlineEditableField
+                      node={node}
+                      field="cost"
+                      activeInlineEdit={activeInlineEdit}
+                      label="Kostnad"
+                      isDark={isDark}
+                      loading={isLoading}
+                      disabled={isDemoMode || isLoading}
+                      styles={styles}
+                      onStart={onStartInlineEdit}
+                      onCancel={onClearInlineEdit}
+                      onDraftChange={onInlineDraftChange}
+                      onSave={onSaveInlineField}
+                      inputStyle={styles.quickCellSmall}
+                    />
+                    <InlineEditableSelect
+                      node={node}
+                      field="currency"
+                      activeInlineEdit={activeInlineEdit}
+                      label="Valuta"
+                      options={inlineCurrencies.map((currency) => ({ value: currency, label: currency }))}
+                      isDark={isDark}
+                      loading={isLoading}
+                      disabled={isDemoMode || isLoading}
+                      styles={styles}
+                      onStart={onStartInlineEdit}
+                      onCancel={onClearInlineEdit}
+                      onDraftChange={onInlineDraftChange}
+                      onSave={onSaveInlineField}
+                    />
+                    <InlineEditableSelect
+                      node={node}
+                      field="bookingStatus"
+                      activeInlineEdit={activeInlineEdit}
+                      label="Bokning"
+                      options={inlineBookingStatuses.map((status) => ({ value: status, label: formatBookingStatus(status) }))}
+                      isDark={isDark}
+                      loading={isLoading}
+                      disabled={isDemoMode || isLoading}
+                      styles={styles}
+                      onStart={onStartInlineEdit}
+                      onCancel={onClearInlineEdit}
+                      onDraftChange={onInlineDraftChange}
+                      onSave={onSaveInlineField}
+                    />
+                    <InlineEditableField
+                      node={node}
+                      field="bookingReference"
+                      activeInlineEdit={activeInlineEdit}
+                      label="Referens"
+                      isDark={isDark}
+                      loading={isLoading}
+                      disabled={isDemoMode || isLoading}
+                      styles={styles}
+                      onStart={onStartInlineEdit}
+                      onCancel={onClearInlineEdit}
+                      onDraftChange={onInlineDraftChange}
+                      onSave={onSaveInlineField}
+                    />
+                    <InlineEditableTextArea
+                      node={node}
+                      field="notes"
+                      activeInlineEdit={activeInlineEdit}
+                      label="Anteckningar"
+                      isDark={isDark}
+                      loading={isLoading}
+                      disabled={isDemoMode || isLoading}
+                      styles={styles}
+                      onStart={onStartInlineEdit}
+                      onCancel={onClearInlineEdit}
+                      onDraftChange={onInlineDraftChange}
+                      onSave={onSaveInlineField}
+                    />
                   </View>
+                  {inlineEditMessage && activeInlineEdit?.nodeId === node.id ? <Text style={styles.validationText}>{inlineEditMessage}</Text> : null}
+                  </>
                 ) : (
                   <>
                     <Text style={[styles.itemTitle, isDark && styles.textDark]}>{node.title}</Text>
