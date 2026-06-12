@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+﻿import React, { useRef, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
 import type { DayChecklistItem, DayPlan } from '@/models';
@@ -23,7 +23,6 @@ type DayCardProps = {
   isDark: boolean;
   isDemoMode: boolean;
   isLoading: boolean;
-  selectedPlannerNodeId: string | null;
   activeInlineEdit: ActiveInlineEdit;
   inlineEditMessage: string | null;
   itineraryNodesLength: number;
@@ -38,12 +37,10 @@ type DayCardProps = {
   onTogglePackingItem: (dayPlan: DayPlan, item: string) => Promise<void>;
   onAddPackingItem: (dayPlan: DayPlan) => Promise<void>;
   onSetPackingDraft: (dayKey: string, text: string) => void;
-  onSelectPlannerNode: (nodeId: string) => void;
   onStartInlineEdit: (nodeId: string, field: InlineFieldKey) => boolean;
   onClearInlineEdit: () => void;
   onInlineDraftChange: (changed: boolean) => void;
   onSaveInlineField: (node: ItineraryNode, field: InlineFieldKey, value: InlineFieldValue) => Promise<void>;
-  onScheduleStop: (node: ItineraryNode, hour: number) => Promise<void>;
   onMoveStop: (nodeId: string, direction: -1 | 1) => Promise<void>;
   onRemoveStop: (nodeId: string) => Promise<void>;
 };
@@ -92,18 +89,6 @@ function formatRawNodeCost(node: ItineraryNode): string {
   return '';
 }
 
-function formatReservation(node: ItineraryNode): string {
-  const details = [
-    node.reservation.provider,
-    node.reservation.reference,
-    node.reservation.siteNumber ? `Site ${node.reservation.siteNumber}` : null,
-    node.reservation.accessDetails,
-    cleanImportedNoteLines(node.notes),
-  ].filter(Boolean);
-
-  return details.join(' / ');
-}
-
 function cleanImportedNoteLines(value?: string | null): string | null {
   if (!value) {
     return null;
@@ -129,36 +114,13 @@ function isImportedNoteLine(value: string): boolean {
   );
 }
 
-function formatNodeCostSummary(node: ItineraryNode): string {
-  const reservation = formatReservation(node);
-  const fallback = cleanImportedNoteLines(node.notes) ?? node.timezone ?? 'lokal tid';
-  const parts = [formatRawNodeCost(node), reservation || fallback].filter(Boolean);
-  return parts.join(' / ');
-}
-
-function buildNodeInfoPills(node: ItineraryNode): string[] {
-  const pills: string[] = [];
-  const place = typeof node.metadata.place === 'string' ? node.metadata.place : null;
-  const cost = formatRawNodeCost(node);
-  const reservation = formatReservation(node);
-
-  if (place) {
-    pills.push(place);
-  } else if (node.location) {
-    pills.push(`${node.location.latitude.toFixed(2)}, ${node.location.longitude.toFixed(2)}`);
+function compactNote(value?: string | null): string | null {
+  const cleaned = cleanImportedNoteLines(value);
+  if (!cleaned) {
+    return null;
   }
 
-  pills.push(cost || 'Kostnad saknas');
-
-  if (reservation) {
-    pills.push(reservation);
-  }
-
-  if (node.notes) {
-    pills.push(node.notes);
-  }
-
-  return pills.slice(0, 4);
+  return cleaned.length > 120 ? `${cleaned.slice(0, 117)}...` : cleaned;
 }
 
 function nodeColor(type: ItineraryNode['type']): string {
@@ -194,6 +156,9 @@ type InlineEditorProps = {
   onDraftChange: (changed: boolean) => void;
   placeholder?: string;
   inputStyle?: unknown;
+  inactiveStyle?: unknown;
+  inactiveValueStyle?: unknown;
+  showInactiveLabel?: boolean;
 };
 
 function InlineEditableField(props: InlineEditorProps) {
@@ -220,6 +185,9 @@ function InlineEditableCore(props: InlineEditorProps & { multiline: boolean }) {
     onDraftChange,
     placeholder,
     inputStyle,
+    inactiveStyle,
+    inactiveValueStyle,
+    showInactiveLabel = true,
     multiline,
   } = props;
   const isActive = activeInlineEdit?.nodeId === node.id && activeInlineEdit.field === field;
@@ -256,7 +224,7 @@ function InlineEditableCore(props: InlineEditorProps & { multiline: boolean }) {
 
     const validation = validateInlineFieldValue(node, field, draft);
     if (!validation.valid) {
-      setError(validation.error ?? 'Kontrollera fältet.');
+      setError(validation.error ?? 'Kontrollera fÃ¤ltet.');
       return;
     }
 
@@ -272,7 +240,7 @@ function InlineEditableCore(props: InlineEditorProps & { multiline: boolean }) {
       await onSave(node, field, draft);
       onCancel();
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Kunde inte spara fältet.');
+      setError(saveError instanceof Error ? saveError.message : 'Kunde inte spara fÃ¤ltet.');
     } finally {
       savingRef.current = false;
       setIsSaving(false);
@@ -281,16 +249,16 @@ function InlineEditableCore(props: InlineEditorProps & { multiline: boolean }) {
 
   if (!isActive) {
     const warning = field === 'place' && inlineFieldValue(node, 'place') && node.location
-      ? 'Platsnamnet ändras, men befintliga kartkoordinater behålls. Kontrollera kartpositionen.'
+      ? 'Platsnamnet Ã¤ndras, men befintliga kartkoordinater behÃ¥lls. Kontrollera kartpositionen.'
       : null;
     return (
       <Pressable
-        style={[styles.quickCell, inputStyle, isDark && styles.inputDark, disabled && styles.disabledButton]}
+        style={[styles.inlineDisplayField, inactiveStyle, disabled && styles.disabledButton]}
         onPress={beginEdit}
         disabled={disabled}
       >
-        <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>{label}</Text>
-        <Text style={[styles.secondarySmallButtonText, isDark && styles.textDark]}>{displayInlineFieldValue(node, field)}</Text>
+        {showInactiveLabel ? <Text style={[styles.inlineDisplayLabel, isDark && styles.textMutedDark]}>{label}</Text> : null}
+        <Text style={[styles.inlineDisplayValue, isDark && styles.textDark, inactiveValueStyle]}>{displayInlineFieldValue(node, field)}</Text>
         {warning ? <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>{warning}</Text> : null}
       </Pressable>
     );
@@ -326,10 +294,10 @@ function InlineEditableCore(props: InlineEditorProps & { multiline: boolean }) {
       {error ? <Text style={styles.validationText}>{error}</Text> : null}
       <View style={styles.stopActions}>
         <Pressable style={[styles.smallButton, (isSaving || loading) && styles.disabledButton]} onPress={() => void saveEdit()} disabled={isSaving || loading}>
-          <Text style={styles.smallButtonText}>{isSaving ? 'Sparar...' : '✓'}</Text>
+          <Text style={styles.smallButtonText}>{isSaving ? 'Sparar...' : 'âœ“'}</Text>
         </Pressable>
         <Pressable style={styles.secondarySmallButton} onPress={cancelEdit} disabled={isSaving}>
-          <Text style={styles.secondarySmallButtonText}>×</Text>
+          <Text style={styles.secondarySmallButtonText}>Ã—</Text>
         </Pressable>
       </View>
     </View>
@@ -350,6 +318,9 @@ function InlineEditableSelect(props: InlineEditorProps & { options: InlineOption
     onCancel,
     onSave,
     onDraftChange,
+    inactiveStyle,
+    inactiveValueStyle,
+    showInactiveLabel = true,
     options,
   } = props;
   const isActive = activeInlineEdit?.nodeId === node.id && activeInlineEdit.field === field;
@@ -375,7 +346,7 @@ function InlineEditableSelect(props: InlineEditorProps & { options: InlineOption
 
     const validation = validateInlineFieldValue(node, field, value);
     if (!validation.valid) {
-      setError(validation.error ?? 'Kontrollera fältet.');
+      setError(validation.error ?? 'Kontrollera fÃ¤ltet.');
       return;
     }
 
@@ -393,7 +364,7 @@ function InlineEditableSelect(props: InlineEditorProps & { options: InlineOption
       onDraftChange(false);
       onCancel();
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Kunde inte spara fältet.');
+      setError(saveError instanceof Error ? saveError.message : 'Kunde inte spara fÃ¤ltet.');
     } finally {
       savingRef.current = false;
       setIsSaving(false);
@@ -403,12 +374,12 @@ function InlineEditableSelect(props: InlineEditorProps & { options: InlineOption
   if (!isActive) {
     return (
       <Pressable
-        style={[styles.quickCell, isDark && styles.inputDark, disabled && styles.disabledButton]}
+        style={[styles.inlineDisplayField, inactiveStyle, disabled && styles.disabledButton]}
         onPress={beginEdit}
         disabled={disabled}
       >
-        <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>{label}</Text>
-        <Text style={[styles.secondarySmallButtonText, isDark && styles.textDark]}>{displayInlineFieldValue(node, field)}</Text>
+        {showInactiveLabel ? <Text style={[styles.inlineDisplayLabel, isDark && styles.textMutedDark]}>{label}</Text> : null}
+        <Text style={[styles.inlineDisplayValue, isDark && styles.textDark, inactiveValueStyle]}>{displayInlineFieldValue(node, field)}</Text>
       </Pressable>
     );
   }
@@ -448,7 +419,6 @@ export default function DayCard(props: DayCardProps) {
     isDark,
     isDemoMode,
     isLoading,
-    selectedPlannerNodeId,
     activeInlineEdit,
     inlineEditMessage,
     itineraryNodesLength,
@@ -463,15 +433,32 @@ export default function DayCard(props: DayCardProps) {
     onTogglePackingItem,
     onAddPackingItem,
     onSetPackingDraft,
-    onSelectPlannerNode,
     onStartInlineEdit,
     onClearInlineEdit,
     onInlineDraftChange,
     onSaveInlineField,
-    onScheduleStop,
     onMoveStop,
     onRemoveStop,
   } = props;
+  const [expandedFlags, setExpandedFlags] = useState(false);
+  const [checklistExpanded, setChecklistExpanded] = useState(false);
+  const [packingExpanded, setPackingExpanded] = useState(false);
+  const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(() => new Set());
+  const [openMenuNodeId, setOpenMenuNodeId] = useState<string | null>(null);
+  const visibleFlags = dayPlan.smartFlags.length > 0 ? dayPlan.smartFlags : ['Ser planerad ut'];
+  const displayedFlags = expandedFlags ? visibleFlags : visibleFlags.slice(0, 3);
+
+  function toggleNodeDetails(nodeId: string) {
+    setExpandedNodeIds((current) => {
+      const next = new Set(current);
+      if (next.has(nodeId)) {
+        next.delete(nodeId);
+      } else {
+        next.add(nodeId);
+      }
+      return next;
+    });
+  }
 
   return (
     <View key={dayPlan.key} style={[styles.dayGroup, isDark && styles.innerPanelDark]}>
@@ -482,9 +469,14 @@ export default function DayCard(props: DayCardProps) {
             {dayPlan.nodes.length} stopp / {formatDistance(dayPlan.route.distanceMeters)} / {formatDuration(dayPlan.route.durationSeconds)} / {formatSek(dayPlan.budget.total)}
           </Text>
           <View style={styles.smartFlagList}>
-            {(dayPlan.smartFlags.length > 0 ? dayPlan.smartFlags : ['Ser planerad ut']).map((flag) => (
+            {displayedFlags.map((flag) => (
               <Text key={flag} style={[styles.smartFlag, flag === 'Ser planerad ut' && styles.smartFlagGood]}>{flag}</Text>
             ))}
+            {visibleFlags.length > 3 ? (
+              <Pressable style={styles.smartFlagMore} onPress={() => setExpandedFlags((current) => !current)}>
+                <Text style={styles.smartFlagMoreText}>{expandedFlags ? 'Visa fÃ¤rre' : `+${visibleFlags.length - 3} fler`}</Text>
+              </Pressable>
+            ) : null}
           </View>
         </View>
         {!isDemoMode ? (
@@ -494,7 +486,7 @@ export default function DayCard(props: DayCardProps) {
               onPress={() => onStartPlaceSearch(dayPlan.key, dayPlan.insight.hasLodging ? 'restaurang eller aktivitet' : 'camping eller hotell')}
               disabled={isLoading}
             >
-              <Text style={styles.secondaryButtonText}>Lägg till plats</Text>
+              <Text style={styles.secondaryButtonText}>LÃ¤gg till plats</Text>
             </Pressable>
             <Pressable
               style={[styles.commandButton, isLoading && styles.disabledButton]}
@@ -517,7 +509,7 @@ export default function DayCard(props: DayCardProps) {
           <Text style={styles.dayInsightValue}>{dayPlan.insight.activitiesLabel}</Text>
         </View>
         <View style={[styles.dayInsightCard, dayPlan.insight.isLongDrive ? styles.dayInsightWarn : null]}>
-          <Text style={styles.dayInsightLabel}>Körning</Text>
+          <Text style={styles.dayInsightLabel}>KÃ¶rning</Text>
           <Text style={styles.dayInsightValue}>{dayPlan.insight.driveLabel}</Text>
         </View>
         <View style={[styles.dayInsightCard, dayPlan.budget.missingCostCount > 0 ? styles.dayInsightWarn : styles.dayInsightGood]}>
@@ -526,72 +518,111 @@ export default function DayCard(props: DayCardProps) {
         </View>
       </View>
       <Text style={styles.dayNextAction}>{dayPlan.insight.nextAction}</Text>
-      <View style={styles.dayChecklist}>
-        {dayPlan.insight.checklist.map((item) => (
-          <Pressable
-            key={item.label}
-            style={[styles.checkItem, item.done && styles.checkItemDone, isDemoMode && styles.checkItemStatic]}
-            onPress={() => onRunChecklistAction(dayPlan, item)}
-            disabled={item.done || isDemoMode || isLoading}
-          >
-            <Text style={[styles.checkMark, item.done && styles.checkMarkDone]}>{item.done ? 'Klar' : 'Att fixa'}</Text>
-            <Text style={styles.checkLabel}>{item.label}</Text>
-            {!item.done && !isDemoMode ? <Text style={styles.checkActionText}>Öppna</Text> : null}
-          </Pressable>
-        ))}
-      </View>
-      <View style={styles.packingPanel}>
-        <Text style={styles.packingTitle}>Packa / ta med</Text>
-        <View style={styles.packingList}>
-          {dayPlan.insight.packingItems.map((item) => (
-            <Pressable
-              key={item}
-              style={[
-                styles.packingChip,
-                dayPlan.insight.packedItems.includes(item) && styles.packingChipDone,
-                isDemoMode && styles.checkItemStatic,
-              ]}
-              onPress={() => void onTogglePackingItem(dayPlan, item)}
-              disabled={isDemoMode || isLoading}
-            >
-              <Text style={[styles.packingChipText, dayPlan.insight.packedItems.includes(item) && styles.packingChipTextDone]}>
-                {dayPlan.insight.packedItems.includes(item) ? 'Packad' : 'Ta med'}
-              </Text>
-              <Text style={styles.packingChipLabel}>{item}</Text>
-            </Pressable>
-          ))}
-        </View>
-        {!isDemoMode ? (
-          <View style={styles.packingAddRow}>
-            <TextInput
-              value={packingDraft}
-              onChangeText={(text) => onSetPackingDraft(dayPlan.key, text)}
-              placeholder="Lägg till egen sak"
-              placeholderTextColor={isDark ? '#737373' : '#78716c'}
-              style={[styles.packingInput, isDark && styles.inputDark]}
-            />
-            <Pressable style={[styles.secondarySmallButton, isLoading && styles.disabledButton]} onPress={() => void onAddPackingItem(dayPlan)} disabled={isLoading}>
-              <Text style={styles.secondarySmallButtonText}>Lägg till</Text>
-            </Pressable>
+      <View style={styles.collapsiblePanel}>
+        <Pressable style={styles.collapsibleHeader} onPress={() => setChecklistExpanded((current) => !current)}>
+          <Text style={styles.packingTitle}>Checklista</Text>
+          <Text style={styles.secondarySmallButtonText}>{checklistExpanded ? 'Dölj' : `Visa ${dayPlan.insight.checklist.length}`}</Text>
+        </Pressable>
+        {checklistExpanded ? (
+          <View style={styles.dayChecklist}>
+            {dayPlan.insight.checklist.map((item) => (
+              <Pressable
+                key={item.label}
+                style={[styles.checkItem, item.done && styles.checkItemDone, isDemoMode && styles.checkItemStatic]}
+                onPress={() => onRunChecklistAction(dayPlan, item)}
+                disabled={item.done || isDemoMode || isLoading}
+              >
+                <Text style={[styles.checkMark, item.done && styles.checkMarkDone]}>{item.done ? 'Klar' : 'Att fixa'}</Text>
+                <Text style={styles.checkLabel}>{item.label}</Text>
+                {!item.done && !isDemoMode ? <Text style={styles.checkActionText}>Öppna</Text> : null}
+              </Pressable>
+            ))}
           </View>
         ) : null}
       </View>
+      <View style={styles.packingPanel}>
+        <Pressable style={styles.collapsibleHeader} onPress={() => setPackingExpanded((current) => !current)}>
+          <Text style={styles.packingTitle}>Packa / ta med</Text>
+          <Text style={styles.secondarySmallButtonText}>{packingExpanded ? 'Dölj' : `Visa ${dayPlan.insight.packingItems.length}`}</Text>
+        </Pressable>
+        {packingExpanded ? (
+          <>
+            <View style={styles.packingList}>
+              {dayPlan.insight.packingItems.map((item) => (
+                <Pressable
+                  key={item}
+                  style={[
+                    styles.packingChip,
+                    dayPlan.insight.packedItems.includes(item) && styles.packingChipDone,
+                    isDemoMode && styles.checkItemStatic,
+                  ]}
+                  onPress={() => void onTogglePackingItem(dayPlan, item)}
+                  disabled={isDemoMode || isLoading}
+                >
+                  <Text style={[styles.packingChipText, dayPlan.insight.packedItems.includes(item) && styles.packingChipTextDone]}>
+                    {dayPlan.insight.packedItems.includes(item) ? 'Packad' : 'Ta med'}
+                  </Text>
+                  <Text style={styles.packingChipLabel}>{item}</Text>
+                </Pressable>
+              ))}
+            </View>
+            {!isDemoMode ? (
+              <View style={styles.packingAddRow}>
+                <TextInput
+                  value={packingDraft}
+                  onChangeText={(text) => onSetPackingDraft(dayPlan.key, text)}
+                  placeholder="Lägg till egen sak"
+                  placeholderTextColor={isDark ? '#737373' : '#78716c'}
+                  style={[styles.packingInput, isDark && styles.inputDark]}
+                />
+                <Pressable style={[styles.secondarySmallButton, isLoading && styles.disabledButton]} onPress={() => void onAddPackingItem(dayPlan)} disabled={isLoading}>
+                  <Text style={styles.secondarySmallButtonText}>Lägg till</Text>
+                </Pressable>
+              </View>
+            ) : null}
+          </>
+        ) : null}
+      </View>
       {draftPlannerDayKey === dayPlan.key ? renderPlannerInlineEditor('new') : null}
-      {dayPlan.nodes.map((node, index) => (
-        <View key={node.id} style={[styles.timelineItem, isDark && styles.innerPanelDark]}>
-          <View style={styles.timeRail}>
-            <Text style={[styles.timeText, isDark && styles.textDark]}>{formatTime(node.startsAt)}</Text>
-            <View style={[styles.nodeDot, { backgroundColor: nodeColor(node.type) }]} />
-          </View>
-          {selectedPlannerNodeId === node.id && !isDemoMode ? (
-            <View style={styles.timelineCopy}>{renderPlannerInlineEditor('edit')}</View>
-          ) : (
-            <>
-              <View style={styles.timelineCopy}>
-                <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>{index + 1}. {formatNodeType(node.type)}</Text>
-                {itineraryNodesLength > 0 && !isDemoMode ? (
-                  <>
-                  <View style={styles.quickCellGrid}>
+      {dayPlan.nodes.map((node) => {
+        const detailsExpanded = expandedNodeIds.has(node.id);
+        const menuOpen = openMenuNodeId === node.id;
+        const notePreview = compactNote(node.notes);
+        const canEdit = itineraryNodesLength > 0 && !isDemoMode;
+
+        return (
+          <View key={node.id} style={[styles.timelineItem, isDark && styles.innerPanelDark]}>
+            <View style={styles.timeRailCompact}>
+              {canEdit ? (
+                <InlineEditableField
+                  node={node}
+                  field="startTime"
+                  activeInlineEdit={activeInlineEdit}
+                  label="Start"
+                  placeholder="TT:MM"
+                  isDark={isDark}
+                  loading={isLoading}
+                  disabled={isDemoMode || isLoading}
+                  styles={styles}
+                  onStart={onStartInlineEdit}
+                  onCancel={onClearInlineEdit}
+                  onDraftChange={onInlineDraftChange}
+                  onSave={onSaveInlineField}
+                  inputStyle={styles.quickCellSmall}
+                  inactiveStyle={styles.inlineTimeField}
+                  inactiveValueStyle={styles.timeText}
+                  showInactiveLabel={false}
+                />
+              ) : (
+                <Text style={[styles.timeText, isDark && styles.textDark]}>{formatTime(node.startsAt)}</Text>
+              )}
+              <View style={[styles.nodeDot, { backgroundColor: nodeColor(node.type) }]} />
+            </View>
+
+            <View style={styles.stopCompactBody}>
+              <View style={styles.stopMainRow}>
+                <View style={styles.stopTitleBlock}>
+                  {canEdit ? (
                     <InlineEditableField
                       node={node}
                       field="title"
@@ -606,84 +637,62 @@ export default function DayCard(props: DayCardProps) {
                       onDraftChange={onInlineDraftChange}
                       onSave={onSaveInlineField}
                       inputStyle={styles.quickCellTitle}
+                      inactiveStyle={styles.inlineTitleField}
+                      inactiveValueStyle={styles.itemTitle}
+                      showInactiveLabel={false}
                     />
-                    <InlineEditableField
-                      node={node}
-                      field="place"
-                      activeInlineEdit={activeInlineEdit}
-                      label="Plats"
-                      isDark={isDark}
-                      loading={isLoading}
-                      disabled={isDemoMode || isLoading}
-                      styles={styles}
-                      onStart={onStartInlineEdit}
-                      onCancel={onClearInlineEdit}
-                      onDraftChange={onInlineDraftChange}
-                      onSave={onSaveInlineField}
-                    />
-                    <InlineEditableField
-                      node={node}
-                      field="date"
-                      activeInlineEdit={activeInlineEdit}
-                      label="Datum"
-                      placeholder="ÅÅÅÅ-MM-DD"
-                      isDark={isDark}
-                      loading={isLoading}
-                      disabled={isDemoMode || isLoading}
-                      styles={styles}
-                      onStart={onStartInlineEdit}
-                      onCancel={onClearInlineEdit}
-                      onDraftChange={onInlineDraftChange}
-                      onSave={onSaveInlineField}
-                      inputStyle={styles.quickCellDate}
-                    />
-                    <InlineEditableField
-                      node={node}
-                      field="startTime"
-                      activeInlineEdit={activeInlineEdit}
-                      label="Start"
-                      placeholder="TT:MM"
-                      isDark={isDark}
-                      loading={isLoading}
-                      disabled={isDemoMode || isLoading}
-                      styles={styles}
-                      onStart={onStartInlineEdit}
-                      onCancel={onClearInlineEdit}
-                      onDraftChange={onInlineDraftChange}
-                      onSave={onSaveInlineField}
-                      inputStyle={styles.quickCellSmall}
-                    />
-                    <InlineEditableField
-                      node={node}
-                      field="endTime"
-                      activeInlineEdit={activeInlineEdit}
-                      label="Slut"
-                      placeholder="TT:MM"
-                      isDark={isDark}
-                      loading={isLoading}
-                      disabled={isDemoMode || isLoading}
-                      styles={styles}
-                      onStart={onStartInlineEdit}
-                      onCancel={onClearInlineEdit}
-                      onDraftChange={onInlineDraftChange}
-                      onSave={onSaveInlineField}
-                      inputStyle={styles.quickCellSmall}
-                    />
-                    <InlineEditableSelect
-                      node={node}
-                      field="type"
-                      activeInlineEdit={activeInlineEdit}
-                      label="Typ"
-                      options={inlineNodeTypes.map((type) => ({ value: type, label: formatNodeType(type) }))}
-                      isDark={isDark}
-                      loading={isLoading}
-                      disabled={isDemoMode || isLoading}
-                      styles={styles}
-                      onStart={onStartInlineEdit}
-                      onCancel={onClearInlineEdit}
-                      onDraftChange={onInlineDraftChange}
-                      onSave={onSaveInlineField}
-                    />
+                  ) : (
+                    <Text style={[styles.itemTitle, isDark && styles.textDark]}>{node.title}</Text>
+                  )}
+                  <View style={styles.stopMetaRow}>
+                    {canEdit ? (
+                      <InlineEditableSelect
+                        node={node}
+                        field="type"
+                        activeInlineEdit={activeInlineEdit}
+                        label="Typ"
+                        options={inlineNodeTypes.map((type) => ({ value: type, label: formatNodeType(type) }))}
+                        isDark={isDark}
+                        loading={isLoading}
+                        disabled={isDemoMode || isLoading}
+                        styles={styles}
+                        onStart={onStartInlineEdit}
+                        onCancel={onClearInlineEdit}
+                        onDraftChange={onInlineDraftChange}
+                        onSave={onSaveInlineField}
+                        inactiveStyle={styles.inlineBadgeField}
+                        inactiveValueStyle={styles.inlineBadgeText}
+                        showInactiveLabel={false}
+                      />
+                    ) : (
+                      <Text style={styles.nodeInfoPill}>{formatNodeType(node.type)}</Text>
+                    )}
+                    {canEdit ? (
+                      <InlineEditableField
+                        node={node}
+                        field="place"
+                        activeInlineEdit={activeInlineEdit}
+                        label="Plats"
+                        isDark={isDark}
+                        loading={isLoading}
+                        disabled={isDemoMode || isLoading}
+                        styles={styles}
+                        onStart={onStartInlineEdit}
+                        onCancel={onClearInlineEdit}
+                        onDraftChange={onInlineDraftChange}
+                        onSave={onSaveInlineField}
+                        inactiveStyle={styles.inlineMetaField}
+                        inactiveValueStyle={styles.itemMeta}
+                        showInactiveLabel={false}
+                      />
+                    ) : (
+                      <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>{displayInlineFieldValue(node, 'place')}</Text>
+                    )}
+                  </View>
+                </View>
+
+                <View style={styles.stopRightRail}>
+                  {canEdit ? (
                     <InlineEditableField
                       node={node}
                       field="cost"
@@ -698,106 +707,167 @@ export default function DayCard(props: DayCardProps) {
                       onDraftChange={onInlineDraftChange}
                       onSave={onSaveInlineField}
                       inputStyle={styles.quickCellSmall}
+                      inactiveStyle={styles.inlineCostField}
+                      inactiveValueStyle={styles.inlineCostText}
+                      showInactiveLabel={false}
                     />
-                    <InlineEditableSelect
-                      node={node}
-                      field="currency"
-                      activeInlineEdit={activeInlineEdit}
-                      label="Valuta"
-                      options={inlineCurrencies.map((currency) => ({ value: currency, label: currency }))}
-                      isDark={isDark}
-                      loading={isLoading}
-                      disabled={isDemoMode || isLoading}
-                      styles={styles}
-                      onStart={onStartInlineEdit}
-                      onCancel={onClearInlineEdit}
-                      onDraftChange={onInlineDraftChange}
-                      onSave={onSaveInlineField}
-                    />
-                    <InlineEditableSelect
-                      node={node}
-                      field="bookingStatus"
-                      activeInlineEdit={activeInlineEdit}
-                      label="Bokning"
-                      options={inlineBookingStatuses.map((status) => ({ value: status, label: formatBookingStatus(status) }))}
-                      isDark={isDark}
-                      loading={isLoading}
-                      disabled={isDemoMode || isLoading}
-                      styles={styles}
-                      onStart={onStartInlineEdit}
-                      onCancel={onClearInlineEdit}
-                      onDraftChange={onInlineDraftChange}
-                      onSave={onSaveInlineField}
-                    />
-                    <InlineEditableField
-                      node={node}
-                      field="bookingReference"
-                      activeInlineEdit={activeInlineEdit}
-                      label="Referens"
-                      isDark={isDark}
-                      loading={isLoading}
-                      disabled={isDemoMode || isLoading}
-                      styles={styles}
-                      onStart={onStartInlineEdit}
-                      onCancel={onClearInlineEdit}
-                      onDraftChange={onInlineDraftChange}
-                      onSave={onSaveInlineField}
-                    />
-                    <InlineEditableTextArea
-                      node={node}
-                      field="notes"
-                      activeInlineEdit={activeInlineEdit}
-                      label="Anteckningar"
-                      isDark={isDark}
-                      loading={isLoading}
-                      disabled={isDemoMode || isLoading}
-                      styles={styles}
-                      onStart={onStartInlineEdit}
-                      onCancel={onClearInlineEdit}
-                      onDraftChange={onInlineDraftChange}
-                      onSave={onSaveInlineField}
-                    />
-                  </View>
-                  {inlineEditMessage && activeInlineEdit?.nodeId === node.id ? <Text style={styles.validationText}>{inlineEditMessage}</Text> : null}
-                  </>
-                ) : (
-                  <>
-                    <Text style={[styles.itemTitle, isDark && styles.textDark]}>{node.title}</Text>
-                    <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>{formatNodeCostSummary(node)}</Text>
-                  </>
-                )}
-                <View style={styles.nodeInfoPills}>
-                  {buildNodeInfoPills(node).map((pill) => (
-                    <Text key={pill} style={styles.nodeInfoPill}>{pill}</Text>
-                  ))}
+                  ) : (
+                    <Text style={styles.inlineCostText}>{formatRawNodeCost(node) || 'Kostnad saknas'}</Text>
+                  )}
+                  {canEdit ? (
+                    <View style={styles.stopMenuWrap}>
+                      <Pressable
+                        style={[styles.iconMenuButton, isLoading && styles.disabledButton]}
+                        onPress={() => setOpenMenuNodeId((current) => (current === node.id ? null : node.id))}
+                        disabled={isLoading}
+                      >
+                        <Text style={styles.iconMenuText}>?</Text>
+                      </Pressable>
+                      {menuOpen ? (
+                        <View style={styles.stopMenuPanel}>
+                          <Pressable
+                            style={styles.stopMenuItem}
+                            onPress={() => {
+                              toggleNodeDetails(node.id);
+                              setOpenMenuNodeId(null);
+                            }}
+                          >
+                            <Text style={styles.secondarySmallButtonText}>{detailsExpanded ? 'Dölj detaljer' : 'Visa/redigera alla detaljer'}</Text>
+                          </Pressable>
+                          <Pressable
+                            style={styles.stopMenuDangerItem}
+                            onPress={() => {
+                              setOpenMenuNodeId(null);
+                              void onRemoveStop(node.id);
+                            }}
+                          >
+                            <Text style={styles.smallButtonText}>Ta bort</Text>
+                          </Pressable>
+                        </View>
+                      ) : null}
+                    </View>
+                  ) : null}
                 </View>
               </View>
-              {itineraryNodesLength > 0 && !isDemoMode ? (
-                <View style={styles.stopActions}>
-                  <Pressable style={styles.secondarySmallButton} onPress={() => onSelectPlannerNode(node.id)} disabled={isLoading}>
-                    <Text style={styles.secondarySmallButtonText}>Redigera</Text>
-                  </Pressable>
+
+              {notePreview ? <Text style={[styles.stopNotePreview, isDark && styles.textMutedDark]}>{notePreview}</Text> : null}
+              {inlineEditMessage && activeInlineEdit?.nodeId === node.id ? <Text style={styles.validationText}>{inlineEditMessage}</Text> : null}
+
+              {detailsExpanded && canEdit ? (
+                <View style={styles.stopDetailsGrid}>
+                  <InlineEditableField
+                    node={node}
+                    field="date"
+                    activeInlineEdit={activeInlineEdit}
+                    label="Datum"
+                    placeholder="ÅÅÅÅ-MM-DD"
+                    isDark={isDark}
+                    loading={isLoading}
+                    disabled={isDemoMode || isLoading}
+                    styles={styles}
+                    onStart={onStartInlineEdit}
+                    onCancel={onClearInlineEdit}
+                    onDraftChange={onInlineDraftChange}
+                    onSave={onSaveInlineField}
+                    inputStyle={styles.quickCellDate}
+                    inactiveStyle={styles.inlineDetailField}
+                  />
+                  <InlineEditableField
+                    node={node}
+                    field="endTime"
+                    activeInlineEdit={activeInlineEdit}
+                    label="Slut"
+                    placeholder="TT:MM"
+                    isDark={isDark}
+                    loading={isLoading}
+                    disabled={isDemoMode || isLoading}
+                    styles={styles}
+                    onStart={onStartInlineEdit}
+                    onCancel={onClearInlineEdit}
+                    onDraftChange={onInlineDraftChange}
+                    onSave={onSaveInlineField}
+                    inputStyle={styles.quickCellSmall}
+                    inactiveStyle={styles.inlineDetailField}
+                  />
+                  <InlineEditableSelect
+                    node={node}
+                    field="currency"
+                    activeInlineEdit={activeInlineEdit}
+                    label="Valuta"
+                    options={inlineCurrencies.map((currency) => ({ value: currency, label: currency }))}
+                    isDark={isDark}
+                    loading={isLoading}
+                    disabled={isDemoMode || isLoading}
+                    styles={styles}
+                    onStart={onStartInlineEdit}
+                    onCancel={onClearInlineEdit}
+                    onDraftChange={onInlineDraftChange}
+                    onSave={onSaveInlineField}
+                    inactiveStyle={styles.inlineDetailField}
+                  />
+                  <InlineEditableSelect
+                    node={node}
+                    field="bookingStatus"
+                    activeInlineEdit={activeInlineEdit}
+                    label="Bokning"
+                    options={inlineBookingStatuses.map((status) => ({ value: status, label: formatBookingStatus(status) }))}
+                    isDark={isDark}
+                    loading={isLoading}
+                    disabled={isDemoMode || isLoading}
+                    styles={styles}
+                    onStart={onStartInlineEdit}
+                    onCancel={onClearInlineEdit}
+                    onDraftChange={onInlineDraftChange}
+                    onSave={onSaveInlineField}
+                    inactiveStyle={styles.inlineDetailField}
+                  />
+                  <InlineEditableField
+                    node={node}
+                    field="bookingReference"
+                    activeInlineEdit={activeInlineEdit}
+                    label="Referens"
+                    isDark={isDark}
+                    loading={isLoading}
+                    disabled={isDemoMode || isLoading}
+                    styles={styles}
+                    onStart={onStartInlineEdit}
+                    onCancel={onClearInlineEdit}
+                    onDraftChange={onInlineDraftChange}
+                    onSave={onSaveInlineField}
+                    inactiveStyle={styles.inlineDetailFieldWide}
+                  />
+                  <InlineEditableTextArea
+                    node={node}
+                    field="notes"
+                    activeInlineEdit={activeInlineEdit}
+                    label="Anteckningar"
+                    isDark={isDark}
+                    loading={isLoading}
+                    disabled={isDemoMode || isLoading}
+                    styles={styles}
+                    onStart={onStartInlineEdit}
+                    onCancel={onClearInlineEdit}
+                    onDraftChange={onInlineDraftChange}
+                    onSave={onSaveInlineField}
+                    inactiveStyle={styles.inlineDetailFieldWide}
+                  />
+                </View>
+              ) : null}
+
+              {canEdit ? (
+                <View style={styles.stopCompactActions}>
                   <Pressable style={styles.secondarySmallButton} onPress={() => void onMoveStop(node.id, -1)} disabled={isLoading}>
                     <Text style={styles.secondarySmallButtonText}>Upp</Text>
                   </Pressable>
                   <Pressable style={styles.secondarySmallButton} onPress={() => void onMoveStop(node.id, 1)} disabled={isLoading}>
                     <Text style={styles.secondarySmallButtonText}>Ner</Text>
                   </Pressable>
-                  <Pressable style={styles.smallButton} onPress={() => void onScheduleStop(node, 9)} disabled={isLoading}>
-                    <Text style={styles.smallButtonText}>AM</Text>
-                  </Pressable>
-                  <Pressable style={styles.smallButton} onPress={() => void onScheduleStop(node, 18)} disabled={isLoading}>
-                    <Text style={styles.smallButtonText}>PM</Text>
-                  </Pressable>
-                  <Pressable style={styles.dangerButton} onPress={() => void onRemoveStop(node.id)} disabled={isLoading}>
-                    <Text style={styles.smallButtonText}>Ta bort</Text>
-                  </Pressable>
                 </View>
               ) : null}
-            </>
-          )}
-        </View>
-      ))}
+            </View>
+          </View>
+        );
+      })}
     </View>
   );
 }
