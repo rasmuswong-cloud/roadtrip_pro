@@ -73,6 +73,12 @@ Den innehåller testbar logik för bland annat:
 
 Rollback-hjälparen är testad isolerat men är ännu inte en ersättning för atomiska databastransaktioner.
 
+### Atomisk flytt av stopp
+
+Flytt uppåt och nedåt inom samma dag sker via en Supabase RPC-funktion. Operationen körs atomiskt i PostgreSQL, vilket innebär att hela flytten antingen lyckas eller rullas tillbaka.
+
+Stopp flyttas inte automatiskt mellan dagar, och datum eller tider ändras inte av flyttfunktionen. Behörighet kontrolleras server-side mot resans redigeringsrättigheter, och lokal state uppdateras först efter ett lyckat RPC-anrop. Flytt mellan dagar är en separat framtida funktion.
+
 ### Budget
 
 * kostnader per stopp
@@ -265,8 +271,6 @@ Att en `.env`-fil är ignorerad av Git innebär inte att en nyckel är säker om
 
 ## Kända begränsningar
 
-* `moveStop` använder ännu inte en atomisk Supabase RPC-transaktion
-* en flytt som kräver flera databasuppdateringar kan därför bli delvis genomförd om ett anrop misslyckas
 * inline-redigeringen saknar fortfarande separata fullständiga fält för sluttid, valuta och bokningsreferens
 * fullständig visuell QA på mobil återstår
 * delar av UI- och applikationslogiken ligger fortfarande i den stora `App.tsx`
@@ -276,11 +280,13 @@ Att en `.env`-fil är ignorerad av Git innebär inte att en nyckel är säker om
 
 ## Nästa prioriterade steg
 
-1. Gör flytt av stopp atomisk via Supabase RPC.
-2. Slutför inline-redigeringens återstående fält.
-3. Genomför visuell QA på mobil, surfplatta och desktop.
-4. Bryt ut fler avgränsade UI-delar ur `App.tsx`.
-5. Lägg till integrationstester och end-to-end-tester.
+1. Inline-redigering i dagkorten.
+2. Titel och plats först.
+3. Därefter datum, starttid, sluttid, typ och kostnad.
+4. Därefter valuta, bokningsstatus, bokningsreferens och anteckningar.
+5. Mobil/surfplatta/desktop-QA.
+6. Integrationstester för Supabase, RLS och realtime.
+7. CI med GitHub Actions.
 
 Se [ROADMAP.md](./ROADMAP.md) för den fullständiga utvecklingsplanen.
 

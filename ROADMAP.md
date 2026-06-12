@@ -40,10 +40,21 @@ Säkerställa att data sparas, uppdateras och laddas om utan att försvinna, dup
 * formulärvalidering före sparning
 * repositories för Supabase-data
 * struktur för Zustand-state och optimistic updates
+* atomisk flytt uppåt och nedåt inom samma dag via Supabase RPC
+* ett enda serveranrop per flytt
+* PostgreSQL-transaktion med automatisk rollback
+* server-side kontroll av `auth.uid()` och redigeringsbehörighet
+* `SECURITY INVOKER`
+* explicit säker `search_path`
+* `EXECUTE` återkallat från `public` och `anon`
+* `EXECUTE` tilldelat `authenticated`
+* lokal state uppdateras först efter lyckad RPC
+* andra dagar och lokala osynkade stopp bevaras
+* datum och tider ändras inte
+* första/sista stopp hanteras som no-op
 
 ### Återstår
 
-* atomisk flytt av stopp via Supabase RPC
 * verifiering av stabila ID:n genom hela dataflödet
 * skydd mot realtime-dubbletter
 * konsekvent hantering av `null` och `undefined`
@@ -56,9 +67,9 @@ UI → Zustand → repository → Supabase → reload → UI
 * verifiering av samtidiga ändringar från flera klienter
 * riktig automatisk rollback där optimistic updates används
 
-### Känd risk
+### Verifieringsnotering
 
-`moveStop` använder flera separata databasoperationer. Om den första lyckas och nästa misslyckas kan sorteringsordningen bli delvis uppdaterad i Supabase.
+RPC-funktionen är applicerad i Supabase. Flytt uppåt och nedåt har testats manuellt i den deployade webbappen, och ordningen består efter omladdning. Verkliga automatiserade PostgreSQL-tester för RLS, samtidighet och rollback återstår.
 
 ### Acceptanskriterier
 
@@ -496,9 +507,9 @@ MVP:n kan betraktas som stabil när:
 
 # Närmaste prioriteringar
 
-1. Implementera atomisk `moveStop` via Supabase RPC.
-2. Slutför inline-redigering för sluttid, valuta och bokningsreferens.
-3. Genomför visuell QA på mobil, surfplatta och desktop.
-4. Bryt ut nästa tydligt avgränsade UI-del ur `App.tsx`.
-5. Lägg till integrationstester för Supabase och realtime.
-6. Konfigurera CI.
+1. Inline-redigering av titel och plats i dagkorten.
+2. Därefter datum, starttid, sluttid, typ och kostnad.
+3. Därefter valuta, bokningsstatus, bokningsreferens och anteckningar.
+4. Genomför visuell QA på mobil, surfplatta och desktop.
+5. Lägg till integrationstester för Supabase, RLS och realtime.
+6. Konfigurera CI med GitHub Actions.
