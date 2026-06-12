@@ -146,6 +146,19 @@ export async function upsertItineraryNode(node: ItineraryNode): Promise<Itinerar
   return itineraryNodeFromRow(data as ItineraryNodeRow);
 }
 
+export async function moveItineraryNode(nodeId: string, direction: -1 | 1): Promise<ItineraryNode[]> {
+  const { data, error } = await supabase.rpc('move_itinerary_node', {
+    input_node_id: nodeId,
+    input_direction: direction,
+  });
+
+  if (error) {
+    throw new Error(`Kunde inte flytta stoppet: ${error.message}`);
+  }
+
+  return ((data ?? []) as ItineraryNodeRow[]).map(itineraryNodeFromRow);
+}
+
 export async function deleteItineraryNode(nodeId: string): Promise<void> {
   const { error } = await supabase
     .from('itinerary_nodes')

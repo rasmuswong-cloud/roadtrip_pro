@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -25,6 +25,7 @@ import {
   ensureFirstTrip,
   joinTripByShareCode,
   listItineraryNodes,
+  moveItineraryNode,
   upsertItineraryNode,
 } from '@/services/database/tripRepository';
 import { googlePlaceToPoi, searchGooglePlaces, type GooglePlace } from '@/services/google/googlePlaces';
@@ -307,6 +308,7 @@ export default function App() {
   const [onlineSaveState, setOnlineSaveState] = useState<OnlineSaveState>('idle');
   const [lastOnlineSavedAt, setLastOnlineSavedAt] = useState<string | null>(null);
   const [undoSnapshot, setUndoSnapshot] = useState<UndoSnapshot | null>(null);
+  const movingStopIdsRef = useRef<Set<string>>(new Set());
   const { activeTripId, setActiveTrip, upsertTrip, upsertPoi: upsertPoiInStore } = useTripStore();
 
   const displayedNodes = itineraryNodes.length > 0 ? itineraryNodes : demoNodes;
@@ -865,54 +867,50 @@ export default function App() {
   }
 
   async function moveStop(nodeId: string, direction: -1 | 1) {
+    if (isLoading || movingStopIdsRef.current.has(nodeId)) {
+      return;
+    }
+
     if (itineraryNodes.length === 0) {
       setStatusMessage('Anslut innan du ändrar ordning på demo-stopp.');
       return;
     }
 
     const orderedNodes = sortNodes(itineraryNodes);
-    const currentIndex = orderedNodes.findIndex((node) => node.id === nodeId);
+    const currentNode = orderedNodes.find((node) => node.id === nodeId);
+    const currentDayKey = currentNode ? dayKeyForNode(currentNode) : null;
+    const sameDayNodes = currentDayKey ? orderedNodes.filter((node) => dayKeyForNode(node) === currentDayKey) : [];
+    const currentIndex = sameDayNodes.findIndex((node) => node.id === nodeId);
     const targetIndex = currentIndex + direction;
-    const currentNode = orderedNodes[currentIndex];
-    const targetNode = orderedNodes[targetIndex];
+    const targetNode = sameDayNodes[targetIndex];
 
     if (!currentNode || !targetNode) {
       setStatusMessage(direction < 0 ? 'Steget ligger redan först.' : 'Steget ligger redan sist.');
       return;
     }
 
+    movingStopIdsRef.current.add(nodeId);
     rememberUndo('flytta stopp');
     setIsLoading(true);
     setStatusMessage(`Flyttar ${currentNode.title}...`);
+    markOnlineSaveStart();
 
     try {
-      const now = new Date().toISOString();
-      const updatedCurrent = await saveItineraryNodeOnline({
-        ...currentNode,
-        sortOrder: targetNode.sortOrder,
-        updatedAt: now,
-        version: currentNode.version + 1,
-      });
-      const updatedTarget = await saveItineraryNodeOnline({
-        ...targetNode,
-        sortOrder: currentNode.sortOrder,
-        updatedAt: now,
-        version: targetNode.version + 1,
-      });
-
-      setItineraryNodes((current) => sortNodes(current.map((node) => {
-        if (node.id === updatedCurrent.id) {
-          return updatedCurrent;
-        }
-        if (node.id === updatedTarget.id) {
-          return updatedTarget;
-        }
-        return node;
-      })));
-      setStatusMessage(`Flyttade steg: ${updatedCurrent.title}`);
+      const movedNodes = await moveItineraryNode(nodeId, direction);
+      const movedNodeIds = new Set(movedNodes.map((node) => node.id));
+      setItineraryNodes((current) => sortNodes([
+        ...current.filter((node) => !movedNodeIds.has(node.id)),
+        ...movedNodes,
+      ]));
+      markOnlineSaveSuccess();
+      const movedNode = movedNodes.find((node) => node.id === nodeId) ?? currentNode;
+      setStatusMessage(`Flyttade steg: ${movedNode.title}`);
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : String(error));
+      markOnlineSaveError();
+      const message = error instanceof Error ? error.message : String(error);
+      setStatusMessage(`Kunde inte flytta stoppet. Ordningen är oförändrad. ${message}`);
     } finally {
+      movingStopIdsRef.current.delete(nodeId);
       setIsLoading(false);
     }
   }
@@ -2077,15 +2075,26 @@ const inlineNodeTypes: ItineraryNodeType[] = ['lodging', 'camping', 'activity', 
 
 function sortNodes(nodes: ItineraryNode[]): ItineraryNode[] {
   return [...nodes].sort((a, b) => {
+    const dayA = a.startsAt ? a.startsAt.slice(0, 10) : '9999-12-31';
+    const dayB = b.startsAt ? b.startsAt.slice(0, 10) : '9999-12-31';
+
+    if (dayA !== dayB) {
+      return dayA.localeCompare(dayB);
+    }
+
+    if (a.sortOrder !== b.sortOrder) {
+      return a.sortOrder - b.sortOrder;
+    }
+
     const timeA = a.startsAt ? new Date(a.startsAt).getTime() : Number.POSITIVE_INFINITY;
     const timeB = b.startsAt ? new Date(b.startsAt).getTime() : Number.POSITIVE_INFINITY;
 
-    if (timeA !== timeB) {
-      return timeA - timeB;
-    }
-
-    return a.sortOrder - b.sortOrder;
+    return timeA - timeB;
   });
+}
+
+function dayKeyForNode(node: ItineraryNode): string {
+  return node.startsAt ? node.startsAt.slice(0, 10) : 'unscheduled';
 }
 
 function buildUpcomingNodes(nodes: ItineraryNode[]): ItineraryNode[] {
