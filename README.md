@@ -1,6 +1,6 @@
 # Roadtrip Pro
 
-Roadtrip Pro är en webbaserad reseplanerare för roadtrips. Appen samlar resans dagar, destinationer, aktiviteter, boenden, kostnader, bokningsinformation och anteckningar i en gemensam plan.
+Roadtrip Pro är en webbaserad reseplanerare för roadtrips. Appen samlar resans dagar, destinationer, aktiviteter, boenden, tider, kostnader, bokningsinformation och anteckningar i en gemensam plan.
 
 **Liveversion:**
 https://roadtrip-pro-sy5y.vercel.app/
@@ -12,12 +12,13 @@ Målet är att skapa en lättanvänd app där en roadtrip kan planeras före avr
 Appen ska hjälpa användaren att:
 
 * planera resan dag för dag
-* lägga till destinationer, aktiviteter och boenden
-* hålla reda på tider, bokningar och kostnader
-* se resans stopp och rutt på en karta
+* lägga till destinationer, aktiviteter, boenden och transportstopp
+* hålla reda på tider, bokningar, kostnader och anteckningar
+* se stopp och rutter på karta
 * dela en resa med andra användare
 * upptäcka problem som saknade boenden, långa kördagar och budgetavvikelser
-* använda planeringen på både mobil och dator
+* redigera resplanen snabbt och intuitivt direkt i dagkortet
+* använda appen på både mobil och dator
 
 ## Nuvarande status
 
@@ -29,28 +30,91 @@ Det centrala planeringsflödet finns på plats:
 2. En resa kan skapas eller öppnas.
 3. Resan visas som en dag-för-dag-planering.
 4. Stopp kan skapas, redigeras, flyttas och tas bort.
-5. Resedata kan sparas i Supabase.
+5. Resedata sparas i Supabase.
 6. Dagkort visar sammanfattningar, aktiviteter, boende, körning, kostnader och planeringsvarningar.
+7. Relevanta fält kan redigeras inline direkt i dagkortet.
+8. Flytt av stopp uppåt och nedåt inom samma dag sker atomiskt via Supabase RPC.
 
-Projektet är ännu inte färdigt för generell produktion. Framför allt behöver dataflöden, mobilupplevelse, routing, offlinefunktioner och samarbete mellan flera användare verifieras ytterligare.
+Projektet är ännu inte färdigt för generell produktion. Framför allt behöver mobilupplevelse, integrationstester, RLS-verifiering, realtime, offlinefunktioner och CI byggas ut ytterligare.
 
 ## Funktioner
 
 ### Dag-för-dag-planering
 
 * schemalagda och oschemalagda stopp
-* aktiviteter, boenden och transportstopp
+* aktiviteter, boenden, matstopp och transportstopp
 * tider, platser, kostnader och anteckningar
-* snabbredigering direkt i dagplaneringen
-* flytt av stopp uppåt och nedåt
-* borttagning av stopp
 * dagsammanfattning med antal stopp, körning och kostnad
+* smarta planeringsvarningar
 * checklistor och packningsinformation
+* kompakt stoppkort med tydlig reseinformation
+* sekundära fält bakom detaljpanel
+* meny för fler åtgärder
 
-Dagkortets presentation är utbruten till:
+Dagkortets presentation finns i:
 
 ```text
 src/components/planning/DayCard.tsx
+```
+
+DayCard-specifika styles finns i:
+
+```text
+src/components/planning/DayCard.styles.ts
+```
+
+### Inline editing
+
+Stopp kan redigeras direkt i dagkortet utan separat formulär.
+
+Följande fält stödjer inline-redigering:
+
+* titel
+* plats
+* datum
+* starttid
+* sluttid
+* typ
+* kostnad
+* valuta
+* bokningsstatus
+* bokningsreferens
+* anteckningar
+
+Designprincipen är att stoppkortet ska se ut som vanlig reseinformation i normalläge. Endast det fält användaren klickar på visas som input, select eller textarea.
+
+Inline editing har stöd för:
+
+* globalt aktivt fält i planeringsvyn
+* spara och avbryt
+* validering
+* skydd mot dubbla sparningar
+* bevarad draft vid fel
+* server-first-sparning
+* uppdatering av lokal state först efter lyckat Supabase-anrop
+
+Platsändring ändrar inte koordinater automatiskt. Om platsnamnet ändras medan koordinater finns kvar visas en varning om att kartpositionen bör kontrolleras.
+
+### Atomisk flytt av stopp
+
+Flytt av stopp uppåt och nedåt inom samma dag sker genom en Supabase RPC-funktion och en atomisk PostgreSQL-transaktion.
+
+Det innebär att:
+
+* hela flytten lyckas eller rullas tillbaka
+* flytten görs med ett serveranrop
+* stopp flyttas inte automatiskt mellan olika dagar
+* datum och tider ändras inte vid omordning
+* behörighet kontrolleras server-side
+* lokal state uppdateras först efter lyckat RPC-anrop
+* första stoppet uppåt och sista stoppet nedåt hanteras som no-op
+
+Flytt mellan olika dagar är en separat framtida funktion och ingår inte i Upp/Ner-knapparnas nuvarande beteende.
+
+Migrationen finns i:
+
+```text
+supabase/migrations/202606120001_atomic_move_itinerary_node.sql
 ```
 
 ### Smart daganalys
@@ -66,18 +130,26 @@ Den innehåller testbar logik för bland annat:
 * dagsammanfattning
 * beräkning av dagskostnad
 * sorteringsordning
-* flytt av stopp mellan dagar
 * formulärvalidering
 * smarta planeringsvarningar
-* rollback-hjälpare för lokal state
+* lokal rollback-hjälpare
 
-Rollback-hjälparen är testad isolerat men är ännu inte en ersättning för atomiska databastransaktioner.
+### Inline edit-logik
 
-### Atomisk flytt av stopp
+Inline editing-logik finns i:
 
-Flytt uppåt och nedåt inom samma dag sker via en Supabase RPC-funktion. Operationen körs atomiskt i PostgreSQL, vilket innebär att hela flytten antingen lyckas eller rullas tillbaka.
+```text
+src/services/planning/inlineEdit.ts
+```
 
-Stopp flyttas inte automatiskt mellan dagar, och datum eller tider ändras inte av flyttfunktionen. Behörighet kontrolleras server-side mot resans redigeringsrättigheter, och lokal state uppdateras först efter ett lyckat RPC-anrop. Flytt mellan dagar är en separat framtida funktion.
+Den hanterar bland annat:
+
+* fältmappning
+* visningsvärden
+* validering
+* datum- och tidshantering
+* patchning av `ItineraryNode`
+* kostnad, valuta och bokningsmetadata
 
 ### Budget
 
@@ -86,15 +158,16 @@ Stopp flyttas inte automatiskt mellan dagar, och datum eller tider ändras inte 
 * kostnadskategorier
 * markering av stopp som saknar kostnad
 * budgetöversikt
+* inline-redigerad kostnad påverkar dagbudget och summeringar
 
 ### Karta och routing
 
 * kartkomponent
 * koordinater för stopp
-* lokalt stöd för waypoint-optimering
-* struktur för extern routing och ruttcache
+* lokal waypoint-struktur
+* stödstruktur för ruttcache och extern routing
 
-Den lokala optimeringen är en fallback. Faktiska restider, vägsträckor och väggeometrier behöver hämtas från en extern routingtjänst för ett fullständigt produktionsflöde.
+Faktiska restider, vägsträckor och väggeometrier behöver fortfarande hämtas från en extern routingtjänst för ett fullständigt produktionsflöde.
 
 ### Delning och synkronisering
 
@@ -133,6 +206,8 @@ supabase/functions/parse-itinerary-command/
 
 Privata AI-nycklar ska endast finnas som Supabase Edge Function-secrets och får inte exponeras i Expo- eller Vercel-klienten.
 
+Edge Functionen returnerar generiska serverfel till klienten för att undvika informationsläckage via stack traces, medan detaljer kan loggas server-side.
+
 ## Teknik
 
 * React Native
@@ -155,7 +230,7 @@ App.tsx
 src/
   components/
     map/                 Kartkomponenter
-    planning/            Dagkort och planeringskomponenter
+    planning/            Dagkort, inline editing och planeringskomponenter
   data/                  Seed- och demodata
   models/                Domänmodeller och delade TypeScript-typer
   services/
@@ -163,12 +238,13 @@ src/
     auth/                Inloggning och användarsession
     database/            Supabase repositories och mappers
     offline/             Lokal SQLite-cache
-    planning/            Dagsammanfattning, validering och varningar
+    planning/            Dagsanalys, inline editing, validering och varningar
     routing/             Rutt- och waypointlogik
     sync/                Synkroniseringskö
   store/                 Zustand-store
 supabase/
   functions/             Supabase Edge Functions
+  migrations/            Supabase/Postgres-migrationer
   schema.sql             Databasschema och RLS
 tests/                   Automatiserade tester
 ```
@@ -239,18 +315,25 @@ Den nuvarande automatiserade testsviten täcker bland annat:
 * dagskostnad
 * sorteringsordning
 * smarta varningar
-* flytt av stopp mellan dagar
+* flytt av stopp mellan dagar på hjälpfunktionsnivå
+* atomisk `moveStop` på kontrakts-/helpernivå
 * formulärvalidering
 * lokal rollback-hjälpare
+* inline editing-validering
+* datum- och tidshantering för inline editing
+* kostnad och metadata för inline editing
+
+Vissa tester är helper- och kontraktstester. Verkliga PostgreSQL-tester för RLS, samtidighet och transaktionsrollback återstår.
 
 ## Supabase
 
 1. Skapa ett Supabase-projekt.
 2. Kör relevanta SQL-filer i `supabase/`.
-3. Aktivera RLS för användardata.
-4. Aktivera Realtime för de tabeller som ska synkroniseras.
-5. Konfigurera tillåtna Site URL- och redirect-adresser.
-6. Lägg `GEMINI_API_KEY` som en Supabase Edge Function-secret.
+3. Kör migrationer i `supabase/migrations/`.
+4. Aktivera RLS för användardata.
+5. Aktivera Realtime för de tabeller som ska synkroniseras.
+6. Konfigurera tillåtna Site URL- och redirect-adresser.
+7. Lägg `GEMINI_API_KEY` som en Supabase Edge Function-secret.
 
 Exempel:
 
@@ -258,38 +341,55 @@ Exempel:
 supabase secrets set GEMINI_API_KEY=...
 ```
 
+RPC-funktionen för atomisk flytt finns i:
+
+```text
+public.move_itinerary_node(uuid, integer)
+```
+
+Den använder:
+
+* `SECURITY INVOKER`
+* explicit `search_path`
+* kontroll av `auth.uid()`
+* kontroll av redigeringsbehörighet
+* explicita `REVOKE`/`GRANT`-rättigheter
+
 ## Säkerhet
 
 * privata API-nycklar får inte committas
 * `.env` och relaterade lokala filer ignoreras av Git och Vercel
-* AI-nycklar ska endast finnas i en betrodd servermiljö
+* AI-nycklar ska endast finnas i betrodd servermiljö
 * Supabase RLS ska begränsa åtkomst till resor som användaren äger eller delar
 * användardata ska valideras innan den sparas
 * klienten får inte betraktas som en betrodd säkerhetsgräns
+* serverfel ska inte exponera stack traces eller interna felmeddelanden till klienten
 
 Att en `.env`-fil är ignorerad av Git innebär inte att en nyckel är säker om den används eller bäddas in i klientkoden.
 
 ## Kända begränsningar
 
-* inline-redigeringen saknar fortfarande separata fullständiga fält för sluttid, valuta och bokningsreferens
-* fullständig visuell QA på mobil återstår
-* delar av UI- och applikationslogiken ligger fortfarande i den stora `App.tsx`
-* offline- och realtimeflöden behöver fler integrationstester
+* verkliga automatiserade PostgreSQL-tester för RLS, rollback och samtidighet återstår
+* fullständig integrationstestning mot Supabase saknas
+* realtime och samarbete mellan flera samtidiga användare behöver verifieras mer
+* offlineflödet är inte fullständigt verifierat
 * faktisk körsträcka och körtid behöver hämtas från en routingtjänst
+* mobil-QA behöver fortsätta, särskilt kring detaljpaneler, tangentbord och overflow
 * end-to-end-tester och CI återstår
+* flytt av stopp mellan olika dagar är ännu inte implementerad som separat funktion
+* komponenttester för faktisk React Native-rendering saknas
 
 ## Nästa prioriterade steg
 
-1. Inline-redigering i dagkorten.
-2. Titel och plats först.
-3. Därefter datum, starttid, sluttid, typ och kostnad.
-4. Därefter valuta, bokningsstatus, bokningsreferens och anteckningar.
-5. Mobil/surfplatta/desktop-QA.
-6. Integrationstester för Supabase, RLS och realtime.
-7. CI med GitHub Actions.
+1. Genomför en strukturerad mobil-, surfplatta- och desktop-QA.
+2. Lägg till GitHub Actions för typecheck, lint, tester och web-export.
+3. Lägg till integrationstester för Supabase, RLS och realtime.
+4. Bygg separat funktion för att flytta stopp mellan dagar.
+5. Fortsätt förbättra routing och faktisk kördata.
+6. Bygg ut offlineflödet och konflikthantering.
 
 Se [ROADMAP.md](./ROADMAP.md) för den fullständiga utvecklingsplanen.
 
 ## Produktionsstatus
 
-Roadtrip Pro är en fungerande MVP under utveckling. Appen kan användas och testas, men bör inte betraktas som fullt produktionsklar förrän de kvarstående data-, säkerhets- och kvalitetsstegen har genomförts.
+Roadtrip Pro är en fungerande MVP under utveckling. Appen kan användas och testas, men bör inte betraktas som fullt produktionsklar förrän de kvarstående data-, säkerhets-, test- och kvalitetsstegen har genomförts.

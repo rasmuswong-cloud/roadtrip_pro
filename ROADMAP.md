@@ -24,7 +24,7 @@ Statusvärden:
 
 ## Fas 1 – Stabilt dataflöde
 
-**Status: Delvis klar**
+**Status: Delvis klar – atomisk flytt inom samma dag implementerad**
 
 ### Mål
 
@@ -35,13 +35,8 @@ Säkerställa att data sparas, uppdateras och laddas om utan att försvinna, dup
 * server-first-flöde för att skapa stopp
 * server-first-flöde för att redigera stopp
 * server-first-flöde för att ta bort stopp
-* testbar sorteringslogik
-* lokal rollback-hjälpare
-* formulärvalidering före sparning
-* repositories för Supabase-data
-* struktur för Zustand-state och optimistic updates
 * atomisk flytt uppåt och nedåt inom samma dag via Supabase RPC
-* ett enda serveranrop per flytt
+* ett enda serveranrop per stoppflytt
 * PostgreSQL-transaktion med automatisk rollback
 * server-side kontroll av `auth.uid()` och redigeringsbehörighet
 * `SECURITY INVOKER`
@@ -49,9 +44,13 @@ Säkerställa att data sparas, uppdateras och laddas om utan att försvinna, dup
 * `EXECUTE` återkallat från `public` och `anon`
 * `EXECUTE` tilldelat `authenticated`
 * lokal state uppdateras först efter lyckad RPC
-* andra dagar och lokala osynkade stopp bevaras
-* datum och tider ändras inte
-* första/sista stopp hanteras som no-op
+* stopp från andra dagar och lokala osynkade stopp bevaras
+* datum och tider ändras inte vid omordning
+* första och sista stoppet hanteras som no-op vid ogiltig flyttriktning
+* testbar sorteringslogik
+* formulärvalidering före sparning
+* repositories för Supabase-data
+* struktur för Zustand-state och optimistic updates
 
 ### Återstår
 
@@ -61,27 +60,35 @@ Säkerställa att data sparas, uppdateras och laddas om utan att försvinna, dup
 * integrationstestning av:
 
 ```text
-UI → Zustand → repository → Supabase → reload → UI
+UI → Zustand/App state → repository → Supabase → reload → UI
 ```
 
 * verifiering av samtidiga ändringar från flera klienter
-* riktig automatisk rollback där optimistic updates används
+* verkliga PostgreSQL-tester för rollback, RLS och samtidighet
+* tydligare strategi för konflikter mellan offline, realtime och server-state
 
-### Verifieringsnotering
+### Kvarstående verifiering
 
-RPC-funktionen är applicerad i Supabase. Flytt uppåt och nedåt har testats manuellt i den deployade webbappen, och ordningen består efter omladdning. Verkliga automatiserade PostgreSQL-tester för RLS, samtidighet och rollback återstår.
+RPC-funktionen är applicerad i Supabase och har testats manuellt via den deployade webbappen. Flytt uppåt och nedåt fungerar och ordningen består efter omladdning.
+
+Automatiserade PostgreSQL-tester för faktisk RLS-exekvering, samtidighet och transaktionsrollback återstår.
 
 ### Acceptanskriterier
 
-* en flytt av stopp genomförs som en enda atomisk operation
-* misslyckad flytt lämnar både lokal state och databas oförändrade
+Fasen kan markeras som klar när:
+
+* alla centrala CRUD-flöden är integrationstestade mot Supabase
 * inga duplicerade stopp skapas
 * sorteringsordningen är identisk efter omladdning
-* användaren får ett tydligt felmeddelande vid misslyckad sparning
+* obehöriga användare nekas åtkomst
+* realtime inte skapar dubbletter
+* användaren får tydliga felmeddelanden vid misslyckad sparning
+* RLS är verifierat med tester eller dokumenterad manuell testplan
 
 ### Beroenden
 
-* Supabase RPC eller annan Postgres-transaktion
+* Supabase-testmiljö
+* integrationsteststrategi
 * verifierade RLS- och behörighetskontroller
 
 ---
@@ -98,44 +105,83 @@ Användaren ska kunna planera och redigera en hel resa direkt i dagvyn.
 
 * schemalagda och oschemalagda stopp
 * dagkort
+* kompakt stoppkort
 * aktiviteter
 * boenden
 * transportstopp
 * tider
 * platser
 * kostnader
+* valuta
+* bokningsstatus
+* bokningsreferens
 * anteckningar
 * skapa stopp
 * redigera stopp
 * ta bort stopp
-* flytta stopp upp och ned
+* flytta stopp upp och ned inom samma dag
 * dagsammanfattning
 * smarta planeringsvarningar
 * checklistor och packningsinformation
 * separat `DayCard`-komponent
+* separat `DayCard.styles.ts`
+* inline editing för alla relevanta stoppfält
+* detaljpanel för sekundära fält
+* menyknapp för fler åtgärder
+
+### Inline editing
+
+Följande fält är inline-redigerbara:
+
+* titel
+* plats
+* datum
+* starttid
+* sluttid
+* typ
+* kostnad
+* valuta
+* bokningsstatus
+* bokningsreferens
+* anteckningar
+
+Inline editing stödjer:
+
+* globalt aktivt fält
+* save/cancel
+* validering
+* bevarad draft vid fel
+* skydd mot dubbla sparningar
+* server-first-sparning
+* uppdaterad dagssammanfattning och budget efter lyckad sparning
 
 ### Återstår
 
-* sluttid som separat fullständigt redigerbart fält
-* valuta som separat fullständigt redigerbart fält
-* bokningsreferens som separat fullständigt redigerbart fält
-* tydligare bekräftelse vid borttagning
-* robust flytt av stopp mellan dagar
-* förbättrad hantering av oschemalagda stopp
-* tydligare sparstatus
-* bättre hantering av valideringsfel direkt vid respektive fält
+* separat funktion för att flytta stopp mellan olika dagar
+* bättre hantering av stora mängder stopp i samma dag
+* förbättrad tangentbordsupplevelse på mobil
+* mer visuell QA av detaljpaneler
+* tydligare status för sparning och fel i vissa edge cases
+* komponenttester för verklig React Native-rendering
+* bättre hantering av konflikter när två användare redigerar samma stopp
 
 ### Acceptanskriterier
 
+Fasen kan markeras som klar när:
+
 * alla stödda fält kan redigeras utan att lämna dagvyn
-* redan inskriven information försvinner inte vid valideringsfel
+* redan inskriven information försvinner inte vid valideringsfel eller serverfel
 * användaren kan skapa, redigera, flytta och ta bort stopp
-* alla ändringar finns kvar efter omladdning
+* ändringar finns kvar efter omladdning
 * inga dubbla sparningar uppstår
+* mobil och desktop är visuellt verifierade
+* flytt mellan dagar finns som separat tydlig användarhandling
 
 ### Beroenden
 
-* Fas 1 för atomisk och stabil datalagring
+* Fas 1 för stabil datalagring
+* mobil-QA
+* integrationstester
 
 ---
 
@@ -163,6 +209,7 @@ Testbar logik finns för bland annat:
 * boende utan plats
 * ofullständiga koordinater
 * budgetvarningar
+* begränsad visning av smarta varningar med möjlighet att visa fler
 
 ### Återstår
 
@@ -174,6 +221,7 @@ Testbar logik finns för bland annat:
 * möjlighet att filtrera eller dölja varningar
 * verifiering mot verklig ruttdata
 * tester av fler gränsfall
+* bättre UX för många varningar samtidigt
 
 ### Princip
 
@@ -185,6 +233,7 @@ Varningar ska hjälpa användaren men inte blockera sparning eller redigering.
 * samma indata ger samma varning
 * falska positiva varningar är begränsade
 * användaren kan förstå vilken dag och vilket stopp som berörs
+* varningar fungerar med verklig rutt- och kostnadsdata
 
 ---
 
@@ -201,18 +250,23 @@ Appen ska fungera bra på mobil, surfplatta och desktop.
 * webbversion via Expo och Vercel
 * responsiv grundlayout
 * separat dagkortskomponent
+* kompaktare stoppkort
+* sekundära fält bakom detaljpanel
+* kollapsbara checklistor och packlistor
 * tekniskt fungerande web-export
-* manuell visuell kontroll av nuvarande dagkort efter refaktorering
+* manuell visuell kontroll av dagkort efter refaktoreringar
 
 ### Återstår
 
 #### Mobil, cirka 375 px
 
-* kontroll av horisontell overflow
+* systematisk kontroll av horisontell overflow
 * kontroll av tryckytor
-* kontroll av formulär med mobilt tangentbord
-* kontroll av modaler och paneler
-* kontroll av dagkort med mycket innehåll
+* kontroll av inline editing med mobilt tangentbord
+* kontroll av detaljpaneler
+* kontroll av menyknapp
+* kontroll av långa anteckningar
+* kontroll av dagkort med många stopp
 * test på verklig mobil enhet
 
 #### Surfplatta
@@ -220,6 +274,7 @@ Appen ska fungera bra på mobil, surfplatta och desktop.
 * kontroll av mellanbredder
 * balans mellan karta och planering
 * kontroll av navigering och paneler
+* kontroll av inline editing
 
 #### Desktop, cirka 1440 px
 
@@ -232,7 +287,8 @@ Appen ska fungera bra på mobil, surfplatta och desktop.
 
 * ingen oavsiktlig horisontell scroll
 * primära funktioner är lätta att nå
-* formulär går att använda på mobil
+* inline editing går att använda på mobil
+* formulär och detaljpaneler fungerar med tangentbord
 * layouten fungerar vid minst 375, 768 och 1440 px
 * kritiska funktioner är visuellt verifierade
 
@@ -254,21 +310,33 @@ Minska komplexiteten i `App.tsx` utan att ändra beteendet.
 src/components/planning/DayCard.tsx
 ```
 
+* DayCard-specifika styles är utbrutna till:
+
+```text
+src/components/planning/DayCard.styles.ts
+```
+
 * delade dagkortstyper finns i:
 
 ```text
 src/models/dayPlan.ts
 ```
 
+* inline editing-logik finns i:
+
+```text
+src/services/planning/inlineEdit.ts
+```
+
 ### Återstår
 
-* bryt ut inline-editorn
 * bryt ut platssökningen
 * bryt ut oschemalagda stopp
 * bryt ut större modaler
 * bryt ut planerhuvudet
 * flytta rent visuella hjälpfunktioner när det är säkert
 * minska mängden callbacks som skickas till `DayCard`
+* överväg komponenttester för `DayCard`
 * behåll data- och affärslogik utanför presentationskomponenterna
 
 ### Principer
@@ -304,11 +372,13 @@ Göra det enkelt att hitta platser och skapa en realistisk körplan.
 * platsrelaterad struktur
 * lokal waypoint-optimering
 * ruttcache-struktur
+* koordinater bevaras vid textbaserad platsändring
 
 ### Återstår
 
 * stabil platssökning
 * automatisk hämtning av koordinater
+* möjlighet att uppdatera kartposition efter ändrat platsnamn
 * faktisk körsträcka
 * faktisk körtid
 * väggeometri
@@ -321,6 +391,7 @@ Göra det enkelt att hitta platser och skapa en realistisk körplan.
 ### Acceptanskriterier
 
 * varje stopp kan visas korrekt på kartan
+* användaren kan se när platsnamn och koordinater kan skilja sig åt
 * faktisk rutt kan beräknas
 * användaren kan välja mellan föreslagen och manuell ordning
 * appen hanterar att routingtjänsten är otillgänglig
@@ -361,6 +432,7 @@ Flera användare ska kunna planera samma resa utan att skapa konflikter eller du
 * ändringar visas utan duplicering
 * obehöriga användare nekas åtkomst
 * konflikter hanteras eller visas tydligt
+* realtime fungerar utan att skriva över lokal draft
 
 ---
 
@@ -389,6 +461,7 @@ Grundläggande reseplanering ska fungera utan internetanslutning.
 * konfliktlösning
 * återförsök med backoff
 * integrationstester för offline → online
+* definiera hur inline editing ska bete sig offline
 
 ### Acceptanskriterier
 
@@ -396,6 +469,7 @@ Grundläggande reseplanering ska fungera utan internetanslutning.
 * ändringar kan göras offline
 * ändringarna synkroniseras när anslutningen återkommer
 * användaren ser om något väntar på synkronisering
+* konflikter hanteras utan dataförlust
 
 ---
 
@@ -415,6 +489,7 @@ AI ska göra planeringen snabbare utan att få okontrollerad åtkomst till anvä
 * Gemini-anrop från servermiljö
 * klienten skickar Supabase-session och anon key
 * `.vercelignore` skyddar lokala miljöfiler vid deploy
+* generiskt 500-fel till klienten för att undvika informationsläckage via stack trace
 
 ### Återstår
 
@@ -433,6 +508,7 @@ AI ska göra planeringen snabbare utan att få okontrollerad åtkomst till anvä
 * AI får inte skriva direkt till databasen utan validering
 * användaren ska kunna se föreslagna ändringar innan de genomförs
 * AI-svar ska betraktas som opålitlig indata
+* serverfel får inte exponera stack traces eller interna felmeddelanden
 
 ### Acceptanskriterier
 
@@ -440,6 +516,7 @@ AI ska göra planeringen snabbare utan att få okontrollerad åtkomst till anvä
 * samtliga mutationer valideras
 * användaren godkänner ändringar
 * rate limits och fel hanteras tydligt
+* känsliga felmeddelanden loggas endast server-side
 
 ---
 
@@ -451,21 +528,25 @@ AI ska göra planeringen snabbare utan att få okontrollerad åtkomst till anvä
 
 * TypeScript-kontroll
 * ESLint
-* automatiserade enhetstester
+* automatiserade helper-/unit-tester
 * Expo web-export
 * Vercel production-deploy
+* Dependabot-uppdatering av `esbuild`
 * test av dagsammanfattning
 * test av dagskostnad
 * test av sorteringsordning
 * test av smarta varningar
-* test av flytt mellan dagar
+* test av flyttlogik
 * test av formulärvalidering
 * test av lokal rollback-hjälpare
+* test av inline editing-hjälpare
+* kontraktstester för atomisk moveStop-migration
 
 ### Återstår
 
 * GitHub Actions eller annan CI
 * integrationstester mot Supabase
+* verkliga PostgreSQL-tester för RLS, samtidighet och rollback
 * end-to-end-tester
 * säkerhetsgranskning
 * verifiering av RLS
@@ -475,6 +556,7 @@ AI ska göra planeringen snabbare utan att få okontrollerad åtkomst till anvä
 * strukturerad loggning
 * backup- och återställningsplan
 * dokumenterad releaseprocess
+* komponenttester för React Native Web
 
 ### Acceptanskriterier
 
@@ -484,6 +566,7 @@ AI ska göra planeringen snabbare utan att få okontrollerad åtkomst till anvä
 * RLS är verifierat
 * inga hemligheter finns i klient eller repository
 * produktionen har felövervakning
+* mobil- och desktopflöden är testade
 
 ---
 
@@ -493,7 +576,9 @@ MVP:n kan betraktas som stabil när:
 
 * skapa, öppna och redigera resa fungerar
 * stopp kan skapas, flyttas och tas bort
-* `moveStop` är atomisk
+* stopp kan inline-redigeras utan dataförlust
+* `moveStop` är atomisk inom samma dag
+* flytt mellan dagar finns som separat tydlig funktion eller är tydligt avgränsad
 * ändringar finns kvar efter omladdning
 * inga kända datadubbletter finns
 * sorteringsordningen är stabil
@@ -502,14 +587,15 @@ MVP:n kan betraktas som stabil när:
 * mobil och desktop är visuellt verifierade
 * delning fungerar mellan två användare
 * typecheck, lint, tester och web-export passerar
+* CI är konfigurerad
 * inga privata API-nycklar exponeras
 * Supabase RLS är verifierat
 
 # Närmaste prioriteringar
 
-1. Inline-redigering av titel och plats i dagkorten.
-2. Därefter datum, starttid, sluttid, typ och kostnad.
-3. Därefter valuta, bokningsstatus, bokningsreferens och anteckningar.
-4. Genomför visuell QA på mobil, surfplatta och desktop.
-5. Lägg till integrationstester för Supabase, RLS och realtime.
-6. Konfigurera CI med GitHub Actions.
+1. Genomför strukturerad mobil-, surfplatta- och desktop-QA.
+2. Lägg till GitHub Actions för typecheck, lint, tester och web-export.
+3. Lägg till integrationstester för Supabase, RLS och realtime.
+4. Bygg separat funktion för att flytta stopp mellan olika dagar.
+5. Förbättra plats- och routingflödet.
+6. Bygg ut offline- och konflikthantering.
