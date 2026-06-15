@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -283,6 +284,8 @@ function formatShortTime(value: string): string {
 
 export default function App() {
   const isDark = false;
+  const { width: viewportWidth } = useWindowDimensions();
+  const isMobile = viewportWidth <= 640;
   const initialPersistedState = useMemo(() => readPersistedAppState(), []);
   const [command, setCommand] = useState('');
   const [statusMessage, setStatusMessage] = useState('Redo att ansluta resan.');
@@ -1491,24 +1494,24 @@ export default function App() {
     <SafeAreaProvider>
       <SafeAreaView style={[styles.screen, isDark && styles.screenDark]}>
         <StatusBar style={isDark ? 'light' : 'dark'} />
-        <View style={[styles.header, isDark && styles.headerDark]}>
-          <View style={styles.brandLockup}>
+        <View style={[styles.header, isMobile && styles.headerMobile, isDark && styles.headerDark]}>
+          <View style={[styles.brandLockup, isMobile && styles.brandLockupMobile]}>
             <Text style={[styles.kicker, isDark && styles.textMutedDark]}>ReseApp</Text>
             <Text style={[styles.title, isDark && styles.textDark]}>Roadtrip-planerare</Text>
           </View>
-          <View style={styles.navLinks}>
+          <View style={[styles.navLinks, isMobile && styles.navLinksMobile]}>
             {appTabs.map((tab) => (
               <Pressable
                 key={tab.key}
-                style={[styles.navTab, activeView === tab.key && styles.navTabActive]}
+                style={[styles.navTab, isMobile && styles.navTabMobile, activeView === tab.key && styles.navTabActive]}
                 onPress={() => setActiveView(tab.key)}
               >
                 <Text style={[styles.navLink, activeView === tab.key && styles.navLinkActive]}>{tab.label}</Text>
               </Pressable>
             ))}
           </View>
-          <View style={styles.headerActions}>
-            <View style={[styles.headerStatusSummary, isDark && styles.headerStatusSummaryDark]}>
+          <View style={[styles.headerActions, isMobile && styles.headerActionsMobile]}>
+            <View style={[styles.headerStatusSummary, isMobile && styles.headerStatusSummaryMobile, isDark && styles.headerStatusSummaryDark]}>
               <Text style={[styles.headerStatusTitle, isDark && styles.textDark]}>{activeTripId ? 'Resan är ansluten' : 'Lokal resa'}</Text>
               <Text style={[styles.headerStatusMeta, isDark && styles.textMutedDark]} numberOfLines={1}>{statusMessage || onlineSaveLabel}</Text>
             </View>
@@ -1521,19 +1524,19 @@ export default function App() {
           </View>
         </View>
 
-        <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
-          <View style={styles.tripHero}>
+        <ScrollView style={styles.content} contentContainerStyle={[styles.contentInner, isMobile && styles.contentInnerMobile]}>
+          <View style={[styles.tripHero, isMobile && styles.tripHeroMobile]}>
             <View style={styles.heroPlaneOne} />
             <View style={styles.heroPlaneTwo} />
             <View style={styles.heroPlaneThree} />
-            <View style={styles.tripHeroCopy}>
+            <View style={[styles.tripHeroCopy, isMobile && styles.tripHeroCopyMobile]}>
               <Text style={styles.heroEyebrow}>Roadtrip 2026</Text>
               <Text style={styles.heroTitle}>{demoTrip.name}</Text>
               <Text style={styles.heroBody}>
                 Planera stopp, tider, kostnader och packning i samma vy. Allt sparas när resan är ansluten.
               </Text>
             </View>
-            <View style={styles.heroStats}>
+            <View style={[styles.heroStats, isMobile && styles.heroStatsMobile]}>
               <View style={styles.heroStat}>
                 <Text style={styles.heroStatValue}>{displayedNodes.length}</Text>
                 <Text style={styles.heroStatLabel}>Stopp</Text>
@@ -1549,7 +1552,7 @@ export default function App() {
             </View>
           </View>
 
-          <View style={styles.dashboardGrid}>
+          <View style={[styles.dashboardGrid, isMobile && styles.dashboardGridMobile]}>
             {!isDemoMode && activeView === 'tools' ? (
             <View style={styles.sidebarColumn}>
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
@@ -1643,7 +1646,7 @@ export default function App() {
             </View>
             ) : null}
 
-            <View style={styles.mainColumn}>
+            <View style={[styles.mainColumn, isMobile && styles.mainColumnMobile]}>
               {activeView === 'tools' ? (
                 <View style={[styles.panelSection, isDark && styles.panelDark]}>
                   <SectionTitle title="Verktyg" dark={isDark} />
@@ -1691,7 +1694,7 @@ export default function App() {
               ) : null}
 
               {activeView === 'route' ? (
-              <View style={styles.statsRow}>
+              <View style={[styles.statsRow, isMobile && styles.singleColumnGrid]}>
                 <Metric label="Stopp" value={`${displayedNodes.length}`} accent="#0f766e" dark={isDark} />
                 <Metric label="Rutt" value={formatDistance(routeSummary.distanceMeters)} accent="#2563eb" dark={isDark} />
                 <Metric label="Körning" value={formatDuration(routeSummary.durationSeconds)} accent="#d97706" dark={isDark} />
@@ -1705,7 +1708,7 @@ export default function App() {
                   <SectionTitle title="Reseöversikt" dark={isDark} />
                   <Text style={styles.overviewMeta}>{dayPlans.length} dagar / {displayedNodes.length} stopp</Text>
                 </View>
-                <View style={styles.overviewFocusGrid}>
+                <View style={[styles.overviewFocusGrid, isMobile && styles.singleColumnGrid]}>
                   <OverviewFocusCard
                     label="Nästa stopp"
                     title={nextNode?.title ?? 'Lägg till första stoppet'}
@@ -1745,7 +1748,7 @@ export default function App() {
                     </View>
                   </View>
                 ) : null}
-                <View style={styles.dayOverviewGrid}>
+                <View style={[styles.dayOverviewGrid, isMobile && styles.singleColumnGrid]}>
                   {dayPlans.slice(0, 3).map((dayPlan) => (
                     <DayOverviewCard key={dayPlan.key} dayPlan={dayPlan} />
                   ))}
@@ -1772,7 +1775,7 @@ export default function App() {
                     </View>
                   </View>
                 </View>
-                <View style={styles.budgetGrid}>
+                <View style={[styles.budgetGrid, isMobile && styles.singleColumnGrid]}>
                   <BudgetCard label="Totalt per person" value={costPerTraveler} detail={`${travelerCount} personer`} accent="#7c3aed" />
                   <BudgetCard label="Snitt per dag" value={costPerDay} detail={`${dayPlans.length} dagar`} accent="#0f766e" />
                   <BudgetCard label="Boende" value={budgetSummary.categories.lodging} detail={formatBudgetShare(budgetSummary.categories.lodging, totalSpend)} accent="#2563eb" />
@@ -2619,6 +2622,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#e6edf5',
   },
+  headerMobile: {
+    alignItems: 'stretch',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'column',
+  },
   headerDark: {
     backgroundColor: '#0b0b0b',
     borderBottomColor: '#242424',
@@ -2637,6 +2647,10 @@ const styles = StyleSheet.create({
   brandLockup: {
     minWidth: 230,
   },
+  brandLockupMobile: {
+    minWidth: 0,
+    width: '100%',
+  },
   navLinks: {
     flex: 1,
     flexDirection: 'row',
@@ -2645,12 +2659,23 @@ const styles = StyleSheet.create({
     gap: 8,
     flexWrap: 'wrap',
   },
+  navLinksMobile: {
+    flex: 0,
+    justifyContent: 'flex-start',
+    width: '100%',
+    gap: 6,
+  },
   navTab: {
     minHeight: 36,
     justifyContent: 'center',
     borderRadius: 999,
     paddingHorizontal: 14,
     paddingVertical: 8,
+  },
+  navTabMobile: {
+    minHeight: 32,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
   },
   navTabActive: {
     backgroundColor: '#0a2540',
@@ -2671,6 +2696,12 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     maxWidth: 500,
   },
+  headerActionsMobile: {
+    alignItems: 'stretch',
+    justifyContent: 'flex-start',
+    maxWidth: '100%',
+    width: '100%',
+  },
   headerStatusSummary: {
     minHeight: 38,
     minWidth: 190,
@@ -2682,6 +2713,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#f6f9fc',
     paddingHorizontal: 12,
     paddingVertical: 6,
+  },
+  headerStatusSummaryMobile: {
+    minWidth: 0,
+    maxWidth: '100%',
+    width: '100%',
   },
   headerStatusSummaryDark: {
     borderColor: '#334155',
@@ -2837,6 +2873,11 @@ const styles = StyleSheet.create({
     padding: 24,
     gap: 16,
   },
+  contentInnerMobile: {
+    maxWidth: '100%',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
   tripHero: {
     minHeight: 150,
     flexDirection: 'row',
@@ -2850,6 +2891,11 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#e6edf5',
     padding: 22,
+  },
+  tripHeroMobile: {
+    minHeight: 0,
+    gap: 12,
+    padding: 14,
   },
   heroPlaneOne: {
     display: 'none',
@@ -2887,6 +2933,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
   },
+  tripHeroCopyMobile: {
+    minWidth: 0,
+    width: '100%',
+  },
   heroEyebrow: {
     color: '#635bff',
     fontSize: 12,
@@ -2916,6 +2966,9 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
     justifyContent: 'center',
   },
+  heroStatsMobile: {
+    width: '100%',
+  },
   heroStat: {
     flex: 1,
     minWidth: 105,
@@ -2944,6 +2997,10 @@ const styles = StyleSheet.create({
     gap: 16,
     flexWrap: 'wrap',
   },
+  dashboardGridMobile: {
+    flexDirection: 'column',
+    gap: 12,
+  },
   sidebarColumn: {
     width: 320,
     gap: 12,
@@ -2952,6 +3009,10 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 520,
     gap: 14,
+  },
+  mainColumnMobile: {
+    minWidth: 0,
+    width: '100%',
   },
   routeStage: {
     gap: 12,
@@ -3247,6 +3308,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     flexWrap: 'wrap',
+  },
+  singleColumnGrid: {
+    flexDirection: 'column',
+    width: '100%',
   },
   budgetCard: {
     flex: 1,
