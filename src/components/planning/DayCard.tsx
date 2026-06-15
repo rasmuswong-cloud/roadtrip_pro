@@ -21,6 +21,7 @@ import {
 } from '@/services/planning/inlineEdit';
 
 type DayCardProps = {
+  availableDayTargets: DayMoveTarget[];
   dayPlan: DayPlan;
   isDark: boolean;
   isDemoMode: boolean;
@@ -44,7 +45,13 @@ type DayCardProps = {
   onInlineDraftChange: (changed: boolean) => void;
   onSaveInlineField: (node: ItineraryNode, field: InlineFieldKey, value: InlineFieldValue) => Promise<void>;
   onMoveStop: (nodeId: string, direction: -1 | 1) => Promise<void>;
+  onMoveStopToDay: (nodeId: string, targetDayKey: string) => Promise<void>;
   onRemoveStop: (nodeId: string) => Promise<void>;
+};
+
+type DayMoveTarget = {
+  key: string;
+  title: string;
 };
 
 function formatDistance(value: number): string {
@@ -417,6 +424,7 @@ function InlineEditableSelect(props: InlineEditorProps & { options: InlineOption
 
 export default function DayCard(props: DayCardProps) {
   const {
+    availableDayTargets,
     dayPlan,
     isDark,
     isDemoMode,
@@ -440,6 +448,7 @@ export default function DayCard(props: DayCardProps) {
     onInlineDraftChange,
     onSaveInlineField,
     onMoveStop,
+    onMoveStopToDay,
     onRemoveStop,
   } = props;
   const [expandedFlags, setExpandedFlags] = useState(false);
@@ -447,6 +456,7 @@ export default function DayCard(props: DayCardProps) {
   const [packingExpanded, setPackingExpanded] = useState(false);
   const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(() => new Set());
   const [openMenuNodeId, setOpenMenuNodeId] = useState<string | null>(null);
+  const [movePickerNodeId, setMovePickerNodeId] = useState<string | null>(null);
   const visibleFlags = dayPlan.smartFlags.length > 0 ? dayPlan.smartFlags : ['Ser planerad ut'];
   const displayedFlags = expandedFlags ? visibleFlags : visibleFlags.slice(0, 3);
 
@@ -589,8 +599,10 @@ export default function DayCard(props: DayCardProps) {
       {dayPlan.nodes.map((node) => {
         const detailsExpanded = expandedNodeIds.has(node.id);
         const menuOpen = openMenuNodeId === node.id;
+        const movePickerOpen = movePickerNodeId === node.id;
         const notePreview = compactNote(node.notes);
         const canEdit = itineraryNodesLength > 0 && !isDemoMode;
+        const targetDays = availableDayTargets.filter((target) => target.key !== dayPlan.key);
 
         return (
           <View key={node.id} style={[styles.timelineItem, isDark && styles.innerPanelDark]}>
@@ -732,14 +744,42 @@ export default function DayCard(props: DayCardProps) {
                             onPress={() => {
                               toggleNodeDetails(node.id);
                               setOpenMenuNodeId(null);
+                              setMovePickerNodeId(null);
                             }}
                           >
                             <Text style={styles.secondarySmallButtonText}>{detailsExpanded ? 'Dölj detaljer' : 'Visa/redigera alla detaljer'}</Text>
                           </Pressable>
                           <Pressable
+                            style={dayCardStyles.stopMenuItem}
+                            onPress={() => setMovePickerNodeId((current) => (current === node.id ? null : node.id))}
+                          >
+                            <Text style={styles.secondarySmallButtonText}>Flytta till annan dag</Text>
+                          </Pressable>
+                          {movePickerOpen ? (
+                            <View style={dayCardStyles.stopMovePanel}>
+                              {targetDays.length > 0 ? targetDays.map((target) => (
+                                <Pressable
+                                  key={target.key}
+                                  style={[dayCardStyles.stopMenuItem, isLoading && styles.disabledButton]}
+                                  onPress={() => {
+                                    setOpenMenuNodeId(null);
+                                    setMovePickerNodeId(null);
+                                    void onMoveStopToDay(node.id, target.key);
+                                  }}
+                                  disabled={isLoading}
+                                >
+                                  <Text style={styles.secondarySmallButtonText}>{target.title}</Text>
+                                </Pressable>
+                              )) : (
+                                <Text style={styles.itemMeta}>Ingen annan dag finns.</Text>
+                              )}
+                            </View>
+                          ) : null}
+                          <Pressable
                             style={dayCardStyles.stopMenuDangerItem}
                             onPress={() => {
                               setOpenMenuNodeId(null);
+                              setMovePickerNodeId(null);
                               void onRemoveStop(node.id);
                             }}
                           >

@@ -134,6 +134,12 @@ export const dayCardStyles = StyleSheet.create({
     backgroundColor: '#f6f9fc',
     paddingHorizontal: 10,
   },
+  stopMovePanel: {
+    gap: 6,
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    paddingTop: 4,
+  },
   stopMenuDangerItem: {
     minHeight: 36,
     justifyContent: 'center',

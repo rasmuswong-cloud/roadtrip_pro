@@ -99,10 +99,11 @@ export function moveNodeToDay(nodes: ItineraryNode[], nodeId: string, dayKey: st
 
   const nextSortOrder = dayNodes.length > 0 ? Math.max(...dayNodes.map((node) => node.sortOrder)) + 100 : 100;
   const startsAt = dayKey === 'unscheduled' ? null : keepTimeOnDay(movingNode.startsAt, dayKey);
+  const endsAt = dayKey === 'unscheduled' || !movingNode.endsAt ? null : keepTimeOnDay(movingNode.endsAt, dayKey);
 
   return sortItineraryNodes(nodes.map((node) => (
     node.id === nodeId
-      ? { ...node, startsAt, sortOrder: nextSortOrder, updatedAt: new Date().toISOString() }
+      ? { ...node, startsAt, endsAt, sortOrder: nextSortOrder, updatedAt: new Date().toISOString(), version: node.version + 1 }
       : node
   )));
 }

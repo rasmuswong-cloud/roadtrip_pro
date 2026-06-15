@@ -106,13 +106,45 @@ test('analyzeDayWarnings reports missing lodging, long drive, missing cost, over
 
 test('moveNodeToDay changes date and keeps stable ordering', () => {
   const moved = moveNodeToDay([
-    node({ id: 'a', startsAt: '2026-06-11T09:00:00.000Z', sortOrder: 100 }),
+    node({ id: 'a', startsAt: '2026-06-11T09:00:00.000Z', endsAt: '2026-06-11T11:30:00.000Z', sortOrder: 100 }),
     node({ id: 'b', startsAt: '2026-06-12T10:00:00.000Z', sortOrder: 100 }),
   ], 'a', '2026-06-12');
 
   const movedNode = moved.find((item) => item.id === 'a');
   assert.equal(movedNode?.startsAt?.slice(0, 10), '2026-06-12');
+  assert.equal(movedNode?.endsAt?.slice(0, 10), '2026-06-12');
   assert.equal(movedNode?.sortOrder, 200);
+  assert.equal(movedNode?.version, 2);
+});
+
+test('moveNodeToDay preserves node details and unrelated stops', () => {
+  const original = node({
+    id: 'a',
+    title: 'Museum',
+    startsAt: '2026-06-11T09:00:00.000Z',
+    sortOrder: 100,
+    reservation: { status: 'confirmed', reference: 'ABC123' },
+    location: { latitude: 46.5, longitude: 11.7 },
+    metadata: { place: 'Bolzano', cost: '450', currency: 'EUR', custom: { source: 'manual' } },
+    notes: 'Keep this note',
+  });
+  const untouched = node({ id: 'c', startsAt: '2026-06-13T10:00:00.000Z', sortOrder: 100 });
+
+  const moved = moveNodeToDay([
+    original,
+    node({ id: 'b', startsAt: '2026-06-12T10:00:00.000Z', sortOrder: 100 }),
+    untouched,
+  ], 'a', '2026-06-12');
+
+  const movedNode = moved.find((item) => item.id === 'a');
+  assert.equal(moved.length, 3);
+  assert.equal(movedNode?.title, original.title);
+  assert.equal(movedNode?.endsAt, null);
+  assert.deepEqual(movedNode?.reservation, original.reservation);
+  assert.deepEqual(movedNode?.location, original.location);
+  assert.deepEqual(movedNode?.metadata, original.metadata);
+  assert.equal(movedNode?.notes, original.notes);
+  assert.deepEqual(moved.find((item) => item.id === 'c'), untouched);
 });
 
 test('rollbackItineraryNodes restores the previous sorted snapshot', () => {

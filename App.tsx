@@ -30,7 +30,7 @@ import {
   upsertItineraryNode,
 } from '@/services/database/tripRepository';
 import { googlePlaceToPoi, searchGooglePlaces, type GooglePlace } from '@/services/google/googlePlaces';
-import { analyzeDayWarnings, summarizeDay, validatePlannerDraft, type DaySummary } from '@/services/planning/dayAnalysis';
+import { analyzeDayWarnings, moveNodeToDay, summarizeDay, validatePlannerDraft, type DaySummary } from '@/services/planning/dayAnalysis';
 import {
   applyInlineFieldUpdate,
   type ActiveInlineEdit,
@@ -331,6 +331,9 @@ export default function App() {
   const isDemoMode = !isEditMode;
   const routeSummary = useMemo(() => estimateRouteSummary(displayedNodes), [displayedNodes]);
   const dayPlans = useMemo(() => buildDayPlans(displayedNodes), [displayedNodes]);
+  const dayMoveTargets = useMemo(() => dayPlans
+    .filter((dayPlan) => dayPlan.key !== 'unscheduled')
+    .map((dayPlan) => ({ key: dayPlan.key, title: dayPlan.title })), [dayPlans]);
   const filteredDayPlans = useMemo(() => filterDayPlans(dayPlans, plannerSearchText), [dayPlans, plannerSearchText]);
   const filteredStopCount = useMemo(() => filteredDayPlans.reduce((count, dayPlan) => count + dayPlan.nodes.length, 0), [filteredDayPlans]);
   const budgetSummary = useMemo(() => buildBudgetSummary(displayedNodes), [displayedNodes]);
@@ -925,6 +928,62 @@ export default function App() {
       markOnlineSaveError();
       const message = error instanceof Error ? error.message : String(error);
       setStatusMessage(`Kunde inte flytta stoppet. Ordningen är oförändrad. ${message}`);
+    } finally {
+      movingStopIdsRef.current.delete(nodeId);
+      setIsLoading(false);
+    }
+  }
+
+  async function moveStopToDay(nodeId: string, targetDayKey: string) {
+    if (isLoading || movingStopIdsRef.current.has(nodeId)) {
+      return;
+    }
+
+    if (!activeTripId || itineraryNodes.length === 0) {
+      setStatusMessage('Anslut resan innan du flyttar stopp mellan dagar.');
+      return;
+    }
+
+    const currentNode = itineraryNodes.find((node) => node.id === nodeId);
+    if (!currentNode) {
+      setStatusMessage('Kunde inte hitta stoppet att flytta.');
+      return;
+    }
+
+    const currentDayKey = dayKeyForNode(currentNode);
+    if (currentDayKey === targetDayKey) {
+      setStatusMessage('Stoppet ligger redan på den dagen.');
+      return;
+    }
+
+    if (!dayMoveTargets.some((target) => target.key === targetDayKey)) {
+      setStatusMessage('Välj en befintlig dag i resan.');
+      return;
+    }
+
+    const movedNodes = moveNodeToDay(itineraryNodes, nodeId, targetDayKey);
+    const movedNode = movedNodes.find((node) => node.id === nodeId);
+
+    if (!movedNode) {
+      setStatusMessage('Kunde inte förbereda flytten.');
+      return;
+    }
+
+    movingStopIdsRef.current.add(nodeId);
+    rememberUndo('flytta stopp till annan dag');
+    setIsLoading(true);
+    setStatusMessage(`Flyttar ${currentNode.title} till ${formatDayKey(targetDayKey)}...`);
+
+    try {
+      const savedNode = await saveItineraryNodeOnline(movedNode);
+      setItineraryNodes((current) => sortNodes(current.map((node) => (node.id === savedNode.id ? savedNode : node))));
+      if (selectedPlannerNodeId === savedNode.id) {
+        populatePlannerEditor(savedNode);
+      }
+      setStatusMessage(`Flyttade ${savedNode.title} till ${formatDayKey(targetDayKey)}.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setStatusMessage(`Kunde inte flytta stoppet. Planen är oförändrad. ${message}`);
     } finally {
       movingStopIdsRef.current.delete(nodeId);
       setIsLoading(false);
@@ -1847,6 +1906,7 @@ export default function App() {
                 {filteredDayPlans.map((dayPlan) => (
                   <DayCard
                     key={dayPlan.key}
+                    availableDayTargets={dayMoveTargets}
                     dayPlan={dayPlan}
                     isDark={isDark}
                     isDemoMode={isDemoMode}
@@ -1870,6 +1930,7 @@ export default function App() {
                     onInlineDraftChange={setActiveInlineDraftChanged}
                     onSaveInlineField={saveInlineField}
                     onMoveStop={moveStop}
+                    onMoveStopToDay={moveStopToDay}
                     onRemoveStop={removeStop}
                   />
                 ))}
