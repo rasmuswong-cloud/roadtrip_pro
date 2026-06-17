@@ -5,6 +5,7 @@ import { dayCardStyles } from './DayCard.styles';
 
 import type { DayChecklistItem, DayPlan } from '@/models';
 import type { ItineraryNode } from '@/models';
+import type { GooglePlace } from '@/services/google/googlePlaces';
 import {
   displayInlineFieldValue,
   formatBookingStatus,
@@ -28,6 +29,10 @@ type DayCardProps = {
   isLoading: boolean;
   activeInlineEdit: ActiveInlineEdit;
   inlineEditMessage: string | null;
+  coordinateSearchNodeId: string | null;
+  coordinateSearchQuery: string;
+  coordinateSearchResults: GooglePlace[];
+  coordinateSearchMessage: string | null;
   itineraryNodesLength: number;
   packingDraft: string;
   draftPlannerDayKey: string | null;
@@ -44,6 +49,11 @@ type DayCardProps = {
   onClearInlineEdit: () => void;
   onInlineDraftChange: (changed: boolean) => void;
   onSaveInlineField: (node: ItineraryNode, field: InlineFieldKey, value: InlineFieldValue) => Promise<void>;
+  onStartCoordinateSearch: (node: ItineraryNode) => void;
+  onChangeCoordinateSearchQuery: (text: string) => void;
+  onSearchCoordinatePlace: (node: ItineraryNode) => Promise<void>;
+  onSelectCoordinatePlace: (node: ItineraryNode, place: GooglePlace) => Promise<void>;
+  onCancelCoordinateSearch: () => void;
   onMoveStop: (nodeId: string, direction: -1 | 1) => Promise<void>;
   onMoveStopToDay: (nodeId: string, targetDayKey: string) => Promise<void>;
   onRemoveStop: (nodeId: string) => Promise<void>;
@@ -257,9 +267,6 @@ function InlineEditableCore(props: InlineEditorProps & { multiline: boolean }) {
   }
 
   if (!isActive) {
-    const warning = field === 'place' && inlineFieldValue(node, 'place') && node.location
-      ? 'Platsnamnet Ã¤ndras, men befintliga kartkoordinater behÃ¥lls. Kontrollera kartpositionen.'
-      : null;
     return (
       <Pressable
         style={[dayCardStyles.inlineDisplayField, inactiveStyle, disabled && styles.disabledButton]}
@@ -268,7 +275,6 @@ function InlineEditableCore(props: InlineEditorProps & { multiline: boolean }) {
       >
         {showInactiveLabel ? <Text style={[dayCardStyles.inlineDisplayLabel, isDark && styles.textMutedDark]}>{label}</Text> : null}
         <Text style={[dayCardStyles.inlineDisplayValue, isDark && styles.textDark, inactiveValueStyle]}>{displayInlineFieldValue(node, field)}</Text>
-        {warning ? <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>{warning}</Text> : null}
       </Pressable>
     );
   }
@@ -431,6 +437,10 @@ export default function DayCard(props: DayCardProps) {
     isLoading,
     activeInlineEdit,
     inlineEditMessage,
+    coordinateSearchNodeId,
+    coordinateSearchQuery,
+    coordinateSearchResults,
+    coordinateSearchMessage,
     itineraryNodesLength,
     packingDraft,
     draftPlannerDayKey,
@@ -447,6 +457,11 @@ export default function DayCard(props: DayCardProps) {
     onClearInlineEdit,
     onInlineDraftChange,
     onSaveInlineField,
+    onStartCoordinateSearch,
+    onChangeCoordinateSearchQuery,
+    onSearchCoordinatePlace,
+    onSelectCoordinatePlace,
+    onCancelCoordinateSearch,
     onMoveStop,
     onMoveStopToDay,
     onRemoveStop,
@@ -603,6 +618,8 @@ export default function DayCard(props: DayCardProps) {
         const notePreview = compactNote(node.notes);
         const canEdit = itineraryNodesLength > 0 && !isDemoMode;
         const targetDays = availableDayTargets.filter((target) => target.key !== dayPlan.key);
+        const showCoordinatePrompt = canEdit && Boolean(node.location && inlineFieldValue(node, 'place'));
+        const coordinateSearchOpen = coordinateSearchNodeId === node.id;
 
         return (
           <View key={node.id} style={[styles.timelineItem, isDark && styles.innerPanelDark]}>
@@ -703,6 +720,65 @@ export default function DayCard(props: DayCardProps) {
                       <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>{displayInlineFieldValue(node, 'place')}</Text>
                     )}
                   </View>
+                  {showCoordinatePrompt ? (
+                    <View style={styles.coordinateWarningBox}>
+                      <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
+                        Platsnamnet kan ha ändrats, men kartkoordinaterna behålls tills du väljer en ny plats.
+                      </Text>
+                      <Pressable
+                        style={[styles.secondarySmallButton, isLoading && styles.disabledButton]}
+                        onPress={() => onStartCoordinateSearch(node)}
+                        disabled={isLoading}
+                      >
+                        <Text style={styles.secondarySmallButtonText}>Sök ny plats</Text>
+                      </Pressable>
+                    </View>
+                  ) : null}
+                  {coordinateSearchOpen ? (
+                    <View style={[styles.coordinateSearchPanel, isDark && styles.innerPanelDark]}>
+                      <View style={styles.actionRow}>
+                        <TextInput
+                          value={coordinateSearchQuery}
+                          onChangeText={onChangeCoordinateSearchQuery}
+                          placeholder="Sök kartposition"
+                          placeholderTextColor={isDark ? '#737373' : '#78716c'}
+                          style={[styles.coordinateSearchInput, isDark && styles.inputDark]}
+                        />
+                        <Pressable
+                          style={[styles.smallButton, isLoading && styles.disabledButton]}
+                          onPress={() => void onSearchCoordinatePlace(node)}
+                          disabled={isLoading}
+                        >
+                          <Text style={styles.smallButtonText}>Sök</Text>
+                        </Pressable>
+                        <Pressable style={styles.secondarySmallButton} onPress={onCancelCoordinateSearch} disabled={isLoading}>
+                          <Text style={styles.secondarySmallButtonText}>Avbryt</Text>
+                        </Pressable>
+                      </View>
+                      {coordinateSearchMessage ? <Text style={styles.validationText}>{coordinateSearchMessage}</Text> : null}
+                      {coordinateSearchResults.length > 0 ? (
+                        <View style={styles.placeResultList}>
+                          {coordinateSearchResults.map((place) => (
+                            <View key={place.id} style={[styles.placeItem, isDark && styles.innerPanelDark]}>
+                              <View style={styles.timelineCopy}>
+                                <Text style={[styles.itemTitle, isDark && styles.textDark]}>{place.displayName?.text ?? 'Namnlös plats'}</Text>
+                                <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
+                                  {[place.formattedAddress, place.rating ? `${place.rating} i betyg` : null, place.primaryType].filter(Boolean).join(' / ')}
+                                </Text>
+                              </View>
+                              <Pressable
+                                style={[styles.smallButton, isLoading && styles.disabledButton]}
+                                onPress={() => void onSelectCoordinatePlace(node, place)}
+                                disabled={isLoading}
+                              >
+                                <Text style={styles.smallButtonText}>Välj</Text>
+                              </Pressable>
+                            </View>
+                          ))}
+                        </View>
+                      ) : null}
+                    </View>
+                  ) : null}
                 </View>
 
                 <View style={dayCardStyles.stopRightRail}>

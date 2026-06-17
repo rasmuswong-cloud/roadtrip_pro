@@ -8,6 +8,7 @@ import {
   shouldSaveInlineField,
   validateInlineFieldValue,
 } from '../src/services/planning/inlineEdit';
+import { applyGooglePlaceCoordinateUpdate } from '../src/services/planning/placeCoordinateUpdate';
 
 function node(overrides: Partial<ItineraryNode> = {}): ItineraryNode {
   const now = '2026-06-11T09:00:00.000Z';
@@ -52,6 +53,33 @@ test('place can be saved without changing coordinates', () => {
   const updated = applyInlineFieldUpdate(original, 'place', 'Prag');
   assert.equal(updated.metadata.place, 'Prag');
   assert.deepEqual(updated.location, original.location);
+});
+
+test('google place selection updates coordinates while preserving stop details', () => {
+  const original = node();
+  const updated = applyGooglePlaceCoordinateUpdate(original, {
+    id: 'places/prague-castle',
+    displayName: { text: 'Prague Castle' },
+    formattedAddress: 'Hradcany, Prague',
+    location: { latitude: 50.0909, longitude: 14.4005 },
+    primaryType: 'tourist_attraction',
+  }, 'poi-1', '2026-06-12T10:00:00.000Z');
+
+  assert.equal(updated.title, original.title);
+  assert.equal(updated.type, original.type);
+  assert.equal(updated.startsAt, original.startsAt);
+  assert.equal(updated.endsAt, original.endsAt);
+  assert.equal(updated.notes, original.notes);
+  assert.deepEqual(updated.reservation, original.reservation);
+  assert.equal(updated.metadata.cost, original.metadata.cost);
+  assert.equal(updated.metadata.currency, original.metadata.currency);
+  assert.equal(updated.metadata.bookingStatus, original.metadata.bookingStatus);
+  assert.deepEqual(updated.location, { latitude: 50.0909, longitude: 14.4005 });
+  assert.equal(updated.poiId, 'poi-1');
+  assert.equal(updated.metadata.place, 'Prague Castle');
+  assert.equal(updated.metadata.address, 'Hradcany, Prague');
+  assert.equal(updated.metadata.externalRef, 'places/prague-castle');
+  assert.equal(updated.version, original.version + 1);
 });
 
 test('date validates and preserves time information', () => {

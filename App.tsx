@@ -40,6 +40,7 @@ import {
   type InlineFieldKey,
   type InlineFieldValue,
 } from '@/services/planning/inlineEdit';
+import { applyGooglePlaceCoordinateUpdate } from '@/services/planning/placeCoordinateUpdate';
 import { estimateRouteSummary } from '@/services/routing/routeEstimate';
 import { useTripStore } from '@/store/tripStore';
 import { formatDistance, formatDuration } from '@/utils/formatters';
@@ -325,6 +326,10 @@ export default function App() {
   const [activeInlineEdit, setActiveInlineEdit] = useState<ActiveInlineEdit>(null);
   const [activeInlineDraftChanged, setActiveInlineDraftChanged] = useState(false);
   const [inlineEditMessage, setInlineEditMessage] = useState<string | null>(null);
+  const [coordinateSearchNodeId, setCoordinateSearchNodeId] = useState<string | null>(null);
+  const [coordinateSearchQuery, setCoordinateSearchQuery] = useState('');
+  const [coordinateSearchResults, setCoordinateSearchResults] = useState<GooglePlace[]>([]);
+  const [coordinateSearchMessage, setCoordinateSearchMessage] = useState<string | null>(null);
   const { activeTripId, setActiveTrip, upsertTrip, upsertPoi: upsertPoiInStore } = useTripStore();
 
   const displayedNodes = itineraryNodes.length > 0 ? itineraryNodes : demoNodes;
@@ -1211,6 +1216,100 @@ export default function App() {
     }
   }
 
+  function startCoordinateSearch(node: ItineraryNode) {
+    if (isDemoMode || isLoading) {
+      return;
+    }
+
+    clearInlineEdit();
+    setCoordinateSearchNodeId(node.id);
+    setCoordinateSearchQuery(inlineFieldValue(node, 'place') || node.title);
+    setCoordinateSearchResults([]);
+    setCoordinateSearchMessage(null);
+  }
+
+  function cancelCoordinateSearch() {
+    if (isLoading) {
+      return;
+    }
+
+    setCoordinateSearchNodeId(null);
+    setCoordinateSearchQuery('');
+    setCoordinateSearchResults([]);
+    setCoordinateSearchMessage(null);
+  }
+
+  async function searchCoordinatePlace(node: ItineraryNode) {
+    if (!coordinateSearchQuery.trim()) {
+      setCoordinateSearchMessage('Skriv en plats att söka efter.');
+      return;
+    }
+
+    setIsLoading(true);
+    setCoordinateSearchMessage(null);
+    setStatusMessage(`Söker kartposition för ${node.title}...`);
+
+    try {
+      const searchInput = {
+        query: coordinateSearchQuery.trim(),
+        radiusMeters: 30_000,
+        languageCode: 'sv',
+        ...(node.location ? { center: node.location } : {}),
+      };
+      const results = await searchGooglePlaces(searchInput);
+
+      setCoordinateSearchResults(results);
+      setCoordinateSearchMessage(results.length > 0 ? null : 'Inga platser hittades. Prova en mer specifik sökning.');
+      setStatusMessage(results.length > 0 ? `Hittade ${results.length} platser.` : 'Inga platser hittades.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setCoordinateSearchMessage(message || 'Kunde inte söka platser.');
+      setStatusMessage(message || 'Kunde inte söka platser.');
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function selectCoordinatePlace(node: ItineraryNode, place: GooglePlace) {
+    if (!activeTripId || !userId) {
+      setCoordinateSearchMessage('Tryck Anslut innan du uppdaterar kartpositionen.');
+      return;
+    }
+
+    const poi = googlePlaceToPoi(place, activeTripId, userId);
+    if (!poi) {
+      setCoordinateSearchMessage('Den valda platsen saknar koordinater.');
+      return;
+    }
+
+    rememberUndo('uppdatera kartposition');
+    setIsLoading(true);
+    setCoordinateSearchMessage(null);
+    setStatusMessage(`Uppdaterar kartposition för ${node.title}...`);
+
+    try {
+      const savedPoi = await upsertPoi(poi);
+      const savedNode = await saveItineraryNodeOnline(applyGooglePlaceCoordinateUpdate(node, place, savedPoi.id));
+
+      upsertPoiInStore(savedPoi);
+      setItineraryNodes((current) => sortNodes(current.map((candidate) => (candidate.id === savedNode.id ? savedNode : candidate))));
+      if (selectedPlannerNodeId === savedNode.id) {
+        populatePlannerEditor(savedNode);
+      }
+      setCoordinateSearchNodeId(null);
+      setCoordinateSearchQuery('');
+      setCoordinateSearchResults([]);
+      setCoordinateSearchMessage(null);
+      setStatusMessage(`Kartposition uppdaterad: ${savedPoi.name}.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setCoordinateSearchMessage(message || 'Kunde inte uppdatera kartpositionen.');
+      setStatusMessage(message || 'Kunde inte uppdatera kartpositionen.');
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   function startInlineEdit(nodeId: string, field: InlineFieldKey): boolean {
     if (isDemoMode || isLoading || inlineSaveInFlightRef.current) {
       return false;
@@ -1913,6 +2012,10 @@ export default function App() {
                     isLoading={isLoading}
                     activeInlineEdit={activeInlineEdit}
                     inlineEditMessage={inlineEditMessage}
+                    coordinateSearchNodeId={coordinateSearchNodeId}
+                    coordinateSearchQuery={coordinateSearchQuery}
+                    coordinateSearchResults={coordinateSearchResults}
+                    coordinateSearchMessage={coordinateSearchMessage}
                     itineraryNodesLength={itineraryNodes.length}
                     packingDraft={packingDraftByDay[dayPlan.key] ?? ''}
                     draftPlannerDayKey={draftPlannerDayKey}
@@ -1929,6 +2032,11 @@ export default function App() {
                     onClearInlineEdit={clearInlineEdit}
                     onInlineDraftChange={setActiveInlineDraftChanged}
                     onSaveInlineField={saveInlineField}
+                    onStartCoordinateSearch={startCoordinateSearch}
+                    onChangeCoordinateSearchQuery={setCoordinateSearchQuery}
+                    onSearchCoordinatePlace={searchCoordinatePlace}
+                    onSelectCoordinatePlace={selectCoordinatePlace}
+                    onCancelCoordinateSearch={cancelCoordinateSearch}
                     onMoveStop={moveStop}
                     onMoveStopToDay={moveStopToDay}
                     onRemoveStop={removeStop}
@@ -3659,6 +3767,36 @@ const styles = StyleSheet.create({
   },
   placeResultList: {
     gap: 8,
+  },
+  coordinateWarningBox: {
+    alignItems: 'flex-start',
+    gap: 8,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#ffe3a3',
+    backgroundColor: '#fff9eb',
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
+  coordinateSearchPanel: {
+    gap: 10,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d7e1ea',
+    backgroundColor: '#ffffff',
+    padding: 10,
+  },
+  coordinateSearchInput: {
+    minHeight: 40,
+    minWidth: 180,
+    flex: 1,
+    color: '#0a2540',
+    fontSize: 13,
+    backgroundColor: '#f6f9fc',
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d7e1ea',
+    paddingHorizontal: 12,
   },
   dayInsightGrid: {
     flexDirection: 'row',
