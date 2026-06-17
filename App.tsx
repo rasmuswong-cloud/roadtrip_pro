@@ -96,63 +96,17 @@ const demoTrip: Trip = {
   version: 1,
 };
 
-const demoNodes: ItineraryNode[] = [
-  {
-    id: '33333333-3333-4333-8333-333333333333',
-    tripId: demoTrip.id,
-    createdBy: demoTrip.ownerId,
-    type: 'lodging',
-    title: 'Natt i München',
-    startsAt: new Date().toISOString(),
-    endsAt: null,
-    timezone: 'Europe/Berlin',
-    location: { latitude: 48.1374, longitude: 11.5755 },
-    sortOrder: 10,
-    transportMode: 'driving',
-    reservation: { provider: 'Hotel', reference: 'DEMO-001' },
-    equipment: [],
-    facilities: {},
-    metadata: {},
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    deletedAt: null,
-    version: 1,
-  },
-  {
-    id: '44444444-4444-4444-8444-444444444444',
-    tripId: demoTrip.id,
-    createdBy: demoTrip.ownerId,
-    type: 'camping',
-    title: 'Camping i Cortina',
-    startsAt: new Date(Date.now() + 86_400_000).toISOString(),
-    endsAt: null,
-    timezone: 'Europe/Rome',
-    location: { latitude: 46.5405, longitude: 12.1357 },
-    sortOrder: 20,
-    transportMode: 'driving',
-    reservation: { siteNumber: 'Ej klart', accessDetails: 'Bekräfta ankomsttid före avresa.' },
-    equipment: [{ name: 'E-MTB-hyra', quantity: 2 }],
-    facilities: { showers: true, electricity: true, water: true },
-    metadata: {},
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    deletedAt: null,
-    version: 1,
-  },
-];
+const demoNodes: ItineraryNode[] = reseplanrareSeedRows.map((row) => buildDemoNodeFromSeedRow(row));
 
 const demoRoute: RouteSummary = {
-  distanceMeters: 304_000,
-  durationSeconds: 12_600,
+  distanceMeters: 1_920_000,
+  durationSeconds: 76_800,
   provider: 'mapbox',
   geometry: {
     type: 'LineString',
-    coordinates: [
-      [11.5755, 48.1374],
-      [11.7041, 47.8824],
-      [11.3922, 47.2692],
-      [12.1357, 46.5405],
-    ],
+    coordinates: reseplanrareSeedRows
+      .filter((row) => row.location)
+      .map((row) => [row.location!.longitude, row.location!.latitude]),
   },
   instructions: [],
 };
@@ -1663,24 +1617,48 @@ export default function App() {
     setStatusMessage('Laddar resplan...');
 
     try {
-      const existingRows = new Set(
-        itineraryNodes
-          .map((node) => (typeof node.metadata.sourceRow === 'number' ? node.metadata.sourceRow : null))
-          .filter((sourceRow): sourceRow is number => sourceRow !== null),
-      );
-      const rowsToImport = reseplanrareSeedRows.filter((row) => !existingRows.has(row.sourceRow));
-
-      if (rowsToImport.length === 0) {
+      const seedRowsById = new Map(reseplanrareSeedRows.map((row) => [row.sourceRow, row]));
+      const existingImportedNodes = itineraryNodes.filter((node) => node.metadata.source === 'reseplanrare.xlsx');
+      const existingNodesByRow = new Map(existingImportedNodes
+        .map((node) => [typeof node.metadata.sourceRow === 'number' ? node.metadata.sourceRow : null, node] as const)
+        .filter((entry): entry is readonly [number, ItineraryNode] => entry[0] !== null));
+      if (reseplanrareSeedRows.length === 0) {
         setStatusMessage('Resplanen är redan laddad.');
         return;
       }
 
       const importedNodes: ItineraryNode[] = [];
-      for (const row of rowsToImport) {
-        importedNodes.push(await saveItineraryNodeOnline(buildNodeFromSeedRow(row, activeTripId, userId)));
+      for (const row of reseplanrareSeedRows) {
+        const existingNode = existingNodesByRow.get(row.sourceRow);
+        const nextNode = existingNode
+          ? applySeedRowToExistingNode(existingNode, row)
+          : buildNodeFromSeedRow(row, activeTripId, userId);
+        importedNodes.push(await saveItineraryNodeOnline(nextNode));
       }
 
-      setItineraryNodes((current) => sortNodes([...current, ...importedNodes]));
+      const now = new Date().toISOString();
+      const obsoleteNodes = existingImportedNodes
+        .filter((node) => {
+          const sourceRow = typeof node.metadata.sourceRow === 'number' ? node.metadata.sourceRow : null;
+          return sourceRow !== null && !seedRowsById.has(sourceRow);
+        })
+        .map((node) => ({
+          ...node,
+          deletedAt: now,
+          updatedAt: now,
+          version: node.version + 1,
+        }));
+
+      for (const node of obsoleteNodes) {
+        await saveItineraryNodeOnline(node);
+      }
+
+      const importedNodeIds = new Set(importedNodes.map((node) => node.id));
+      const obsoleteNodeIds = new Set(obsoleteNodes.map((node) => node.id));
+      setItineraryNodes((current) => sortNodes([
+        ...current.filter((node) => !importedNodeIds.has(node.id) && !obsoleteNodeIds.has(node.id)),
+        ...importedNodes,
+      ]));
       setStatusMessage(`Laddade ${importedNodes.length} steg till dagplaneringen. Idéplatser sparade: ${reseplanrareIdeaPlaces.length}.`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
@@ -2795,10 +2773,10 @@ function formatDayKey(dayKey: string): string {
 
 function buildNodeFromSeedRow(row: ReseplanrareSeedRow, tripId: string, userId: string): ItineraryNode {
   const now = new Date().toISOString();
-  const title = row.activity ? row.activity : row.hotel ? row.hotel : row.place;
+  const title = titleFromSeedRow(row);
   const startsAt = row.date ? new Date(`${row.date}T09:00:00`).toISOString() : null;
   const costParts = [row.lodgingCost, row.activityCost].filter(Boolean);
-  const notes = row.activity && row.place !== row.activity ? row.place : null;
+  const notes = notesFromSeedRow(row);
 
   return {
     id: cryptoRandomId(),
@@ -2820,6 +2798,10 @@ function buildNodeFromSeedRow(row: ReseplanrareSeedRow, tripId: string, userId: 
       source: 'reseplanrare.xlsx',
       sourceRow: row.sourceRow,
       place: row.place,
+      externalRef: row.googlePlaceId ?? null,
+      website: row.website ?? null,
+      phone: row.phone ?? null,
+      email: row.email ?? null,
       lodgingCostSek: row.lodgingCost ?? null,
       activityCostSek: row.activityCost ?? null,
       cost: costParts.join(' + '),
@@ -2829,6 +2811,60 @@ function buildNodeFromSeedRow(row: ReseplanrareSeedRow, tripId: string, userId: 
     deletedAt: null,
     version: 1,
   };
+}
+
+function applySeedRowToExistingNode(node: ItineraryNode, row: ReseplanrareSeedRow): ItineraryNode {
+  const seedNode = buildNodeFromSeedRow(row, node.tripId, node.createdBy);
+  const nextMetadata = {
+    ...node.metadata,
+    ...seedNode.metadata,
+  };
+  const notes = row.notes ?? node.notes ?? seedNode.notes;
+
+  return {
+    ...node,
+    type: seedNode.type,
+    title: seedNode.title,
+    notes: notes ?? null,
+    startsAt: node.startsAt ?? seedNode.startsAt ?? null,
+    endsAt: node.endsAt ?? seedNode.endsAt ?? null,
+    timezone: node.timezone ?? seedNode.timezone ?? null,
+    location: seedNode.location ?? null,
+    sortOrder: seedNode.sortOrder,
+    transportMode: node.transportMode ?? seedNode.transportMode ?? null,
+    reservation: {
+      ...node.reservation,
+      ...seedNode.reservation,
+    },
+    metadata: nextMetadata,
+    updatedAt: new Date().toISOString(),
+    deletedAt: null,
+    version: node.version + 1,
+  };
+}
+
+function buildDemoNodeFromSeedRow(row: ReseplanrareSeedRow): ItineraryNode {
+  const createdAt = '2026-06-01T00:00:00.000Z';
+  return {
+    ...buildNodeFromSeedRow(row, demoTrip.id, demoTrip.ownerId),
+    id: `00000000-0000-4000-8000-${String(row.sourceRow).padStart(12, '0')}`,
+    createdAt,
+    updatedAt: createdAt,
+    version: 1,
+  };
+}
+
+function titleFromSeedRow(row: ReseplanrareSeedRow): string {
+  return row.title ?? row.activity ?? row.hotel ?? row.place;
+}
+
+function notesFromSeedRow(row: ReseplanrareSeedRow): string | null {
+  if (row.notes) {
+    return row.notes;
+  }
+
+  const title = titleFromSeedRow(row);
+  return row.place !== title ? row.place : null;
 }
 
 function formatTime(value?: string | null): string {
