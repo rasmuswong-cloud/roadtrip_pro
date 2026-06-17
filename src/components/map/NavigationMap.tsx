@@ -15,6 +15,7 @@ type NavigationMapProps = {
   nodes: ItineraryNode[];
   activeRoute?: RouteSummary | null;
   followUser?: boolean;
+  compact?: boolean;
   onUserLocationChange?: (coordinates: Coordinates) => void;
 };
 
@@ -22,6 +23,7 @@ export function NavigationMap({
   nodes,
   activeRoute,
   followUser = true,
+  compact = false,
   onUserLocationChange,
 }: NavigationMapProps) {
   const [userLocation, setUserLocation] = useState<Coordinates | null>(null);
@@ -98,7 +100,7 @@ export function NavigationMap({
     : nodeFeatures.features[0]?.geometry.coordinates;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, compact && styles.compactContainer]}>
       <Mapbox.MapView style={styles.map} styleURL={Mapbox.StyleURL.Outdoors}>
         {cameraCenter ? (
           <Mapbox.Camera
@@ -156,6 +158,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000000',
+  },
+  compactContainer: {
+    minHeight: 220,
   },
   map: {
     flex: 1,

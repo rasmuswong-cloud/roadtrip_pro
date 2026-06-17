@@ -7,6 +7,7 @@ type NavigationMapProps = {
   nodes: ItineraryNode[];
   activeRoute?: RouteSummary | null;
   followUser?: boolean;
+  compact?: boolean;
   onUserLocationChange?: (coordinates: Coordinates) => void;
 };
 
@@ -39,7 +40,7 @@ declare global {
 
 const googleMapsApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
 
-export function NavigationMap({ nodes }: NavigationMapProps) {
+export function NavigationMap({ nodes, compact = false }: NavigationMapProps) {
   const mapElementRef = useRef<HTMLElement | null>(null);
   const mapRef = useRef<GoogleMapInstance | null>(null);
   const markerRefs = useRef<GoogleMarkerInstance[]>([]);
@@ -100,20 +101,20 @@ export function NavigationMap({ nodes }: NavigationMapProps) {
   }, []);
 
   if (viewport.state === 'empty') {
-    return <MapFallback title="Saknar koordinater för kartvisning" detail="Lägg till eller uppdatera kartpositioner för stoppen." />;
+    return <MapFallback compact={compact} title="Saknar koordinater för kartvisning" detail="Lägg till eller uppdatera kartpositioner för stoppen." />;
   }
 
   if (loadState === 'missing-key') {
-    return <MapFallback title="Google Maps är inte konfigurerat" detail="Lägg till EXPO_PUBLIC_GOOGLE_MAPS_API_KEY eller återanvänd Places-nyckeln." />;
+    return <MapFallback compact={compact} title="Google Maps är inte konfigurerat" detail="Lägg till EXPO_PUBLIC_GOOGLE_MAPS_API_KEY eller återanvänd Places-nyckeln." />;
   }
 
   if (loadState === 'error') {
-    return <MapFallback title="Kartan kunde inte laddas" detail="Kontrollera Google Maps-nyckeln och försök igen." />;
+    return <MapFallback compact={compact} title="Kartan kunde inte laddas" detail="Kontrollera Google Maps-nyckeln och försök igen." />;
   }
 
   return (
-    <View style={styles.container}>
-      <View ref={mapElementRef as never} style={styles.map} />
+    <View style={[styles.container, compact && styles.compactContainer]}>
+      <View ref={mapElementRef as never} style={[styles.map, compact && styles.compactMap]} />
       {loadState !== 'ready' ? (
         <View style={styles.loadingOverlay}>
           <Text style={styles.loadingText}>Laddar karta...</Text>
@@ -123,9 +124,9 @@ export function NavigationMap({ nodes }: NavigationMapProps) {
   );
 }
 
-function MapFallback({ title, detail }: { title: string; detail: string }) {
+function MapFallback({ compact, title, detail }: { compact: boolean; title: string; detail: string }) {
   return (
-    <View style={styles.fallback}>
+    <View style={[styles.fallback, compact && styles.compactFallback]}>
       <Text style={styles.fallbackTitle}>{title}</Text>
       <Text style={styles.fallbackText}>{detail}</Text>
     </View>
@@ -206,6 +207,12 @@ const styles = StyleSheet.create({
     minHeight: 320,
     width: '100%',
   },
+  compactContainer: {
+    minHeight: 220,
+  },
+  compactMap: {
+    minHeight: 220,
+  },
   loadingOverlay: {
     position: 'absolute',
     left: 12,
@@ -228,6 +235,9 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: '#f6f9fc',
     padding: 18,
+  },
+  compactFallback: {
+    minHeight: 220,
   },
   fallbackTitle: {
     color: '#0a2540',

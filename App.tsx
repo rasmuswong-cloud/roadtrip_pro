@@ -32,6 +32,12 @@ import {
 import { googlePlaceToPoi, searchGooglePlaces, type GooglePlace } from '@/services/google/googlePlaces';
 import { analyzeDayWarnings, moveNodeToDay, summarizeDay, validatePlannerDraft, type DaySummary } from '@/services/planning/dayAnalysis';
 import {
+  formatBulkCoordinateSummary,
+  getBulkCoordinateCandidates,
+  summarizeBulkCoordinateOutcomes,
+  type BulkCoordinateOutcome,
+} from '@/services/planning/bulkCoordinateUpdate';
+import {
   applyInlineFieldUpdate,
   type ActiveInlineEdit,
   inlineFieldLabel,
@@ -1310,6 +1316,74 @@ export default function App() {
     }
   }
 
+  async function updateMissingCoordinatesForAllStops() {
+    if (isDemoMode || isLoading || !activeTripId || !userId) {
+      setStatusMessage('Anslut resan innan du uppdaterar kartpositioner.');
+      return;
+    }
+
+    const candidates = getBulkCoordinateCandidates(itineraryNodes);
+    if (candidates.length === 0) {
+      setStatusMessage(formatBulkCoordinateSummary({ attempted: 0, updated: 0, notFound: 0, failed: 0 }));
+      return;
+    }
+
+    rememberUndo('uppdatera kartpositioner');
+    setIsLoading(true);
+    const outcomes: BulkCoordinateOutcome[] = [];
+
+    try {
+      for (let index = 0; index < candidates.length; index += 1) {
+        const candidate = candidates[index]!;
+        setStatusMessage(`Uppdaterar ${index + 1} av ${candidates.length} stopp...`);
+
+        try {
+          const results = await searchGooglePlaces({
+            query: candidate.query,
+            languageCode: 'sv',
+            maxResultCount: 1,
+          });
+          const place = results.find((result) => {
+            const latitude = result.location?.latitude;
+            const longitude = result.location?.longitude;
+            return typeof latitude === 'number' && typeof longitude === 'number';
+          });
+
+          if (!place) {
+            outcomes.push({ nodeId: candidate.node.id, status: 'not_found' });
+            continue;
+          }
+
+          const poi = googlePlaceToPoi(place, activeTripId, userId);
+          if (!poi) {
+            outcomes.push({ nodeId: candidate.node.id, status: 'not_found' });
+            continue;
+          }
+
+          const savedPoi = await upsertPoi(poi);
+          const savedNode = await saveItineraryNodeOnline(applyGooglePlaceCoordinateUpdate(candidate.node, place, savedPoi.id));
+
+          upsertPoiInStore(savedPoi);
+          setItineraryNodes((current) => sortNodes(current.map((node) => (node.id === savedNode.id ? savedNode : node))));
+          if (selectedPlannerNodeId === savedNode.id) {
+            populatePlannerEditor(savedNode);
+          }
+          outcomes.push({ nodeId: candidate.node.id, status: 'updated' });
+        } catch (error) {
+          outcomes.push({
+            nodeId: candidate.node.id,
+            status: 'failed',
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      setStatusMessage(formatBulkCoordinateSummary(summarizeBulkCoordinateOutcomes(candidates.length, outcomes)));
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   function startInlineEdit(nodeId: string, field: InlineFieldKey): boolean {
     if (isDemoMode || isLoading || inlineSaveInFlightRef.current) {
       return false;
@@ -1818,8 +1892,19 @@ export default function App() {
                     <Text style={styles.routeStageKicker}>Interaktiv ruttkarta</Text>
                     <Text style={styles.routeStageTitle}>Ruttkarta</Text>
                   </View>
-                  <View style={styles.routeBadge}>
-                    <Text style={styles.routeBadgeText}>{displayedNodes.length} stopp</Text>
+                  <View style={styles.routeHeaderActions}>
+                    {!isDemoMode ? (
+                      <Pressable
+                        style={[styles.routeActionButton, isLoading && styles.disabledButton]}
+                        onPress={() => void updateMissingCoordinatesForAllStops()}
+                        disabled={isLoading}
+                      >
+                        <Text style={styles.routeActionButtonText}>Fyll i kartpositioner</Text>
+                      </Pressable>
+                    ) : null}
+                    <View style={styles.routeBadge}>
+                      <Text style={styles.routeBadgeText}>{displayedNodes.length} stopp</Text>
+                    </View>
                   </View>
                 </View>
                 <View style={styles.mapShell}>
@@ -1885,6 +1970,31 @@ export default function App() {
                     detail={budgetSummary.missingCostCount > 0 ? `${budgetSummary.missingCostCount} stopp saknar kostnad` : `${formatSek(costPerTraveler)} per person`}
                     accent={budgetSummary.missingCostCount > 0 ? '#d97706' : '#0f766e'}
                   />
+                </View>
+                <View style={styles.overviewMapCard}>
+                  <View style={styles.overviewMapHeader}>
+                    <View>
+                      <Text style={styles.overviewMapKicker}>Kartpreview</Text>
+                      <Text style={styles.overviewMapTitle}>Resan på kartan</Text>
+                    </View>
+                    <View style={styles.overviewMapActions}>
+                      {!isDemoMode ? (
+                        <Pressable
+                          style={[styles.secondarySmallButton, isLoading && styles.disabledButton]}
+                          onPress={() => void updateMissingCoordinatesForAllStops()}
+                          disabled={isLoading}
+                        >
+                          <Text style={styles.secondarySmallButtonText}>Fyll i kartpositioner</Text>
+                        </Pressable>
+                      ) : null}
+                      <Pressable style={styles.smallButton} onPress={() => setActiveView('route')}>
+                        <Text style={styles.smallButtonText}>Visa hela kartan</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                  <View style={styles.overviewMapShell}>
+                    <NavigationMap nodes={displayedNodes} activeRoute={routeSummary.geometry ? routeSummary : demoRoute} followUser={false} compact />
+                  </View>
                 </View>
                 {nextDayPlan ? (
                   <View style={styles.overviewNextPanel}>
@@ -3198,7 +3308,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
+    flexWrap: 'wrap',
     paddingHorizontal: 6,
+  },
+  routeHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+    flexWrap: 'wrap',
+    maxWidth: '100%',
+  },
+  routeActionButton: {
+    minHeight: 38,
+    justifyContent: 'center',
+    borderRadius: 999,
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+  },
+  routeActionButtonText: {
+    color: '#0a2540',
+    fontSize: 12,
+    fontWeight: '900',
   },
   routeStageKicker: {
     color: '#00d4ff',
@@ -3367,6 +3499,51 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     lineHeight: 18,
+  },
+  overviewMapCard: {
+    gap: 10,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d7e1ea',
+    backgroundColor: '#ffffff',
+    padding: 12,
+  },
+  overviewMapHeader: {
+    minHeight: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  overviewMapKicker: {
+    color: '#635bff',
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  overviewMapTitle: {
+    color: '#0a2540',
+    fontSize: 16,
+    fontWeight: '900',
+    marginTop: 3,
+  },
+  overviewMapActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+    flexWrap: 'wrap',
+    maxWidth: '100%',
+  },
+  overviewMapShell: {
+    height: 240,
+    minHeight: 220,
+    overflow: 'hidden',
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d7e1ea',
+    backgroundColor: '#f6f9fc',
   },
   overviewNextPanel: {
     gap: 12,
