@@ -1,0 +1,76 @@
+create or replace function public.create_trip_invite(input_trip_id uuid)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  invite_code text;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated.' using errcode = '28000';
+  end if;
+
+  if not public.is_trip_owner(input_trip_id) then
+    raise exception 'Only trip owners can create invite codes.' using errcode = '42501';
+  end if;
+
+  invite_code := upper(substr(replace(md5(random()::text || clock_timestamp()::text), '-', ''), 1, 8));
+
+  insert into public.trip_invites (code, trip_id, created_by)
+  values (invite_code, input_trip_id, auth.uid());
+
+  return invite_code;
+end;
+$$;
+
+create or replace function public.join_trip_by_code(input_code text)
+returns public.trips
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  invite public.trip_invites;
+  joined_trip public.trips;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated.' using errcode = '28000';
+  end if;
+
+  select *
+  into invite
+  from public.trip_invites
+  where code = upper(trim(input_code))
+    and expires_at > now()
+  limit 1;
+
+  if invite.code is null then
+    raise exception 'Invite code is invalid or expired.' using errcode = 'P0002';
+  end if;
+
+  insert into public.trip_members (trip_id, user_id, role)
+  values (invite.trip_id, auth.uid(), 'editor')
+  on conflict (trip_id, user_id)
+  do update set role = excluded.role;
+
+  update public.trip_invites
+  set used_at = now()
+  where code = invite.code;
+
+  select *
+  into joined_trip
+  from public.trips
+  where id = invite.trip_id;
+
+  return joined_trip;
+end;
+$$;
+
+revoke all on function public.create_trip_invite(uuid) from public;
+revoke all on function public.create_trip_invite(uuid) from anon;
+grant execute on function public.create_trip_invite(uuid) to authenticated;
+
+revoke all on function public.join_trip_by_code(text) from public;
+revoke all on function public.join_trip_by_code(text) from anon;
+grant execute on function public.join_trip_by_code(text) to authenticated;
