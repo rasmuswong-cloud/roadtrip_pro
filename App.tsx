@@ -355,21 +355,26 @@ export default function App() {
     return visibleDayPlans.find((dayPlan) => dayPlan.key === selectedDayKey) ?? visibleDayPlans[0] ?? null;
   }, [selectedDayKey, visibleDayPlans]);
   const budgetSummary = useMemo(() => buildBudgetSummary(displayedNodes), [displayedNodes]);
+  const travelerCount = parseTravelerCount(travelerCountText);
+  const budgetCenter = useMemo(() => buildTravelBudgetCenter(displayedNodes, travelerCount), [displayedNodes, travelerCount]);
   const bulkCoordinateCandidates = useMemo(() => getBulkCoordinateCandidates(displayedNodes), [displayedNodes]);
   const missingCoordinateCount = bulkCoordinateCandidates.length;
   const missingBookingCount = useMemo(() => countMissingBookingReferences(displayedNodes), [displayedNodes]);
+  const missingTimeCount = useMemo(() => countMissingTimes(displayedNodes), [displayedNodes]);
+  const planningGapCount = useMemo(() => countPlanningGaps(displayedNodes), [displayedNodes]);
   const tripReadiness = useMemo(() => buildTripReadiness({
     stopCount: displayedNodes.length,
+    dayCount: dayPlans.filter((dayPlan) => dayPlan.key !== 'unscheduled').length,
     missingCoordinateCount,
-    missingCostCount: budgetSummary.missingCostCount,
+    missingCostCount: budgetCenter.missingCostCount,
     missingBookingCount,
-  }), [displayedNodes.length, missingCoordinateCount, budgetSummary.missingCostCount, missingBookingCount]);
+    missingTimeCount,
+    planningGapCount,
+  }), [displayedNodes.length, dayPlans, missingCoordinateCount, budgetCenter.missingCostCount, missingBookingCount, missingTimeCount, planningGapCount]);
   const firstRouteStop = displayedNodes[0] ?? null;
   const lastRouteStop = displayedNodes[displayedNodes.length - 1] ?? null;
   const activeHeroCopy = viewHeroCopy[activeView];
   const totalSpend = budgetSummary.total;
-  const travelerCount = parseTravelerCount(travelerCountText);
-  const budgetCenter = useMemo(() => buildTravelBudgetCenter(displayedNodes, travelerCount), [displayedNodes, travelerCount]);
   const costPerTraveler = travelerCount > 0 ? totalSpend / travelerCount : totalSpend;
   const onlineSaveLabel = formatOnlineSaveLabel(onlineSaveState, lastOnlineSavedAt, Boolean(activeTripId));
 
@@ -2154,17 +2159,21 @@ export default function App() {
                     accent={budgetSummary.missingCostCount > 0 ? '#d97706' : '#0f766e'}
                   />
                 </View>
-                <View style={styles.readinessPanel}>
+                <View style={[styles.readinessPanel, tripReadiness.isReady && styles.readinessPanelReady]}>
                   <View style={styles.readinessHeader}>
                     <View>
                       <Text style={styles.overviewMapKicker}>Resestatus</Text>
-                      <Text style={styles.overviewMapTitle}>Planera → Kontrollera → Förfina → Res</Text>
+                      <Text style={styles.readinessTitle}>{tripReadiness.title}</Text>
+                      <Text style={styles.readinessNextText}>{tripReadiness.subtitle}</Text>
                     </View>
                     <Pressable style={styles.smallButton} onPress={() => goToView(tripReadiness.nextStep.target)}>
                       <Text style={styles.smallButtonText}>{tripReadiness.nextStep.label}</Text>
                     </Pressable>
                   </View>
-                  <Text style={styles.readinessNextText}>{tripReadiness.nextStep.detail}</Text>
+                  <View style={styles.readinessNextAction}>
+                    <Text style={styles.readinessNextLabel}>Nästa bästa steg</Text>
+                    <Text style={styles.readinessNextDetail}>{tripReadiness.nextStep.detail}</Text>
+                  </View>
                   <View style={[styles.readinessGrid, isMobile && styles.singleColumnGrid]}>
                     {tripReadiness.items.map((item) => (
                       <View key={item.label} style={[styles.readinessItem, item.status === 'ready' && styles.readinessItemReady]}>
@@ -2173,6 +2182,28 @@ export default function App() {
                       </View>
                     ))}
                   </View>
+                  {tripReadiness.groups.length > 0 ? (
+                    <View style={styles.readinessIssueGroups}>
+                      {tripReadiness.groups.map((group) => (
+                        <View key={group.key} style={styles.readinessIssueGroup}>
+                          <Text style={styles.readinessGroupTitle}>{group.label}</Text>
+                          {group.issues.map((issue) => (
+                            <View key={issue.id} style={styles.readinessIssueRow}>
+                              <View style={styles.readinessIssueCopy}>
+                                <Text style={styles.readinessIssueLabel}>{issue.label}</Text>
+                                <Text style={styles.readinessIssueDetail}>{issue.detail}</Text>
+                              </View>
+                              <Pressable style={styles.secondarySmallButton} onPress={() => goToView(issue.target)}>
+                                <Text style={styles.secondarySmallButtonText}>{issue.actionLabel}</Text>
+                              </Pressable>
+                            </View>
+                          ))}
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <Text style={styles.readinessReadyText}>{tripReadiness.completedCheckCount} av {tripReadiness.totalCheckCount} kontroller klara. Klar för avresa.</Text>
+                  )}
                 </View>
                 <View style={styles.overviewMapCard}>
                   <View style={styles.overviewMapHeader}>
@@ -2839,7 +2870,30 @@ function buildBudgetSummary(nodes: ItineraryNode[]): BudgetSummary {
 }
 
 function countMissingBookingReferences(nodes: ItineraryNode[]): number {
-  return nodes.filter((node) => node.type === 'lodging' && !node.reservation.reference).length;
+  return nodes.filter((node) => (node.type === 'lodging' || node.type === 'transport') && !node.reservation.reference).length;
+}
+
+function countMissingTimes(nodes: ItineraryNode[]): number {
+  return nodes.filter((node) => node.type !== 'note' && !isValidDateTimeValue(node.startsAt)).length;
+}
+
+function countPlanningGaps(nodes: ItineraryNode[]): number {
+  return nodes.filter((node) => {
+    if (!node.title.trim()) {
+      return true;
+    }
+
+    return Boolean(node.startsAt) && !isValidDateTimeValue(node.startsAt);
+  }).length;
+}
+
+function isValidDateTimeValue(value?: string | null): boolean {
+  if (!value) {
+    return false;
+  }
+
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp);
 }
 
 function buildBudgetWarnings(nodes: ItineraryNode[], total: number, missingCostCount: number): string[] {
@@ -4176,11 +4230,15 @@ const styles = StyleSheet.create({
   },
   readinessPanel: {
     gap: 12,
-    borderRadius: 14,
+    borderRadius: 18,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#dce5ee',
     backgroundColor: '#ffffff',
     padding: 16,
+  },
+  readinessPanelReady: {
+    borderColor: '#b8ead1',
+    backgroundColor: '#f0fbf5',
   },
   readinessHeader: {
     minHeight: 40,
@@ -4195,6 +4253,34 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     lineHeight: 18,
+    marginTop: 4,
+  },
+  readinessTitle: {
+    color: '#0a2540',
+    fontSize: 20,
+    fontWeight: '900',
+    marginTop: 3,
+  },
+  readinessNextAction: {
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d7e1ea',
+    backgroundColor: '#f6f9fc',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 4,
+  },
+  readinessNextLabel: {
+    color: '#0f766e',
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  readinessNextDetail: {
+    color: '#0a2540',
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 19,
   },
   readinessGrid: {
     flexDirection: 'row',
@@ -4230,6 +4316,55 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     lineHeight: 18,
     marginTop: 4,
+  },
+  readinessIssueGroups: {
+    gap: 12,
+  },
+  readinessIssueGroup: {
+    gap: 8,
+  },
+  readinessGroupTitle: {
+    color: '#0a2540',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  readinessIssueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#ffe3a3',
+    backgroundColor: '#fffaf0',
+    padding: 12,
+  },
+  readinessIssueCopy: {
+    flex: 1,
+    minWidth: 160,
+    gap: 4,
+  },
+  readinessIssueLabel: {
+    color: '#4f2e00',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  readinessIssueDetail: {
+    color: '#7a4b00',
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 17,
+  },
+  readinessReadyText: {
+    color: '#076b4d',
+    fontSize: 13,
+    fontWeight: '900',
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#b8ead1',
+    backgroundColor: '#e7f8ef',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   toolSummaryGrid: {
     flexDirection: 'row',

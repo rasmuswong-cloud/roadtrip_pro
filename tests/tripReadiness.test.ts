@@ -4,67 +4,125 @@ import { TRIP_READINESS_TARGETS, buildTripReadiness } from '../src/services/plan
 
 const validTargets = new Set<string>(TRIP_READINESS_TARGETS);
 
-test('trip readiness sends incomplete routes to day planning first', () => {
+test('complete trip returns ready state', () => {
   const readiness = buildTripReadiness({
-    stopCount: 1,
+    stopCount: 9,
+    dayCount: 7,
     missingCoordinateCount: 0,
     missingCostCount: 0,
     missingBookingCount: 0,
+    missingTimeCount: 0,
+    planningGapCount: 0,
   });
 
-  assert.equal(readiness.nextStep.target, 'days');
-  assert.equal(validTargets.has(readiness.nextStep.target), true);
-  assert.equal(readiness.nextStep.label, 'Granska dagarna');
-  assert.equal(readiness.items.find((item) => item.label === 'Rutt')?.status, 'warning');
+  assert.equal(readiness.isReady, true);
+  assert.equal(readiness.title, 'Resan är redo');
+  assert.equal(readiness.nextStep.label, 'Klar för avresa');
+  assert.equal(readiness.groups.length, 0);
+  assert.ok(readiness.items.every((item) => item.status === 'ready'));
 });
 
-test('trip readiness prioritizes missing coordinates before budget cleanup and opens route tab', () => {
+test('empty trip is not ready and points to route review', () => {
   const readiness = buildTripReadiness({
-    stopCount: 9,
-    missingCoordinateCount: 2,
-    missingCostCount: 4,
-    missingBookingCount: 1,
-  });
-
-  assert.equal(readiness.nextStep.target, 'route');
-  assert.match(readiness.nextStep.label, /^Granska rutt(en)?$/);
-  assert.equal(validTargets.has(readiness.nextStep.target), true);
-  assert.equal(readiness.items.find((item) => item.label === 'Karta')?.detail, '2 saknar kartposition');
-});
-
-test('trip readiness sends complete map with missing costs to budget', () => {
-  const readiness = buildTripReadiness({
-    stopCount: 9,
+    stopCount: 0,
+    dayCount: 0,
     missingCoordinateCount: 0,
-    missingCostCount: 3,
+    missingCostCount: 0,
     missingBookingCount: 0,
+    missingTimeCount: 0,
+  });
+
+  assert.equal(readiness.isReady, false);
+  assert.equal(readiness.nextStep.target, 'route');
+  assert.equal(readiness.issues.some((issue) => issue.id === 'route_missing'), true);
+  assert.equal(readiness.issues.some((issue) => issue.id === 'days_missing'), true);
+});
+
+test('missing coordinates are detected and route is the next workspace', () => {
+  const readiness = buildTripReadiness({
+    stopCount: 9,
+    dayCount: 7,
+    missingCoordinateCount: 4,
+    missingCostCount: 2,
+    missingBookingCount: 1,
+    missingTimeCount: 0,
+  });
+
+  const issue = readiness.issues.find((candidate) => candidate.id === 'coordinates_missing');
+  assert.equal(readiness.nextStep.target, 'route');
+  assert.equal(readiness.nextStep.label, 'Fyll i kartpositioner');
+  assert.equal(issue?.label, '4 stopp saknar kartposition');
+  assert.equal(readiness.groups.find((group) => group.key === 'route_map')?.label, 'Rutt & karta');
+});
+
+test('missing costs are detected and budget is the next workspace', () => {
+  const readiness = buildTripReadiness({
+    stopCount: 9,
+    dayCount: 7,
+    missingCoordinateCount: 0,
+    missingCostCount: 6,
+    missingBookingCount: 1,
+    missingTimeCount: 0,
   });
 
   assert.equal(readiness.nextStep.target, 'budget');
-  assert.equal(validTargets.has(readiness.nextStep.target), true);
-  assert.equal(readiness.nextStep.label, 'Komplettera budget');
+  assert.equal(readiness.nextStep.label, 'Lägg till saknade kostnader');
+  assert.equal(readiness.issues.find((issue) => issue.id === 'costs_missing')?.count, 6);
 });
 
-test('trip readiness marks complete trips ready to travel', () => {
+test('missing booking references are detected and days is the next workspace', () => {
   const readiness = buildTripReadiness({
     stopCount: 9,
+    dayCount: 7,
+    missingCoordinateCount: 0,
+    missingCostCount: 0,
+    missingBookingCount: 2,
+    missingTimeCount: 0,
+  });
+
+  assert.equal(readiness.nextStep.target, 'days');
+  assert.equal(readiness.nextStep.label, 'Fyll i bokningsreferenser');
+  assert.equal(readiness.groups.find((group) => group.key === 'bookings')?.issues[0]?.label, '2 bokningar saknar referens');
+});
+
+test('missing times are detected and days is the next workspace', () => {
+  const readiness = buildTripReadiness({
+    stopCount: 9,
+    dayCount: 7,
     missingCoordinateCount: 0,
     missingCostCount: 0,
     missingBookingCount: 0,
+    missingTimeCount: 3,
   });
 
-  assert.equal(readiness.nextStep.label, 'Res');
-  assert.equal(validTargets.has(readiness.nextStep.target), true);
-  assert.ok(readiness.items.every((item) => item.status === 'ready'));
+  assert.equal(readiness.nextStep.target, 'days');
+  assert.equal(readiness.nextStep.label, 'Planera dagar');
+  assert.equal(readiness.issues.find((issue) => issue.id === 'times_missing')?.label, '3 steg saknar tid');
+});
+
+test('planning gaps are grouped as other issues without crashing', () => {
+  const readiness = buildTripReadiness({
+    stopCount: 9,
+    dayCount: 7,
+    missingCoordinateCount: 0,
+    missingCostCount: 0,
+    missingBookingCount: 0,
+    missingTimeCount: 0,
+    planningGapCount: 1,
+  });
+
+  assert.equal(readiness.nextStep.target, 'days');
+  assert.equal(readiness.groups.find((group) => group.key === 'other')?.issues[0]?.id, 'planning_gaps');
 });
 
 test('trip readiness next step targets are always internal app view keys', () => {
   const scenarios = [
-    { stopCount: 0, missingCoordinateCount: 0, missingCostCount: 0, missingBookingCount: 0 },
-    { stopCount: 9, missingCoordinateCount: 1, missingCostCount: 0, missingBookingCount: 0 },
-    { stopCount: 9, missingCoordinateCount: 0, missingCostCount: 1, missingBookingCount: 0 },
-    { stopCount: 9, missingCoordinateCount: 0, missingCostCount: 0, missingBookingCount: 1 },
-    { stopCount: 9, missingCoordinateCount: 0, missingCostCount: 0, missingBookingCount: 0 },
+    { stopCount: 0, dayCount: 0, missingCoordinateCount: 0, missingCostCount: 0, missingBookingCount: 0, missingTimeCount: 0 },
+    { stopCount: 9, dayCount: 7, missingCoordinateCount: 1, missingCostCount: 0, missingBookingCount: 0, missingTimeCount: 0 },
+    { stopCount: 9, dayCount: 7, missingCoordinateCount: 0, missingCostCount: 1, missingBookingCount: 0, missingTimeCount: 0 },
+    { stopCount: 9, dayCount: 7, missingCoordinateCount: 0, missingCostCount: 0, missingBookingCount: 1, missingTimeCount: 0 },
+    { stopCount: 9, dayCount: 7, missingCoordinateCount: 0, missingCostCount: 0, missingBookingCount: 0, missingTimeCount: 1 },
+    { stopCount: 9, dayCount: 7, missingCoordinateCount: 0, missingCostCount: 0, missingBookingCount: 0, missingTimeCount: 0 },
   ];
 
   scenarios.forEach((scenario) => {
