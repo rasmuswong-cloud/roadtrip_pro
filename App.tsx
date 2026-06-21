@@ -290,6 +290,7 @@ export default function App() {
   const [onlineSaveState, setOnlineSaveState] = useState<OnlineSaveState>('idle');
   const [lastOnlineSavedAt, setLastOnlineSavedAt] = useState<string | null>(null);
   const [undoSnapshot, setUndoSnapshot] = useState<UndoSnapshot | null>(null);
+  const contentScrollRef = useRef<ScrollView | null>(null);
   const movingStopIdsRef = useRef<Set<string>>(new Set());
   const inlineSaveInFlightRef = useRef(false);
   const [activeInlineEdit, setActiveInlineEdit] = useState<ActiveInlineEdit>(null);
@@ -361,6 +362,13 @@ export default function App() {
       });
       setStatusMessage(next ? 'Redigeringsläge på. Ändringar sparas när du sparar fälten.' : 'Redigeringsläge av.');
       return next;
+    });
+  }
+
+  function goToView(target: AppView) {
+    setActiveView(target);
+    requestAnimationFrame(() => {
+      contentScrollRef.current?.scrollTo({ y: 0, animated: true });
     });
   }
 
@@ -1755,7 +1763,7 @@ export default function App() {
               <Pressable
                 key={tab.key}
                 style={[styles.navTab, isMobile && styles.navTabMobile, activeView === tab.key && styles.navTabActive]}
-                onPress={() => setActiveView(tab.key)}
+                onPress={() => goToView(tab.key)}
               >
                 <Text style={[styles.navLink, activeView === tab.key && styles.navLinkActive]}>{tab.label}</Text>
               </Pressable>
@@ -1775,7 +1783,7 @@ export default function App() {
           </View>
         </View>
 
-        <ScrollView style={styles.content} contentContainerStyle={[styles.contentInner, isMobile && styles.contentInnerMobile]}>
+        <ScrollView ref={contentScrollRef} style={styles.content} contentContainerStyle={[styles.contentInner, isMobile && styles.contentInnerMobile]}>
           <View style={[styles.tripHero, isMobile && styles.tripHeroMobile]}>
             <View style={styles.heroPlaneOne} />
             <View style={styles.heroPlaneTwo} />
@@ -2029,7 +2037,7 @@ export default function App() {
                       <Text style={styles.overviewMapKicker}>Resestatus</Text>
                       <Text style={styles.overviewMapTitle}>Planera → Kontrollera → Förfina → Res</Text>
                     </View>
-                    <Pressable style={styles.smallButton} onPress={() => setActiveView(tripReadiness.nextStep.target)}>
+                    <Pressable style={styles.smallButton} onPress={() => goToView(tripReadiness.nextStep.target)}>
                       <Text style={styles.smallButtonText}>{tripReadiness.nextStep.label}</Text>
                     </Pressable>
                   </View>
@@ -2050,7 +2058,7 @@ export default function App() {
                       <Text style={styles.overviewMapTitle}>Resan på kartan</Text>
                     </View>
                     <View style={styles.overviewMapActions}>
-                      <Pressable style={styles.smallButton} onPress={() => setActiveView('route')}>
+                      <Pressable style={styles.smallButton} onPress={() => goToView('route')}>
                         <Text style={styles.smallButtonText}>Visa hela kartan</Text>
                       </Pressable>
                     </View>
