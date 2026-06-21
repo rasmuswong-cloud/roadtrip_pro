@@ -313,6 +313,8 @@ export default function App() {
   const [plannerHotelNote, setPlannerHotelNote] = useState('');
   const [plannerNotes, setPlannerNotes] = useState('');
   const [plannerSearchText, setPlannerSearchText] = useState('');
+  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
+  const [showPlannerTechnicalDetails, setShowPlannerTechnicalDetails] = useState(false);
   const [travelerCountText, setTravelerCountText] = useState(() => initialPersistedState?.travelerCountText ?? '2');
   const [packingDraftByDay, setPackingDraftByDay] = useState<Record<string, string>>({});
   const [hasLoadedPersistentState, setHasLoadedPersistentState] = useState(false);
@@ -340,6 +342,14 @@ export default function App() {
     .map((dayPlan) => ({ key: dayPlan.key, title: dayPlan.title })), [dayPlans]);
   const filteredDayPlans = useMemo(() => filterDayPlans(dayPlans, plannerSearchText), [dayPlans, plannerSearchText]);
   const filteredStopCount = useMemo(() => filteredDayPlans.reduce((count, dayPlan) => count + dayPlan.nodes.length, 0), [filteredDayPlans]);
+  const visibleDayPlans = plannerSearchText.trim() ? filteredDayPlans : dayPlans;
+  const selectedDayPlan = useMemo(() => {
+    if (visibleDayPlans.length === 0) {
+      return null;
+    }
+
+    return visibleDayPlans.find((dayPlan) => dayPlan.key === selectedDayKey) ?? visibleDayPlans[0] ?? null;
+  }, [selectedDayKey, visibleDayPlans]);
   const budgetSummary = useMemo(() => buildBudgetSummary(displayedNodes), [displayedNodes]);
   const bulkCoordinateCandidates = useMemo(() => getBulkCoordinateCandidates(displayedNodes), [displayedNodes]);
   const missingCoordinateCount = bulkCoordinateCandidates.length;
@@ -382,6 +392,20 @@ export default function App() {
   useEffect(() => {
     void connectSupabaseTrip();
   }, []);
+
+  useEffect(() => {
+    if (visibleDayPlans.length === 0) {
+      if (selectedDayKey !== null) {
+        setSelectedDayKey(null);
+      }
+      return;
+    }
+
+    const firstVisibleDay = visibleDayPlans[0];
+    if (firstVisibleDay && (!selectedDayKey || !visibleDayPlans.some((dayPlan) => dayPlan.key === selectedDayKey))) {
+      setSelectedDayKey(firstVisibleDay.key);
+    }
+  }, [selectedDayKey, visibleDayPlans]);
 
   function toggleEditMode() {
     setIsEditMode((current) => {
@@ -1023,6 +1047,8 @@ export default function App() {
   function populatePlannerEditor(node: ItineraryNode) {
     setSelectedPlannerNodeId(node.id);
     setDraftPlannerDayKey(null);
+    setShowPlannerTechnicalDetails(false);
+    setSelectedDayKey(dayKeyForNode(node));
     setPlannerTitle(node.title);
     setPlannerType(node.type);
     setPlannerPlace(typeof node.metadata.place === 'string' ? node.metadata.place : '');
@@ -1039,6 +1065,7 @@ export default function App() {
   function clearPlannerEditor() {
     setSelectedPlannerNodeId(null);
     setDraftPlannerDayKey(null);
+    setShowPlannerTechnicalDetails(false);
     setPlannerTitle('');
     setPlannerType('custom');
     setPlannerPlace('');
@@ -1054,12 +1081,15 @@ export default function App() {
   function startNewPlannerStep(dayKey: string) {
     clearPlannerEditor();
     setDraftPlannerDayKey(dayKey);
+    setSelectedDayKey(dayKey);
     setPlannerDate(dayKey === 'unscheduled' ? '' : dayKey);
-    setStatusMessage('Fyll i det nya steget direkt i dagen och tryck Lägg till.');
+    setShowPlannerTechnicalDetails(false);
+    setStatusMessage('Fyll i det nya steget direkt i dagen och tryck Spara steg.');
   }
 
   function startPlaceSearch(dayKey: string, suggestedQuery?: string) {
     setActivePlaceDayKey(dayKey);
+    setSelectedDayKey(dayKey);
     setPlaceResults([]);
     if (suggestedQuery) {
       setPlaceQuery(suggestedQuery);
@@ -1604,6 +1634,15 @@ export default function App() {
   function renderPlannerInlineEditor(mode: 'edit' | 'new') {
     return (
       <View style={[styles.dayInlineEditor, isDark && styles.innerPanelDark]}>
+        <View style={styles.sectionHeaderRow}>
+          <View>
+            <Text style={[styles.dayTitle, isDark && styles.textDark]}>{mode === 'new' ? 'Lägg till i dag' : 'Redigera steg'}</Text>
+            <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>{onlineSaveState === 'saving' ? 'Sparar...' : onlineSaveLabel}</Text>
+          </View>
+          <Pressable style={styles.secondarySmallButton} onPress={clearPlannerEditor} disabled={isLoading}>
+            <Text style={styles.secondarySmallButtonText}>Avbryt</Text>
+          </Pressable>
+        </View>
         <View style={styles.typeChipRow}>
           {inlineNodeTypes.map((type) => (
             <Pressable
@@ -1620,17 +1659,22 @@ export default function App() {
           <TextInput value={plannerDate} onChangeText={setPlannerDate} placeholder="ÅÅÅÅ-MM-DD" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
           <TextInput value={plannerTime} onChangeText={setPlannerTime} placeholder="TT:MM" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
         </View>
-        <TextInput value={plannerTitle} onChangeText={setPlannerTitle} placeholder="Plats, boende eller aktivitet" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.singleLineInput, isDark && styles.inputDark]} />
+        <TextInput value={plannerTitle} onChangeText={setPlannerTitle} placeholder="Titel *" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.singleLineInput, isDark && styles.inputDark]} />
         <View style={styles.actionRow}>
-          <TextInput value={plannerPlace} onChangeText={setPlannerPlace} placeholder="Plats" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
+          <TextInput value={plannerPlace} onChangeText={setPlannerPlace} placeholder="Plats eller adress" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
           <TextInput value={plannerCost} onChangeText={setPlannerCost} placeholder="Kostnad" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
         </View>
-        <TextInput value={plannerHotelNote} onChangeText={setPlannerHotelNote} placeholder="Hotell / bokning / notis" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.singleLineInput, isDark && styles.inputDark]} />
+        <TextInput value={plannerHotelNote} onChangeText={setPlannerHotelNote} placeholder="Bokningsstatus eller referens" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.singleLineInput, isDark && styles.inputDark]} />
         <TextInput value={plannerNotes} onChangeText={setPlannerNotes} placeholder="Anteckningar" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.commandInput, isDark && styles.inputDark]} multiline />
-        <View style={styles.advancedEditorGrid}>
-          <TextInput value={plannerLatitude} onChangeText={setPlannerLatitude} placeholder="Latitud" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} inputMode="decimal" />
-          <TextInput value={plannerLongitude} onChangeText={setPlannerLongitude} placeholder="Longitud" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} inputMode="decimal" />
-        </View>
+        <Pressable style={styles.secondarySmallButton} onPress={() => setShowPlannerTechnicalDetails((current) => !current)}>
+          <Text style={styles.secondarySmallButtonText}>{showPlannerTechnicalDetails ? 'Dölj detaljer' : 'Visa detaljer'}</Text>
+        </Pressable>
+        {showPlannerTechnicalDetails ? (
+          <View style={styles.advancedEditorGrid}>
+            <TextInput value={plannerLatitude} onChangeText={setPlannerLatitude} placeholder="Latitud" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} inputMode="decimal" />
+            <TextInput value={plannerLongitude} onChangeText={setPlannerLongitude} placeholder="Longitud" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} inputMode="decimal" />
+          </View>
+        ) : null}
         <View style={styles.editorActionRow}>
           <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={clearPlannerEditor} disabled={isLoading}>
             <Text style={styles.secondaryButtonText}>Avbryt</Text>
@@ -1640,7 +1684,7 @@ export default function App() {
             onPress={mode === 'new' ? addPlannerStep : savePlannerEdit}
             disabled={isLoading || (mode === 'edit' && !selectedPlannerNodeId)}
           >
-            <Text style={styles.commandButtonText}>{mode === 'new' ? 'Lägg till' : 'Spara'}</Text>
+            <Text style={styles.commandButtonText}>{isLoading ? 'Sparar...' : 'Spara steg'}</Text>
           </Pressable>
         </View>
       </View>
@@ -2184,7 +2228,10 @@ export default function App() {
               {activeView === 'days' ? (
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
                 <View style={styles.sectionHeaderRow}>
-                  <SectionTitle title="Planering dag för dag" dark={isDark} />
+                  <View>
+                    <SectionTitle title="Vad händer varje dag?" dark={isDark} />
+                    <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>Välj dag, följ tidslinjen och lägg till eller redigera stopp.</Text>
+                  </View>
                   <View style={styles.plannerSearchWrap}>
                     <TextInput
                       value={plannerSearchText}
@@ -2201,41 +2248,65 @@ export default function App() {
                   </View>
                   {!isDemoMode ? (
                     <View style={styles.dayHeaderActions}>
-                      <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={() => startPlaceSearch('unscheduled', 'camping')} disabled={isLoading}>
-                        <Text style={styles.secondaryButtonText}>Sök plats</Text>
-                      </Pressable>
                       <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={() => startNewPlannerStep('unscheduled')} disabled={isLoading}>
-                        <Text style={styles.secondaryButtonText}>Nytt oschemalagt steg</Text>
+                        <Text style={styles.secondaryButtonText}>Lägg till oschemalagt</Text>
+                      </Pressable>
+                      <Pressable style={[styles.commandButton, (isLoading || !selectedDayPlan) && styles.disabledButton]} onPress={() => selectedDayPlan && startNewPlannerStep(selectedDayPlan.key)} disabled={isLoading || !selectedDayPlan}>
+                        <Text style={styles.commandButtonText}>Lägg till i dag</Text>
                       </Pressable>
                     </View>
                   ) : null}
                 </View>
-                {renderDayPlaceSearch('unscheduled')}
-                {draftPlannerDayKey === 'unscheduled' ? (
-                  <View style={[styles.dayGroup, isDark && styles.innerPanelDark]}>
-                    <View style={styles.dayHeader}>
-                      <View>
-                        <Text style={[styles.dayTitle, isDark && styles.textDark]}>Oschemalagt</Text>
-                        <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>Nytt steg utan datum</Text>
-                      </View>
-                    </View>
-                    {renderPlannerInlineEditor('new')}
-                  </View>
-                ) : null}
                 {plannerSearchText.trim() ? (
                   <Text style={styles.searchResultText}>{filteredStopCount} av {displayedNodes.length} stopp matchar sökningen.</Text>
                 ) : null}
-                {filteredDayPlans.length === 0 ? (
+                {visibleDayPlans.length > 0 ? (
+                  <View style={styles.daySelectorRail}>
+                    {visibleDayPlans.map((dayPlan) => {
+                      const isSelected = selectedDayPlan?.key === dayPlan.key;
+                      const missingInfoCount = dayPlan.smartFlags.filter((flag) => flag !== 'Ser planerad ut').length;
+                      const routeText = dayPlan.summary.startPlace === dayPlan.summary.endPlace
+                        ? dayPlan.summary.startPlace
+                        : `${dayPlan.summary.startPlace} → ${dayPlan.summary.endPlace}`;
+
+                      return (
+                        <Pressable key={dayPlan.key} style={[styles.daySelectorCard, isSelected && styles.daySelectorCardActive]} onPress={() => setSelectedDayKey(dayPlan.key)}>
+                          <View style={styles.daySelectorHeader}>
+                            <Text style={[styles.daySelectorTitle, isSelected && styles.daySelectorTitleActive]}>{dayPlan.shortTitle}</Text>
+                            <Text style={[styles.daySelectorCount, isSelected && styles.daySelectorCountActive]}>{dayPlan.nodes.length} steg</Text>
+                          </View>
+                          <Text style={[styles.daySelectorDate, isSelected && styles.daySelectorDateActive]}>{formatDayKey(dayPlan.key)}</Text>
+                          <Text style={[styles.daySelectorRoute, isSelected && styles.daySelectorRouteActive]} numberOfLines={1}>{routeText}</Text>
+                          <Text style={[styles.daySelectorMissing, missingInfoCount === 0 && styles.daySelectorReady]}>{missingInfoCount > 0 ? `${missingInfoCount} att kolla` : 'Redo'}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ) : null}
+                {selectedDayPlan ? (
+                  <View style={styles.selectedDaySummary}>
+                    <View>
+                      <Text style={[styles.dayTitle, isDark && styles.textDark]}>{selectedDayPlan.title.replace(' / ', ' - ')}</Text>
+                      <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>{selectedDayPlan.summary.startPlace} → {selectedDayPlan.summary.endPlace}</Text>
+                    </View>
+                    <View style={styles.selectedDayMetricRow}>
+                      <DayInsight label="Steg" value={`${selectedDayPlan.nodes.length}`} tone="neutral" />
+                      <DayInsight label="Körning" value={selectedDayPlan.insight.driveLabel} tone={selectedDayPlan.insight.isLongDrive ? 'warn' : 'neutral'} />
+                      <DayInsight label="Kostnad" value={selectedDayPlan.insight.costLabel} tone={selectedDayPlan.budget.missingCostCount > 0 ? 'warn' : 'good'} />
+                    </View>
+                  </View>
+                ) : null}
+                {visibleDayPlans.length === 0 ? (
                   <View style={styles.emptySearchState}>
                     <Text style={styles.emptySearchTitle}>Inga stopp hittades</Text>
                     <Text style={styles.emptySearchText}>Testa ett annat ord, datum, plats eller pris.</Text>
                   </View>
                 ) : null}
-                {filteredDayPlans.map((dayPlan) => (
+                {selectedDayPlan ? (
                   <DayCard
-                    key={dayPlan.key}
+                    key={selectedDayPlan.key}
                     availableDayTargets={dayMoveTargets}
-                    dayPlan={dayPlan}
+                    dayPlan={selectedDayPlan}
                     isDark={isDark}
                     isDemoMode={isDemoMode}
                     isLoading={isLoading}
@@ -2246,7 +2317,7 @@ export default function App() {
                     coordinateSearchResults={coordinateSearchResults}
                     coordinateSearchMessage={coordinateSearchMessage}
                     itineraryNodesLength={itineraryNodes.length}
-                    packingDraft={packingDraftByDay[dayPlan.key] ?? ''}
+                    packingDraft={packingDraftByDay[selectedDayPlan.key] ?? ''}
                     draftPlannerDayKey={draftPlannerDayKey}
                     styles={styles}
                     renderDayPlaceSearch={renderDayPlaceSearch}
@@ -2270,7 +2341,7 @@ export default function App() {
                     onMoveStopToDay={moveStopToDay}
                     onRemoveStop={removeStop}
                   />
-                ))}
+                ) : null}
               </View>
               ) : null}
             </View>
@@ -4215,6 +4286,92 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     lineHeight: 18,
+  },
+  daySelectorRail: {
+    flexDirection: 'row',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  daySelectorCard: {
+    flex: 1,
+    minWidth: 170,
+    gap: 6,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d8e2eb',
+    backgroundColor: '#fbfdff',
+    padding: 14,
+  },
+  daySelectorCardActive: {
+    borderColor: '#24445d',
+    backgroundColor: '#102a43',
+  },
+  daySelectorHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  daySelectorTitle: {
+    color: '#0a2540',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  daySelectorTitleActive: {
+    color: '#ffffff',
+  },
+  daySelectorCount: {
+    color: '#0f766e',
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  daySelectorCountActive: {
+    color: '#f6b35f',
+  },
+  daySelectorDate: {
+    color: '#425466',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  daySelectorDateActive: {
+    color: '#dbeafe',
+  },
+  daySelectorRoute: {
+    color: '#0a2540',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  daySelectorRouteActive: {
+    color: '#ffffff',
+  },
+  daySelectorMissing: {
+    alignSelf: 'flex-start',
+    color: '#7a4b00',
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    borderRadius: 999,
+    backgroundColor: '#fff7df',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  daySelectorReady: {
+    color: '#0f766e',
+    backgroundColor: '#ecfdf5',
+  },
+  selectedDaySummary: {
+    gap: 12,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#dce5ee',
+    backgroundColor: '#f8fbf9',
+    padding: 16,
+  },
+  selectedDayMetricRow: {
+    flexDirection: 'row',
+    gap: 10,
+    flexWrap: 'wrap',
   },
   dayGroup: {
     gap: 14,

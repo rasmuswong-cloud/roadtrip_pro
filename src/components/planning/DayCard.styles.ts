@@ -31,6 +31,16 @@ export const dayCardStyles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
   },
+  timelineHeader: {
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#d8e5f2',
+    paddingTop: 12,
+  },
   timeRailCompact: {
     width: 58,
     alignItems: 'center',
@@ -58,6 +68,24 @@ export const dayCardStyles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     flexWrap: 'wrap',
+  },
+  missingChipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  missingChip: {
+    color: '#7a4b00',
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#ffe3a3',
+    backgroundColor: '#fff7df',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   stopRightRail: {
     minWidth: 104,
@@ -95,7 +123,7 @@ export const dayCardStyles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   iconMenuButton: {
-    width: 36,
+    minWidth: 44,
     minHeight: 34,
     alignItems: 'center',
     justifyContent: 'center',
@@ -106,8 +134,7 @@ export const dayCardStyles = StyleSheet.create({
   },
   iconMenuText: {
     color: '#0a2540',
-    fontSize: 20,
-    lineHeight: 20,
+    fontSize: 12,
     fontWeight: '900',
   },
   stopMenuPanel: {
@@ -146,6 +173,14 @@ export const dayCardStyles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: '#ef4444',
     paddingHorizontal: 10,
+  },
+  deleteConfirmPanel: {
+    gap: 8,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#fecdd3',
+    backgroundColor: '#fff1f2',
+    padding: 10,
   },
   inlineDisplayField: {
     minHeight: 24,

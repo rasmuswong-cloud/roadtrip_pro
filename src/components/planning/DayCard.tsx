@@ -2,6 +2,7 @@
 import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { dayCardStyles } from './DayCard.styles';
+import { buildMissingInfoChips, formatItineraryTime } from './dayCardViewModel';
 
 import type { DayChecklistItem, DayPlan } from '@/models';
 import type { ItineraryNode } from '@/models';
@@ -85,14 +86,6 @@ function formatDuration(value: number): string {
 
 function formatSek(value: number): string {
   return `${Math.round(value).toLocaleString('sv-SE')} SEK`;
-}
-
-function formatTime(value?: string | null): string {
-  if (!value) {
-    return '--:--';
-  }
-
-  return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(new Date(value));
 }
 
 function formatRawNodeCost(node: ItineraryNode): string {
@@ -472,6 +465,7 @@ export default function DayCard(props: DayCardProps) {
   const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(() => new Set());
   const [openMenuNodeId, setOpenMenuNodeId] = useState<string | null>(null);
   const [movePickerNodeId, setMovePickerNodeId] = useState<string | null>(null);
+  const [pendingDeleteNodeId, setPendingDeleteNodeId] = useState<string | null>(null);
   const visibleFlags = dayPlan.smartFlags.length > 0 ? dayPlan.smartFlags : ['Ser planerad ut'];
   const displayedFlags = expandedFlags ? visibleFlags : visibleFlags.slice(0, 3);
 
@@ -513,14 +507,14 @@ export default function DayCard(props: DayCardProps) {
               onPress={() => onStartPlaceSearch(dayPlan.key, dayPlan.insight.hasLodging ? 'restaurang eller aktivitet' : 'camping eller hotell')}
               disabled={isLoading}
             >
-              <Text style={styles.secondaryButtonText}>LÃ¤gg till plats</Text>
+              <Text style={styles.secondaryButtonText}>Sök plats</Text>
             </Pressable>
             <Pressable
               style={[styles.commandButton, isLoading && styles.disabledButton]}
               onPress={() => onStartNewPlannerStep(dayPlan.key)}
               disabled={isLoading}
             >
-              <Text style={styles.commandButtonText}>Nytt steg</Text>
+              <Text style={styles.commandButtonText}>Lägg till i dag</Text>
             </Pressable>
           </View>
         ) : null}
@@ -611,15 +605,27 @@ export default function DayCard(props: DayCardProps) {
         ) : null}
       </View>
       {draftPlannerDayKey === dayPlan.key ? renderPlannerInlineEditor('new') : null}
+      <View style={dayCardStyles.timelineHeader}>
+        <Text style={styles.packingTitle}>Tidslinje</Text>
+        <Text style={styles.secondarySmallButtonText}>{dayPlan.nodes.length > 0 ? `${dayPlan.nodes.length} steg` : 'Tom dag'}</Text>
+      </View>
+      {dayPlan.nodes.length === 0 ? (
+        <View style={styles.emptySearchState}>
+          <Text style={styles.emptySearchTitle}>Inget planerat än</Text>
+          <Text style={styles.emptySearchText}>Lägg till dagens första stopp, aktivitet, boende eller notis.</Text>
+        </View>
+      ) : null}
       {dayPlan.nodes.map((node) => {
         const detailsExpanded = expandedNodeIds.has(node.id);
         const menuOpen = openMenuNodeId === node.id;
         const movePickerOpen = movePickerNodeId === node.id;
+        const deleteConfirmOpen = pendingDeleteNodeId === node.id;
         const notePreview = compactNote(node.notes);
         const canEdit = itineraryNodesLength > 0 && !isDemoMode;
         const targetDays = availableDayTargets.filter((target) => target.key !== dayPlan.key);
         const showCoordinatePrompt = canEdit && Boolean(node.location && inlineFieldValue(node, 'place'));
         const coordinateSearchOpen = coordinateSearchNodeId === node.id;
+        const missingInfoChips = buildMissingInfoChips(node);
 
         return (
           <View key={node.id} style={[styles.timelineItem, isDark && styles.innerPanelDark]}>
@@ -645,7 +651,7 @@ export default function DayCard(props: DayCardProps) {
                   showInactiveLabel={false}
                 />
               ) : (
-                <Text style={[styles.timeText, isDark && styles.textDark]}>{formatTime(node.startsAt)}</Text>
+                <Text style={[styles.timeText, isDark && styles.textDark]}>{formatItineraryTime(node.startsAt)}</Text>
               )}
               <View style={[styles.nodeDot, { backgroundColor: nodeColor(node.type) }]} />
             </View>
@@ -720,6 +726,13 @@ export default function DayCard(props: DayCardProps) {
                       <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>{displayInlineFieldValue(node, 'place')}</Text>
                     )}
                   </View>
+                  {missingInfoChips.length > 0 ? (
+                    <View style={dayCardStyles.missingChipRow}>
+                      {missingInfoChips.map((chip) => (
+                        <Text key={chip} style={dayCardStyles.missingChip}>{chip}</Text>
+                      ))}
+                    </View>
+                  ) : null}
                   {showCoordinatePrompt ? (
                     <View style={styles.coordinateWarningBox}>
                       <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
@@ -811,7 +824,7 @@ export default function DayCard(props: DayCardProps) {
                         onPress={() => setOpenMenuNodeId((current) => (current === node.id ? null : node.id))}
                         disabled={isLoading}
                       >
-                        <Text style={dayCardStyles.iconMenuText}>?</Text>
+                        <Text style={dayCardStyles.iconMenuText}>Mer</Text>
                       </Pressable>
                       {menuOpen ? (
                         <View style={dayCardStyles.stopMenuPanel}>
@@ -823,13 +836,13 @@ export default function DayCard(props: DayCardProps) {
                               setMovePickerNodeId(null);
                             }}
                           >
-                            <Text style={styles.secondarySmallButtonText}>{detailsExpanded ? 'Dölj detaljer' : 'Visa/redigera alla detaljer'}</Text>
+                            <Text style={styles.secondarySmallButtonText}>{detailsExpanded ? 'Dölj detaljer' : 'Redigera'}</Text>
                           </Pressable>
                           <Pressable
                             style={dayCardStyles.stopMenuItem}
                             onPress={() => setMovePickerNodeId((current) => (current === node.id ? null : node.id))}
                           >
-                            <Text style={styles.secondarySmallButtonText}>Flytta till annan dag</Text>
+                            <Text style={styles.secondarySmallButtonText}>Flytta</Text>
                           </Pressable>
                           {movePickerOpen ? (
                             <View style={dayCardStyles.stopMovePanel}>
@@ -854,13 +867,34 @@ export default function DayCard(props: DayCardProps) {
                           <Pressable
                             style={dayCardStyles.stopMenuDangerItem}
                             onPress={() => {
-                              setOpenMenuNodeId(null);
                               setMovePickerNodeId(null);
-                              void onRemoveStop(node.id);
+                              setPendingDeleteNodeId(node.id);
                             }}
                           >
                             <Text style={styles.smallButtonText}>Ta bort</Text>
                           </Pressable>
+                          {deleteConfirmOpen ? (
+                            <View style={dayCardStyles.deleteConfirmPanel}>
+                              <Text style={styles.itemMeta}>Ta bort steget permanent från resan?</Text>
+                              <View style={styles.stopActions}>
+                                <Pressable
+                                  style={[styles.dangerButton, isLoading && styles.disabledButton]}
+                                  onPress={() => {
+                                    setOpenMenuNodeId(null);
+                                    setMovePickerNodeId(null);
+                                    setPendingDeleteNodeId(null);
+                                    void onRemoveStop(node.id);
+                                  }}
+                                  disabled={isLoading}
+                                >
+                                  <Text style={styles.smallButtonText}>Ja, ta bort</Text>
+                                </Pressable>
+                                <Pressable style={styles.secondarySmallButton} onPress={() => setPendingDeleteNodeId(null)} disabled={isLoading}>
+                                  <Text style={styles.secondarySmallButtonText}>Avbryt</Text>
+                                </Pressable>
+                              </View>
+                            </View>
+                          ) : null}
                         </View>
                       ) : null}
                     </View>
