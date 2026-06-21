@@ -81,10 +81,38 @@ type AppView = 'overview' | 'route' | 'budget' | 'days' | 'tools';
 const appTabs: { key: AppView; label: string }[] = [
   { key: 'overview', label: 'Översikt' },
   { key: 'route', label: 'Rutt' },
-  { key: 'budget', label: 'Budget' },
   { key: 'days', label: 'Dagar' },
+  { key: 'budget', label: 'Budget' },
   { key: 'tools', label: 'Verktyg' },
 ];
+
+const viewHeroCopy: Record<AppView, { eyebrow: string; title: string; body: string }> = {
+  overview: {
+    eyebrow: 'Resestatus',
+    title: 'Din roadtrip i ett lugnt beslutsflöde',
+    body: 'Se vad som är klart, vad som saknas och vilket steg som för resan framåt.',
+  },
+  route: {
+    eyebrow: 'Kontrollera rutten',
+    title: 'Karta, ordning och körsträcka',
+    body: 'Fokusera på vart ni ska, vilka stopp som ingår och om kartpositionerna är redo.',
+  },
+  days: {
+    eyebrow: 'Planera dagarna',
+    title: 'Dag-för-dag utan att tappa detaljerna',
+    body: 'Redigera tider, platser, bokningar och anteckningar där resplanen faktiskt händer.',
+  },
+  budget: {
+    eyebrow: 'Förfina budgeten',
+    title: 'Kostnader som går att förstå',
+    body: 'Följ totalen, per person och saknade kostnader utan att blanda in ruttverktyg.',
+  },
+  tools: {
+    eyebrow: 'Avancerade verktyg',
+    title: 'Import, synk och underhåll samlat',
+    body: 'Tekniska åtgärder ligger här så huvudflödet kan vara rent och praktiskt.',
+  },
+};
 
 const demoTrip: Trip = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -324,6 +352,8 @@ export default function App() {
   }), [displayedNodes.length, missingCoordinateCount, budgetSummary.missingCostCount, missingBookingCount]);
   const firstRouteStop = displayedNodes[0] ?? null;
   const lastRouteStop = displayedNodes[displayedNodes.length - 1] ?? null;
+  const activeHeroCopy = viewHeroCopy[activeView];
+  const activeTabIndex = appTabs.findIndex((tab) => tab.key === activeView);
   const totalSpend = budgetSummary.total;
   const travelerCount = parseTravelerCount(travelerCountText);
   const costPerTraveler = travelerCount > 0 ? totalSpend / travelerCount : totalSpend;
@@ -1756,8 +1786,8 @@ export default function App() {
         <StatusBar style={isDark ? 'light' : 'dark'} />
         <View style={[styles.header, isMobile && styles.headerMobile, isDark && styles.headerDark]}>
           <View style={[styles.brandLockup, isMobile && styles.brandLockupMobile]}>
-            <Text style={[styles.kicker, isDark && styles.textMutedDark]}>ReseApp</Text>
-            <Text style={[styles.title, isDark && styles.textDark]}>Roadtrip-planerare</Text>
+            <Text style={[styles.kicker, isDark && styles.textMutedDark]}>Roadtrip Pro</Text>
+            <Text style={[styles.title, isDark && styles.textDark]}>Alpine Roadtrip</Text>
           </View>
           <View style={[styles.navLinks, isMobile && styles.navLinksMobile]}>
             {appTabs.map((tab) => (
@@ -1772,7 +1802,7 @@ export default function App() {
           </View>
           <View style={[styles.headerActions, isMobile && styles.headerActionsMobile]}>
             <View style={[styles.headerStatusSummary, isMobile && styles.headerStatusSummaryMobile, isDark && styles.headerStatusSummaryDark]}>
-              <Text style={[styles.headerStatusTitle, isDark && styles.textDark]}>{activeTripId ? 'Resan är ansluten' : 'Lokal resa'}</Text>
+              <Text style={[styles.headerStatusTitle, isDark && styles.textDark]}>{activeTripId ? 'Ansluten resa' : 'Lokalt läge'}</Text>
               <Text style={[styles.headerStatusMeta, isDark && styles.textMutedDark]} numberOfLines={1}>{statusMessage || onlineSaveLabel}</Text>
             </View>
             <Pressable style={[styles.modeButton, isEditMode && styles.modeButtonActive]} onPress={toggleEditMode}>
@@ -1786,15 +1816,15 @@ export default function App() {
 
         <ScrollView ref={contentScrollRef} style={styles.content} contentContainerStyle={[styles.contentInner, isMobile && styles.contentInnerMobile]}>
           <View style={[styles.tripHero, isMobile && styles.tripHeroMobile]}>
-            <View style={styles.heroPlaneOne} />
-            <View style={styles.heroPlaneTwo} />
-            <View style={styles.heroPlaneThree} />
             <View style={[styles.tripHeroCopy, isMobile && styles.tripHeroCopyMobile]}>
-              <Text style={styles.heroEyebrow}>Roadtrip 2026</Text>
-              <Text style={styles.heroTitle}>{demoTrip.name}</Text>
-              <Text style={styles.heroBody}>
-                Planera stopp, tider, kostnader och packning i samma vy. Allt sparas när resan är ansluten.
-              </Text>
+              <Text style={styles.heroEyebrow}>{activeHeroCopy.eyebrow}</Text>
+              <Text style={styles.heroTitle}>{activeHeroCopy.title}</Text>
+              <Text style={styles.heroBody}>{activeHeroCopy.body}</Text>
+              <View style={styles.tripRouteLine}>
+                <Text style={styles.tripRouteText}>{firstRouteStop?.title ?? 'Start'}</Text>
+                <Text style={styles.tripRouteArrow}>→</Text>
+                <Text style={styles.tripRouteText}>{lastRouteStop?.title ?? 'Mål'}</Text>
+              </View>
             </View>
             <View style={[styles.heroStats, isMobile && styles.heroStatsMobile]}>
               <View style={styles.heroStat}>
@@ -1810,6 +1840,21 @@ export default function App() {
                 <Text style={styles.heroStatLabel}>Körning</Text>
               </View>
             </View>
+          </View>
+
+          <View style={[styles.flowRail, isMobile && styles.flowRailMobile]}>
+            {appTabs.map((tab, index) => (
+              <Pressable
+                key={tab.key}
+                style={[styles.flowStep, activeView === tab.key && styles.flowStepActive]}
+                onPress={() => goToView(tab.key)}
+              >
+                <Text style={[styles.flowStepNumber, activeView === tab.key && styles.flowStepNumberActive]}>{index + 1}</Text>
+                <Text style={[styles.flowStepText, activeView === tab.key && styles.flowStepTextActive]}>{tab.label}</Text>
+                {index < appTabs.length - 1 && !isMobile ? <Text style={styles.flowStepConnector}>/</Text> : null}
+              </Pressable>
+            ))}
+            <Text style={styles.flowCurrentText}>{activeTabIndex + 1} av {appTabs.length}</Text>
           </View>
 
           <View style={[styles.dashboardGrid, isMobile && styles.dashboardGridMobile]}>
@@ -1919,8 +1964,30 @@ export default function App() {
             <View style={[styles.mainColumn, isMobile && styles.mainColumnMobile]}>
               {activeView === 'tools' ? (
                 <View style={[styles.panelSection, isDark && styles.panelDark]}>
-                  <SectionTitle title="Verktyg" dark={isDark} />
-                  <Text style={styles.emptySearchText}>Här finns konto, delning och AI-assistent när redigering är aktiv.</Text>
+                  <View style={styles.sectionHeaderRow}>
+                    <SectionTitle title="Tekniska verktyg" dark={isDark} />
+                    <Text style={styles.overviewMeta}>{activeTripId ? 'Synk är tillgänglig' : 'Anslut resan för onlineverktyg'}</Text>
+                  </View>
+                  <View style={[styles.toolSummaryGrid, isMobile && styles.singleColumnGrid]}>
+                    <View style={styles.toolSummaryItem}>
+                      <Text style={styles.toolSummaryLabel}>Import</Text>
+                      <Text style={styles.toolSummaryTitle}>Importera/uppdatera resplan</Text>
+                      <Text style={styles.toolSummaryText}>Ladda den korrigerade rutten och rensa gamla importerade stopp.</Text>
+                    </View>
+                    <View style={styles.toolSummaryItem}>
+                      <Text style={styles.toolSummaryLabel}>Karta</Text>
+                      <Text style={styles.toolSummaryTitle}>{missingCoordinateCount > 0 ? `${missingCoordinateCount} saknar kartposition` : 'Kartpositioner klara'}</Text>
+                      <Text style={styles.toolSummaryText}>Fyll saknade koordinater med Google Places när det behövs.</Text>
+                    </View>
+                    <View style={styles.toolSummaryItem}>
+                      <Text style={styles.toolSummaryLabel}>Synk</Text>
+                      <Text style={styles.toolSummaryTitle}>{onlineSaveLabel}</Text>
+                      <Text style={styles.toolSummaryText}>Konto, delning, ångra och AI-assistent ligger i verktygspanelen.</Text>
+                    </View>
+                  </View>
+                  {isDemoMode ? (
+                    <Text style={styles.emptySearchText}>Slå på redigering och anslut resan för att visa import, delning och synkverktyg.</Text>
+                  ) : null}
                 </View>
               ) : null}
               {activeView === 'route' ? (
@@ -1946,21 +2013,21 @@ export default function App() {
                       </View>
                     </View>
                   </View>
-                  <View style={styles.mapShell}>
+                  <View style={[styles.mapShell, isMobile && styles.mapShellMobile]}>
                     <NavigationMap nodes={displayedNodes} activeRoute={routeSummary.geometry ? routeSummary : demoRoute} followUser={false} />
-                    <View style={styles.mapOverlayPanel}>
+                    <View style={[styles.mapOverlayPanel, isMobile && styles.mapOverlayPanelMobile]}>
                       <Text style={styles.mapOverlayKicker}>Aktuell plan</Text>
                       <Text style={styles.mapOverlayTitle}>{demoTrip.name}</Text>
                       <Text style={styles.mapOverlayMeta}>{formatDistance(routeSummary.distanceMeters)} / {formatDuration(routeSummary.durationSeconds)}</Text>
                     </View>
-                    <View style={styles.mapLayerControls}>
+                    <View style={[styles.mapLayerControls, isMobile && styles.mapLayerControlsMobile]}>
                       {['Karta', 'Stopp'].map((label, index) => (
                         <View key={label} style={[styles.mapLayerChip, index === 0 && styles.mapLayerChipActive]}>
                           <Text style={[styles.mapLayerText, index === 0 && styles.mapLayerTextActive]}>{label}</Text>
                         </View>
                       ))}
                     </View>
-                    <View style={styles.mapLegend}>
+                    <View style={[styles.mapLegend, isMobile && styles.mapLegendMobile]}>
                       <View style={[styles.legendDot, { backgroundColor: '#635bff' }]} />
                       <Text style={styles.legendText}>planerat stopp</Text>
                       <View style={[styles.legendDot, { backgroundColor: '#00d4ff' }]} />
@@ -2930,7 +2997,7 @@ function cryptoRandomId(): string {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#f5f7fa',
+    backgroundColor: '#eef3f6',
   },
   screenDark: {
     backgroundColor: '#050505',
@@ -2940,11 +3007,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 24,
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-    backgroundColor: '#ffffff',
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+    backgroundColor: 'rgba(255,255,255,0.98)',
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e6edf5',
+    borderBottomColor: '#d8e2eb',
+    shadowColor: '#0a2540',
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
   },
   headerMobile: {
     alignItems: 'stretch',
@@ -2965,7 +3037,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#0a2540',
-    fontSize: 22,
+    fontSize: 21,
     fontWeight: '900',
   },
   brandLockup: {
@@ -2990,10 +3062,10 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   navTab: {
-    minHeight: 36,
+    minHeight: 38,
     justifyContent: 'center',
     borderRadius: 999,
-    paddingHorizontal: 14,
+    paddingHorizontal: 15,
     paddingVertical: 8,
   },
   navTabMobile: {
@@ -3002,7 +3074,7 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   navTabActive: {
-    backgroundColor: '#0a2540',
+    backgroundColor: '#102a43',
   },
   navLink: {
     color: '#425466',
@@ -3033,8 +3105,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d7e1ea',
-    backgroundColor: '#f6f9fc',
+    borderColor: '#d8e2eb',
+    backgroundColor: '#fbfdff',
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
@@ -3116,7 +3188,7 @@ const styles = StyleSheet.create({
     color: '#b91c1c',
   },
   syncButton: {
-    backgroundColor: '#0a2540',
+    backgroundColor: '#102a43',
     borderRadius: 999,
     minHeight: 38,
     justifyContent: 'center',
@@ -3182,20 +3254,23 @@ const styles = StyleSheet.create({
     height: 460,
     overflow: 'hidden',
     position: 'relative',
-    borderRadius: 8,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#111827',
-    backgroundColor: '#101820',
+    borderColor: '#0f2233',
+    backgroundColor: '#0f2233',
+  },
+  mapShellMobile: {
+    height: 360,
   },
   content: {
     flex: 1,
   },
   contentInner: {
     width: '100%',
-    maxWidth: 1500,
+    maxWidth: 1320,
     alignSelf: 'center',
-    padding: 24,
-    gap: 16,
+    padding: 28,
+    gap: 18,
   },
   contentInnerMobile: {
     maxWidth: '100%',
@@ -3203,18 +3278,23 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   tripHero: {
-    minHeight: 150,
+    minHeight: 190,
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'stretch',
     justifyContent: 'space-between',
-    gap: 18,
+    gap: 22,
     overflow: 'hidden',
-    borderRadius: 8,
+    borderRadius: 16,
     backgroundColor: '#ffffff',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#e6edf5',
-    padding: 22,
+    borderColor: '#d8e2eb',
+    padding: 28,
+    shadowColor: '#0a2540',
+    shadowOpacity: 0.07,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 4,
   },
   tripHeroMobile: {
     minHeight: 0,
@@ -3255,14 +3335,14 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 320,
     justifyContent: 'center',
-    gap: 8,
+    gap: 10,
   },
   tripHeroCopyMobile: {
     minWidth: 0,
     width: '100%',
   },
   heroEyebrow: {
-    color: '#635bff',
+    color: '#0f766e',
     fontSize: 12,
     fontWeight: '900',
     textTransform: 'uppercase',
@@ -3270,16 +3350,41 @@ const styles = StyleSheet.create({
   heroTitle: {
     maxWidth: 760,
     color: '#0a2540',
-    fontSize: 30,
-    lineHeight: 36,
+    fontSize: 34,
+    lineHeight: 40,
     fontWeight: '900',
   },
   heroBody: {
     maxWidth: 660,
     color: '#425466',
-    fontSize: 15,
-    lineHeight: 22,
-    fontWeight: '700',
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: '600',
+  },
+  tripRouteLine: {
+    alignSelf: 'flex-start',
+    minHeight: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 999,
+    backgroundColor: '#fbfdff',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d8e2eb',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 4,
+    flexWrap: 'wrap',
+  },
+  tripRouteText: {
+    color: '#0a2540',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  tripRouteArrow: {
+    color: '#64748b',
+    fontSize: 14,
+    fontWeight: '900',
   },
   heroStats: {
     width: 360,
@@ -3298,11 +3403,80 @@ const styles = StyleSheet.create({
     minWidth: 105,
     justifyContent: 'center',
     gap: 6,
-    borderRadius: 8,
-    backgroundColor: '#f6f9fc',
+    borderRadius: 12,
+    backgroundColor: '#fbfdff',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d7e1ea',
+    borderColor: '#d8e2eb',
     padding: 16,
+  },
+  flowRail: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d8e2eb',
+    backgroundColor: '#ffffff',
+    padding: 10,
+    shadowColor: '#0a2540',
+    shadowOpacity: 0.04,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 7 },
+    elevation: 2,
+  },
+  flowRailMobile: {
+    alignItems: 'stretch',
+  },
+  flowStep: {
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  flowStepActive: {
+    backgroundColor: '#102a43',
+  },
+  flowStepNumber: {
+    minWidth: 22,
+    minHeight: 22,
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    borderRadius: 11,
+    color: '#425466',
+    backgroundColor: '#edf2f7',
+    fontSize: 11,
+    fontWeight: '900',
+    overflow: 'hidden',
+  },
+  flowStepNumberActive: {
+    color: '#0a2540',
+    backgroundColor: '#ffffff',
+  },
+  flowStepText: {
+    color: '#425466',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  flowStepTextActive: {
+    color: '#ffffff',
+  },
+  flowStepConnector: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '900',
+    marginLeft: 2,
+  },
+  flowCurrentText: {
+    marginLeft: 'auto',
+    color: '#64748b',
+    fontSize: 12,
+    fontWeight: '900',
+    textTransform: 'uppercase',
   },
   heroStatValue: {
     color: '#0a2540',
@@ -3345,11 +3519,16 @@ const styles = StyleSheet.create({
   routeStage: {
     gap: 12,
     overflow: 'hidden',
-    borderRadius: 8,
-    backgroundColor: '#0a2540',
+    borderRadius: 16,
+    backgroundColor: '#102a43',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#0a2540',
-    padding: 14,
+    borderColor: '#102a43',
+    padding: 16,
+    shadowColor: '#0a2540',
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 4,
   },
   routeStageHeader: {
     minHeight: 56,
@@ -3382,7 +3561,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   routeStageKicker: {
-    color: '#00d4ff',
+    color: '#7dd3fc',
     fontSize: 12,
     fontWeight: '900',
     textTransform: 'uppercase',
@@ -3396,11 +3575,11 @@ const styles = StyleSheet.create({
     minHeight: 34,
     justifyContent: 'center',
     borderRadius: 999,
-    backgroundColor: '#00d4ff',
+    backgroundColor: '#f8fafc',
     paddingHorizontal: 14,
   },
   routeBadgeText: {
-    color: '#04243a',
+    color: '#102a43',
     fontSize: 12,
     fontWeight: '900',
     textTransform: 'uppercase',
@@ -3427,10 +3606,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#e6edf5',
-    backgroundColor: '#f6f9fc',
+    borderColor: '#dce5ee',
+    backgroundColor: '#fbfdff',
     paddingHorizontal: 12,
     paddingVertical: 9,
   },
@@ -3468,14 +3647,21 @@ const styles = StyleSheet.create({
     left: 18,
     top: 18,
     minWidth: 240,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.94)',
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.96)',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(215,225,234,0.9)',
     padding: 16,
   },
+  mapOverlayPanelMobile: {
+    left: 10,
+    right: 10,
+    top: 10,
+    minWidth: 0,
+    padding: 12,
+  },
   mapOverlayKicker: {
-    color: '#635bff',
+    color: '#0f766e',
     fontSize: 11,
     fontWeight: '900',
     textTransform: 'uppercase',
@@ -3499,8 +3685,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     borderRadius: 999,
-    backgroundColor: 'rgba(10,37,64,0.82)',
+    backgroundColor: 'rgba(16,42,67,0.86)',
     padding: 6,
+  },
+  mapLayerControlsMobile: {
+    display: 'none',
   },
   mapLayerChip: {
     minHeight: 34,
@@ -3527,11 +3716,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.94)',
+    backgroundColor: 'rgba(255,255,255,0.96)',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(215,225,234,0.9)',
     paddingHorizontal: 14,
     paddingVertical: 10,
+  },
+  mapLegendMobile: {
+    left: 10,
+    right: 10,
+    bottom: 10,
+    justifyContent: 'center',
+    flexWrap: 'wrap',
   },
   legendDot: {
     width: 9,
@@ -3547,12 +3743,17 @@ const styles = StyleSheet.create({
   panelSection: {
     flex: 1,
     minWidth: 300,
-    gap: 12,
+    gap: 14,
     backgroundColor: '#ffffff',
-    borderRadius: 8,
+    borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#e6edf5',
-    padding: 16,
+    borderColor: '#d8e2eb',
+    padding: 18,
+    shadowColor: '#0a2540',
+    shadowOpacity: 0.05,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2,
   },
   statsRow: {
     flexDirection: 'row',
@@ -3595,11 +3796,11 @@ const styles = StyleSheet.create({
   },
   readinessPanel: {
     gap: 12,
-    borderRadius: 8,
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d7e1ea',
+    borderColor: '#dce5ee',
     backgroundColor: '#ffffff',
-    padding: 14,
+    padding: 16,
   },
   readinessHeader: {
     minHeight: 40,
@@ -3650,13 +3851,45 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginTop: 4,
   },
+  toolSummaryGrid: {
+    flexDirection: 'row',
+    gap: 12,
+    flexWrap: 'wrap',
+  },
+  toolSummaryItem: {
+    flex: 1,
+    minWidth: 210,
+    gap: 6,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#dce5ee',
+    backgroundColor: '#fbfdff',
+    padding: 16,
+  },
+  toolSummaryLabel: {
+    color: '#0f766e',
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  toolSummaryTitle: {
+    color: '#0a2540',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  toolSummaryText: {
+    color: '#425466',
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
   overviewMapCard: {
     gap: 10,
-    borderRadius: 8,
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d7e1ea',
+    borderColor: '#dce5ee',
     backgroundColor: '#ffffff',
-    padding: 12,
+    padding: 14,
   },
   overviewMapHeader: {
     minHeight: 40,
@@ -3690,21 +3923,21 @@ const styles = StyleSheet.create({
     height: 240,
     minHeight: 220,
     overflow: 'hidden',
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d7e1ea',
-    backgroundColor: '#f6f9fc',
+    borderColor: '#d8e2eb',
+    backgroundColor: '#fbfdff',
   },
   metric: {
     flex: 1,
     minWidth: 150,
     minHeight: 78,
     backgroundColor: '#ffffff',
-    borderRadius: 8,
+    borderRadius: 14,
     borderTopWidth: 3,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#e6edf5',
-    padding: 14,
+    borderColor: '#dce5ee',
+    padding: 16,
     justifyContent: 'space-between',
   },
   metricLabel: {
@@ -3776,9 +4009,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderTopWidth: 3,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#e6edf5',
-    backgroundColor: '#f6f9fc',
-    padding: 14,
+    borderColor: '#dce5ee',
+    backgroundColor: '#fbfdff',
+    padding: 16,
   },
   budgetLabel: {
     color: '#425466',
@@ -3859,8 +4092,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   typeChipActive: {
-    borderColor: '#635bff',
-    backgroundColor: '#635bff',
+    borderColor: '#102a43',
+    backgroundColor: '#102a43',
   },
   typeChipText: {
     color: '#425466',
@@ -3900,8 +4133,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d7e1ea',
-    backgroundColor: '#f6f9fc',
+    borderColor: '#d8e2eb',
+    backgroundColor: '#fbfdff',
     paddingHorizontal: 16,
     paddingVertical: 9,
   },
@@ -3910,7 +4143,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d7e1ea',
+    borderColor: '#d8e2eb',
     backgroundColor: '#ffffff',
     paddingHorizontal: 13,
   },
@@ -3927,10 +4160,10 @@ const styles = StyleSheet.create({
   },
   emptySearchState: {
     gap: 6,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d7e1ea',
-    backgroundColor: '#f6f9fc',
+    borderColor: '#d8e2eb',
+    backgroundColor: '#fbfdff',
     padding: 16,
   },
   emptySearchTitle: {
@@ -3945,26 +4178,26 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   dayGroup: {
-    gap: 12,
-    backgroundColor: '#f6f9fc',
-    borderRadius: 8,
+    gap: 14,
+    backgroundColor: '#fbfdff',
+    borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#e6edf5',
-    padding: 14,
+    borderColor: '#dce5ee',
+    padding: 16,
   },
   dayInlineEditor: {
     gap: 10,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d7e1ea',
+    borderColor: '#d8e2eb',
     backgroundColor: '#ffffff',
     padding: 12,
   },
   dayPlaceSearch: {
     gap: 10,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d7e1ea',
+    borderColor: '#d8e2eb',
     backgroundColor: '#ffffff',
     padding: 12,
   },
@@ -3974,7 +4207,7 @@ const styles = StyleSheet.create({
   coordinateWarningBox: {
     alignItems: 'flex-start',
     gap: 8,
-    borderRadius: 8,
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#ffe3a3',
     backgroundColor: '#fff9eb',
@@ -3983,9 +4216,9 @@ const styles = StyleSheet.create({
   },
   coordinateSearchPanel: {
     gap: 10,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d7e1ea',
+    borderColor: '#d8e2eb',
     backgroundColor: '#ffffff',
     padding: 10,
   },
@@ -3995,10 +4228,10 @@ const styles = StyleSheet.create({
     flex: 1,
     color: '#0a2540',
     fontSize: 13,
-    backgroundColor: '#f6f9fc',
-    borderRadius: 8,
+    backgroundColor: '#fbfdff',
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d7e1ea',
+    borderColor: '#d8e2eb',
     paddingHorizontal: 12,
   },
   dayInsightGrid: {
@@ -4009,9 +4242,9 @@ const styles = StyleSheet.create({
   dayInsightCard: {
     flex: 1,
     minWidth: 150,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d7e1ea',
+    borderColor: '#d8e2eb',
     backgroundColor: '#ffffff',
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -4037,14 +4270,14 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   dayNextAction: {
-    color: '#635bff',
+    color: '#0f766e',
     fontSize: 13,
     fontWeight: '900',
     lineHeight: 18,
-    borderRadius: 8,
-    backgroundColor: '#f2f4ff',
+    borderRadius: 12,
+    backgroundColor: '#ecfdf5',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#dfe3ff',
+    borderColor: '#b8ead1',
     paddingHorizontal: 12,
     paddingVertical: 9,
   },
@@ -4093,7 +4326,7 @@ const styles = StyleSheet.create({
   },
   packingPanel: {
     gap: 8,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#d8e5f2',
     backgroundColor: '#f7fbff',
@@ -4150,7 +4383,7 @@ const styles = StyleSheet.create({
     minWidth: 180,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#d8e5f2',
-    borderRadius: 8,
+    borderRadius: 12,
     backgroundColor: '#ffffff',
     color: '#0a2540',
     paddingHorizontal: 12,
@@ -4189,10 +4422,10 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 14,
     backgroundColor: '#ffffff',
-    borderRadius: 8,
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#e6edf5',
-    padding: 12,
+    borderColor: '#dce5ee',
+    padding: 14,
   },
   timeRail: {
     width: 62,
@@ -4222,7 +4455,7 @@ const styles = StyleSheet.create({
   itemTitle: {
     color: '#0a2540',
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: '900',
   },
   itemMeta: {
     color: '#425466',
@@ -4249,8 +4482,8 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#d8e5f2',
-    borderRadius: 8,
-    backgroundColor: '#f7fbff',
+    borderRadius: 12,
+    backgroundColor: '#fbfdff',
     color: '#0a2540',
     paddingHorizontal: 10,
     paddingVertical: 8,
@@ -4287,8 +4520,8 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   quickTypeChipActive: {
-    borderColor: '#635bff',
-    backgroundColor: '#eef4ff',
+    borderColor: '#102a43',
+    backgroundColor: '#eef3f6',
   },
   quickTypeChipText: {
     color: '#425466',
@@ -4296,14 +4529,14 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   quickTypeChipTextActive: {
-    color: '#635bff',
+    color: '#102a43',
   },
   nodeInfoPill: {
     color: '#425466',
     fontSize: 11,
     fontWeight: '800',
     borderRadius: 999,
-    backgroundColor: '#f6f9fc',
+    backgroundColor: '#fbfdff',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#d7e1ea',
     paddingHorizontal: 9,
@@ -4315,10 +4548,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     textAlignVertical: 'top',
-    backgroundColor: '#f6f9fc',
+    backgroundColor: '#fbfdff',
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d7e1ea',
+    borderColor: '#d8e2eb',
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
@@ -4326,10 +4559,10 @@ const styles = StyleSheet.create({
     minHeight: 42,
     color: '#0a2540',
     fontSize: 14,
-    backgroundColor: '#f6f9fc',
+    backgroundColor: '#fbfdff',
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d7e1ea',
+    borderColor: '#d8e2eb',
     paddingHorizontal: 12,
   },
   coordinateInput: {
@@ -4338,15 +4571,15 @@ const styles = StyleSheet.create({
     flex: 1,
     color: '#0a2540',
     fontSize: 14,
-    backgroundColor: '#f6f9fc',
+    backgroundColor: '#fbfdff',
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d7e1ea',
+    borderColor: '#d8e2eb',
     paddingHorizontal: 12,
   },
   commandButton: {
     alignSelf: 'flex-end',
-    backgroundColor: '#635bff',
+    backgroundColor: '#0f766e',
     borderRadius: 999,
     minHeight: 40,
     justifyContent: 'center',
@@ -4354,7 +4587,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   secondaryButton: {
-    backgroundColor: '#0a2540',
+    backgroundColor: '#102a43',
     borderRadius: 999,
     minHeight: 40,
     justifyContent: 'center',
@@ -4378,8 +4611,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 10,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d7e1ea',
-    backgroundColor: '#f6f9fc',
+    borderColor: '#d8e2eb',
+    backgroundColor: '#fbfdff',
     paddingHorizontal: 12,
   },
   shareCodeBoxDark: {
@@ -4409,19 +4642,19 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   smallButton: {
-    backgroundColor: '#635bff',
+    backgroundColor: '#0f766e',
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
   secondarySmallButton: {
-    backgroundColor: '#e7ecff',
+    backgroundColor: '#eef3f6',
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
   secondarySmallButtonText: {
-    color: '#635bff',
+    color: '#102a43',
     fontSize: 12,
     fontWeight: '900',
   },
