@@ -55,6 +55,7 @@ import {
 } from '@/services/planning/inlineEdit';
 import { applyGooglePlaceCoordinateUpdate } from '@/services/planning/placeCoordinateUpdate';
 import { planReseplanrareImport } from '@/services/planning/reseplanrareImport';
+import { buildTripReadiness } from '@/services/planning/tripReadiness';
 import { estimateRouteSummary } from '@/services/routing/routeEstimate';
 import { useTripStore } from '@/store/tripStore';
 import { formatDistance, formatDuration } from '@/utils/formatters';
@@ -310,9 +311,17 @@ export default function App() {
   const filteredDayPlans = useMemo(() => filterDayPlans(dayPlans, plannerSearchText), [dayPlans, plannerSearchText]);
   const filteredStopCount = useMemo(() => filteredDayPlans.reduce((count, dayPlan) => count + dayPlan.nodes.length, 0), [filteredDayPlans]);
   const budgetSummary = useMemo(() => buildBudgetSummary(displayedNodes), [displayedNodes]);
-  const upcomingNodes = useMemo(() => buildUpcomingNodes(displayedNodes), [displayedNodes]);
-  const nextNode = upcomingNodes[0] ?? displayedNodes[0] ?? null;
-  const nextDayPlan = dayPlans.find((dayPlan) => dayPlan.nodes.some((node) => node.id === nextNode?.id)) ?? dayPlans[0] ?? null;
+  const bulkCoordinateCandidates = useMemo(() => getBulkCoordinateCandidates(displayedNodes), [displayedNodes]);
+  const missingCoordinateCount = bulkCoordinateCandidates.length;
+  const missingBookingCount = useMemo(() => countMissingBookingReferences(displayedNodes), [displayedNodes]);
+  const tripReadiness = useMemo(() => buildTripReadiness({
+    stopCount: displayedNodes.length,
+    missingCoordinateCount,
+    missingCostCount: budgetSummary.missingCostCount,
+    missingBookingCount,
+  }), [displayedNodes.length, missingCoordinateCount, budgetSummary.missingCostCount, missingBookingCount]);
+  const firstRouteStop = displayedNodes[0] ?? null;
+  const lastRouteStop = displayedNodes[displayedNodes.length - 1] ?? null;
   const totalSpend = budgetSummary.total;
   const travelerCount = parseTravelerCount(travelerCountText);
   const costPerTraveler = travelerCount > 0 ? totalSpend / travelerCount : totalSpend;
@@ -1862,6 +1871,16 @@ export default function App() {
                 <Pressable style={[styles.commandButton, (isLoading || !activeTripId) && styles.disabledButton]} onPress={importReseplanrarePlan} disabled={isLoading || !activeTripId}>
                   <Text style={styles.commandButtonText}>Ladda resplan</Text>
                 </Pressable>
+                <Pressable
+                  style={[styles.secondaryButton, (isLoading || !activeTripId || missingCoordinateCount === 0) && styles.disabledButton]}
+                  onPress={() => void updateMissingCoordinatesForAllStops()}
+                  disabled={isLoading || !activeTripId || missingCoordinateCount === 0}
+                >
+                  <Text style={styles.secondaryButtonText}>Fyll i saknade kartpositioner</Text>
+                </Pressable>
+                <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
+                  {missingCoordinateCount > 0 ? `${missingCoordinateCount} aktiva stopp saknar kartposition.` : 'Alla aktiva stopp har kartpositioner.'}
+                </Text>
               </View>
 
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
@@ -1903,7 +1922,7 @@ export default function App() {
                     <Text style={styles.routeStageTitle}>Ruttkarta</Text>
                   </View>
                   <View style={styles.routeHeaderActions}>
-                    {!isDemoMode ? (
+                    {!isDemoMode && missingCoordinateCount > 0 ? (
                       <Pressable
                         style={[styles.routeActionButton, isLoading && styles.disabledButton]}
                         onPress={() => void updateMissingCoordinatesForAllStops()}
@@ -1925,7 +1944,7 @@ export default function App() {
                     <Text style={styles.mapOverlayMeta}>{formatDistance(routeSummary.distanceMeters)} / {formatDuration(routeSummary.durationSeconds)}</Text>
                   </View>
                   <View style={styles.mapLayerControls}>
-                    {['Karta', 'Stopp', 'Kostnad'].map((label, index) => (
+                    {['Karta', 'Stopp'].map((label, index) => (
                       <View key={label} style={[styles.mapLayerChip, index === 0 && styles.mapLayerChipActive]}>
                         <Text style={[styles.mapLayerText, index === 0 && styles.mapLayerTextActive]}>{label}</Text>
                       </View>
@@ -1941,7 +1960,7 @@ export default function App() {
                 <View style={styles.routeStageFooter}>
                   <Text style={styles.routeStageMeta}>{formatDistance(routeSummary.distanceMeters)} rutt</Text>
                   <Text style={styles.routeStageMeta}>{formatDuration(routeSummary.durationSeconds)} körning</Text>
-                  <Text style={styles.routeStageMeta}>{formatSek(totalSpend)} kostnad</Text>
+                  {missingCoordinateCount > 0 ? <Text style={styles.routeStageMeta}>{missingCoordinateCount} saknar kartposition</Text> : null}
                 </View>
               </View>
               ) : null}
@@ -1951,27 +1970,50 @@ export default function App() {
                 <Metric label="Stopp" value={`${displayedNodes.length}`} accent="#0f766e" dark={isDark} />
                 <Metric label="Rutt" value={formatDistance(routeSummary.distanceMeters)} accent="#2563eb" dark={isDark} />
                 <Metric label="Körning" value={formatDuration(routeSummary.durationSeconds)} accent="#d97706" dark={isDark} />
-                <Metric label="Per person" value={formatSek(costPerTraveler)} accent="#7c3aed" dark={isDark} />
+              </View>
+              ) : null}
+
+              {activeView === 'route' ? (
+              <View style={[styles.panelSection, isDark && styles.panelDark]}>
+                <View style={styles.sectionHeaderRow}>
+                  <SectionTitle title="Stopp i ordning" dark={isDark} />
+                  <Text style={styles.overviewMeta}>{displayedNodes.length} stopp</Text>
+                </View>
+                <View style={styles.routeStopList}>
+                  {displayedNodes.map((node, index) => (
+                    <View key={node.id} style={styles.routeStopItem}>
+                      <View style={styles.routeStopNumber}>
+                        <Text style={styles.routeStopNumberText}>{index + 1}</Text>
+                      </View>
+                      <View style={styles.routeStopCopy}>
+                        <Text style={styles.routeStopTitle}>{node.title}</Text>
+                        <Text style={styles.routeStopMeta}>
+                          {[formatDateLabel(node.startsAt?.slice(0, 10) ?? 'unscheduled'), formatTime(node.startsAt), node.location ? 'kartposition klar' : 'saknar kartposition'].filter(Boolean).join(' / ')}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
               </View>
               ) : null}
 
               {activeView === 'overview' ? (
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
                 <View style={styles.sectionHeaderRow}>
-                  <SectionTitle title="Reseöversikt" dark={isDark} />
-                  <Text style={styles.overviewMeta}>{dayPlans.length} dagar / {displayedNodes.length} stopp</Text>
+                  <SectionTitle title="Översikt" dark={isDark} />
+                  <Text style={styles.overviewMeta}>{firstRouteStop?.title ?? 'Start'} → {lastRouteStop?.title ?? 'destination'}</Text>
                 </View>
                 <View style={[styles.overviewFocusGrid, isMobile && styles.singleColumnGrid]}>
                   <OverviewFocusCard
-                    label="Nästa stopp"
-                    title={nextNode?.title ?? 'Lägg till första stoppet'}
-                    detail={nextNode ? `${formatDateLabel(nextNode.startsAt?.slice(0, 10) ?? 'unscheduled')} / ${formatTime(nextNode.startsAt)}` : 'Planera ett stopp i Dagar.'}
+                    label="Plan"
+                    title={`${dayPlans.length} dagar`}
+                    detail={`${displayedNodes.length} stopp / ${firstRouteStop?.title ?? 'start'} → ${lastRouteStop?.title ?? 'mål'}`}
                     accent="#635bff"
                   />
                   <OverviewFocusCard
                     label="Rutt"
                     title={formatDistance(routeSummary.distanceMeters)}
-                    detail={`${formatDuration(routeSummary.durationSeconds)} körning / ${displayedNodes.length} stopp`}
+                    detail={`${formatDuration(routeSummary.durationSeconds)} körning`}
                     accent="#2563eb"
                   />
                   <OverviewFocusCard
@@ -1981,6 +2023,26 @@ export default function App() {
                     accent={budgetSummary.missingCostCount > 0 ? '#d97706' : '#0f766e'}
                   />
                 </View>
+                <View style={styles.readinessPanel}>
+                  <View style={styles.readinessHeader}>
+                    <View>
+                      <Text style={styles.overviewMapKicker}>Resestatus</Text>
+                      <Text style={styles.overviewMapTitle}>Planera → Kontrollera → Förfina → Res</Text>
+                    </View>
+                    <Pressable style={styles.smallButton} onPress={() => setActiveView(tripReadiness.nextStep.target)}>
+                      <Text style={styles.smallButtonText}>{tripReadiness.nextStep.label}</Text>
+                    </Pressable>
+                  </View>
+                  <Text style={styles.readinessNextText}>{tripReadiness.nextStep.detail}</Text>
+                  <View style={[styles.readinessGrid, isMobile && styles.singleColumnGrid]}>
+                    {tripReadiness.items.map((item) => (
+                      <View key={item.label} style={[styles.readinessItem, item.status === 'ready' && styles.readinessItemReady]}>
+                        <Text style={[styles.readinessLabel, item.status === 'ready' && styles.readinessLabelReady]}>{item.label}</Text>
+                        <Text style={styles.readinessDetail}>{item.detail}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
                 <View style={styles.overviewMapCard}>
                   <View style={styles.overviewMapHeader}>
                     <View>
@@ -1988,15 +2050,6 @@ export default function App() {
                       <Text style={styles.overviewMapTitle}>Resan på kartan</Text>
                     </View>
                     <View style={styles.overviewMapActions}>
-                      {!isDemoMode ? (
-                        <Pressable
-                          style={[styles.secondarySmallButton, isLoading && styles.disabledButton]}
-                          onPress={() => void updateMissingCoordinatesForAllStops()}
-                          disabled={isLoading}
-                        >
-                          <Text style={styles.secondarySmallButtonText}>Fyll i kartpositioner</Text>
-                        </Pressable>
-                      ) : null}
                       <Pressable style={styles.smallButton} onPress={() => setActiveView('route')}>
                         <Text style={styles.smallButtonText}>Visa hela kartan</Text>
                       </Pressable>
@@ -2005,31 +2058,6 @@ export default function App() {
                   <View style={styles.overviewMapShell}>
                     <NavigationMap nodes={displayedNodes} activeRoute={routeSummary.geometry ? routeSummary : demoRoute} followUser={false} compact />
                   </View>
-                </View>
-                {nextDayPlan ? (
-                  <View style={styles.overviewNextPanel}>
-                    <View style={styles.dayOverviewHeader}>
-                      <Text style={styles.dayOverviewTitle}>{nextDayPlan.title}</Text>
-                      <Text style={styles.dayOverviewCost}>{formatSek(nextDayPlan.budget.total)}</Text>
-                    </View>
-                    <Text style={styles.dayOverviewAction}>{nextDayPlan.insight.nextAction}</Text>
-                    <View style={styles.upcomingList}>
-                      {upcomingNodes.slice(0, 5).map((node) => (
-                        <View key={node.id} style={styles.upcomingItem}>
-                          <View style={[styles.upcomingDot, { backgroundColor: nodeColor(node.type) }]} />
-                          <View style={styles.upcomingCopy}>
-                            <Text style={styles.upcomingTitle}>{node.title}</Text>
-                            <Text style={styles.upcomingMeta}>{formatNodeType(node.type)} / {formatTime(node.startsAt)} / {formatNodeCostSummary(node)}</Text>
-                          </View>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                ) : null}
-                <View style={[styles.dayOverviewGrid, isMobile && styles.singleColumnGrid]}>
-                  {dayPlans.slice(0, 3).map((dayPlan) => (
-                    <DayOverviewCard key={dayPlan.key} dayPlan={dayPlan} />
-                  ))}
                 </View>
               </View>
               ) : null}
@@ -2210,50 +2238,8 @@ function OverviewFocusCard({ label, title, detail, accent }: { label: string; ti
   );
 }
 
-function DayOverviewCard({ dayPlan }: { dayPlan: DayPlan }) {
-  const primaryStop = dayPlan.nodes[0]?.title ?? 'Inga stopp än';
-  const flags = dayPlan.smartFlags.length > 0 ? dayPlan.smartFlags : ['Ser planerad ut'];
-
-  return (
-    <View style={styles.dayOverviewCard}>
-      <View style={styles.dayOverviewHeader}>
-        <Text style={styles.dayOverviewTitle}>{dayPlan.shortTitle}</Text>
-        <Text style={styles.dayOverviewCost}>{formatSek(dayPlan.budget.total)}</Text>
-      </View>
-      <Text style={styles.dayOverviewPrimary}>{primaryStop}</Text>
-      <Text style={styles.dayOverviewMetaLine}>{dayPlan.summary.startPlace} till {dayPlan.summary.endPlace}</Text>
-      <Text style={styles.dayOverviewMetaLine}>Boende: {dayPlan.summary.lodging}</Text>
-      <Text style={styles.dayOverviewAction}>{dayPlan.insight.nextAction}</Text>
-      <View style={styles.dayOverviewStats}>
-        <Text style={styles.dayOverviewStat}>{dayPlan.nodes.length} stopp</Text>
-        <Text style={styles.dayOverviewStat}>{dayPlan.summary.activityCount} aktiviteter</Text>
-        <Text style={styles.dayOverviewStat}>{formatDistance(dayPlan.route.distanceMeters)}</Text>
-        <Text style={styles.dayOverviewStat}>{formatDuration(dayPlan.route.durationSeconds)}</Text>
-      </View>
-      <View style={styles.smartFlagList}>
-        {flags.slice(0, 3).map((flag) => (
-          <Text key={flag} style={[styles.smartFlag, flag === 'Ser planerad ut' && styles.smartFlagGood]}>{flag}</Text>
-        ))}
-      </View>
-    </View>
-  );
-}
-
 function SectionTitle({ title, dark }: { title: string; dark: boolean }) {
   return <Text style={[styles.sectionTitle, dark && styles.textDark]}>{title}</Text>;
-}
-
-function nodeColor(type: ItineraryNode['type']) {
-  switch (type) {
-    case 'camping':
-      return '#059669';
-    case 'activity':
-      return '#d97706';
-    case 'lodging':
-      return '#2563eb';
-    default:
-      return '#0f766e';
-  }
 }
 
 function formatNodeType(type: ItineraryNode['type']): string {
@@ -2275,13 +2261,6 @@ function formatNodeType(type: ItineraryNode['type']): string {
     default:
       return 'Övrigt';
   }
-}
-
-function formatNodeCostSummary(node: ItineraryNode): string {
-  const reservation = formatReservation(node);
-  const fallback = cleanImportedNoteLines(node.notes) ?? node.timezone ?? 'lokal tid';
-  const parts = [formatRawNodeCost(node), reservation || fallback].filter(Boolean);
-  return parts.join(' / ');
 }
 
 function buildNodeInfoPills(node: ItineraryNode): string[] {
@@ -2331,14 +2310,6 @@ function sortNodes(nodes: ItineraryNode[]): ItineraryNode[] {
 
 function dayKeyForNode(node: ItineraryNode): string {
   return node.startsAt ? node.startsAt.slice(0, 10) : 'unscheduled';
-}
-
-function buildUpcomingNodes(nodes: ItineraryNode[]): ItineraryNode[] {
-  const now = Date.now();
-  const sortedNodes = sortNodes(nodes);
-  const upcomingNodes = sortedNodes.filter((node) => !node.startsAt || new Date(node.startsAt).getTime() >= now);
-
-  return upcomingNodes.length > 0 ? upcomingNodes : sortedNodes;
 }
 
 function nextSortOrder(nodes: ItineraryNode[]): number {
@@ -2598,6 +2569,10 @@ function buildBudgetSummary(nodes: ItineraryNode[]): BudgetSummary {
     missingCostCount,
     warnings,
   };
+}
+
+function countMissingBookingReferences(nodes: ItineraryNode[]): number {
+  return nodes.filter((node) => node.type === 'lodging' && !node.reservation.reference).length;
 }
 
 function buildBudgetWarnings(nodes: ItineraryNode[], total: number, missingCostCount: number): string[] {
@@ -3438,6 +3413,50 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
   },
+  routeStopList: {
+    gap: 8,
+  },
+  routeStopItem: {
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e6edf5',
+    backgroundColor: '#f6f9fc',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  routeStopNumber: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0a2540',
+  },
+  routeStopNumberText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  routeStopCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  routeStopTitle: {
+    color: '#0a2540',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  routeStopMeta: {
+    color: '#425466',
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 17,
+    marginTop: 2,
+  },
   mapOverlayPanel: {
     position: 'absolute',
     left: 18,
@@ -3568,6 +3587,63 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 18,
   },
+  readinessPanel: {
+    gap: 12,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d7e1ea',
+    backgroundColor: '#ffffff',
+    padding: 14,
+  },
+  readinessHeader: {
+    minHeight: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  readinessNextText: {
+    color: '#425466',
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 18,
+  },
+  readinessGrid: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  readinessItem: {
+    flex: 1,
+    minWidth: 150,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#ffe3a3',
+    backgroundColor: '#fff7df',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  readinessItemReady: {
+    borderColor: '#b8ead1',
+    backgroundColor: '#e7f8ef',
+  },
+  readinessLabel: {
+    color: '#7a4b00',
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  readinessLabelReady: {
+    color: '#076b4d',
+  },
+  readinessDetail: {
+    color: '#0a2540',
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 18,
+    marginTop: 4,
+  },
   overviewMapCard: {
     gap: 10,
     borderRadius: 8,
@@ -3612,47 +3688,6 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#d7e1ea',
     backgroundColor: '#f6f9fc',
-  },
-  overviewNextPanel: {
-    gap: 12,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d7e1ea',
-    backgroundColor: '#ffffff',
-    padding: 14,
-  },
-  upcomingList: {
-    gap: 8,
-  },
-  upcomingItem: {
-    minHeight: 48,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    borderRadius: 8,
-    backgroundColor: '#f6f9fc',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  upcomingDot: {
-    width: 9,
-    height: 9,
-    borderRadius: 5,
-  },
-  upcomingCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  upcomingTitle: {
-    color: '#0a2540',
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  upcomingMeta: {
-    color: '#425466',
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 3,
   },
   metric: {
     flex: 1,
@@ -3772,89 +3807,6 @@ const styles = StyleSheet.create({
     color: '#425466',
     fontSize: 13,
     fontWeight: '900',
-  },
-  dayOverviewGrid: {
-    flexDirection: 'row',
-    gap: 12,
-    flexWrap: 'wrap',
-  },
-  dayOverviewCard: {
-    flex: 1,
-    minWidth: 240,
-    gap: 10,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#e6edf5',
-    backgroundColor: '#f6f9fc',
-    padding: 14,
-  },
-  dayOverviewHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  dayOverviewTitle: {
-    color: '#635bff',
-    fontSize: 13,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-  },
-  dayOverviewCost: {
-    color: '#0a2540',
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  dayOverviewPrimary: {
-    color: '#0a2540',
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  dayOverviewMetaLine: {
-    color: '#425466',
-    fontSize: 12,
-    fontWeight: '700',
-    lineHeight: 17,
-  },
-  dayOverviewAction: {
-    color: '#425466',
-    fontSize: 12,
-    fontWeight: '800',
-    lineHeight: 17,
-  },
-  dayOverviewStats: {
-    flexDirection: 'row',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  dayOverviewStat: {
-    color: '#425466',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  smartFlagList: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexWrap: 'wrap',
-    marginTop: 6,
-  },
-  smartFlag: {
-    color: '#7a4b00',
-    fontSize: 11,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    borderRadius: 999,
-    backgroundColor: '#fff7df',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#ffe3a3',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  smartFlagGood: {
-    color: '#076b4d',
-    backgroundColor: '#e7f8ef',
-    borderColor: '#b8ead1',
   },
   warningList: {
     gap: 8,
