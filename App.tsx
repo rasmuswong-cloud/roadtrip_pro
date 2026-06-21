@@ -1923,84 +1923,82 @@ export default function App() {
                 </View>
               ) : null}
               {activeView === 'route' ? (
-              <View style={styles.routeStage}>
-                <View style={styles.routeStageHeader}>
-                  <View>
-                    <Text style={styles.routeStageKicker}>Interaktiv ruttkarta</Text>
-                    <Text style={styles.routeStageTitle}>Ruttkarta</Text>
-                  </View>
-                  <View style={styles.routeHeaderActions}>
-                    {!isDemoMode && missingCoordinateCount > 0 ? (
-                      <Pressable
-                        style={[styles.routeActionButton, isLoading && styles.disabledButton]}
-                        onPress={() => void updateMissingCoordinatesForAllStops()}
-                        disabled={isLoading}
-                      >
-                        <Text style={styles.routeActionButtonText}>Fyll i kartpositioner</Text>
-                      </Pressable>
-                    ) : null}
-                    <View style={styles.routeBadge}>
-                      <Text style={styles.routeBadgeText}>{displayedNodes.length} stopp</Text>
+              <View style={styles.routeView}>
+                <View style={styles.routeStage}>
+                  <View style={styles.routeStageHeader}>
+                    <View>
+                      <Text style={styles.routeStageKicker}>Interaktiv ruttkarta</Text>
+                      <Text style={styles.routeStageTitle}>Ruttkarta</Text>
+                    </View>
+                    <View style={styles.routeHeaderActions}>
+                      {!isDemoMode && missingCoordinateCount > 0 ? (
+                        <Pressable
+                          style={[styles.routeActionButton, isLoading && styles.disabledButton]}
+                          onPress={() => void updateMissingCoordinatesForAllStops()}
+                          disabled={isLoading}
+                        >
+                          <Text style={styles.routeActionButtonText}>Fyll i kartpositioner</Text>
+                        </Pressable>
+                      ) : null}
+                      <View style={styles.routeBadge}>
+                        <Text style={styles.routeBadgeText}>{displayedNodes.length} stopp</Text>
+                      </View>
                     </View>
                   </View>
-                </View>
-                <View style={styles.mapShell}>
-                  <NavigationMap nodes={displayedNodes} activeRoute={routeSummary.geometry ? routeSummary : demoRoute} followUser={false} />
-                  <View style={styles.mapOverlayPanel}>
-                    <Text style={styles.mapOverlayKicker}>Aktuell plan</Text>
-                    <Text style={styles.mapOverlayTitle}>{demoTrip.name}</Text>
-                    <Text style={styles.mapOverlayMeta}>{formatDistance(routeSummary.distanceMeters)} / {formatDuration(routeSummary.durationSeconds)}</Text>
+                  <View style={styles.mapShell}>
+                    <NavigationMap nodes={displayedNodes} activeRoute={routeSummary.geometry ? routeSummary : demoRoute} followUser={false} />
+                    <View style={styles.mapOverlayPanel}>
+                      <Text style={styles.mapOverlayKicker}>Aktuell plan</Text>
+                      <Text style={styles.mapOverlayTitle}>{demoTrip.name}</Text>
+                      <Text style={styles.mapOverlayMeta}>{formatDistance(routeSummary.distanceMeters)} / {formatDuration(routeSummary.durationSeconds)}</Text>
+                    </View>
+                    <View style={styles.mapLayerControls}>
+                      {['Karta', 'Stopp'].map((label, index) => (
+                        <View key={label} style={[styles.mapLayerChip, index === 0 && styles.mapLayerChipActive]}>
+                          <Text style={[styles.mapLayerText, index === 0 && styles.mapLayerTextActive]}>{label}</Text>
+                        </View>
+                      ))}
+                    </View>
+                    <View style={styles.mapLegend}>
+                      <View style={[styles.legendDot, { backgroundColor: '#635bff' }]} />
+                      <Text style={styles.legendText}>planerat stopp</Text>
+                      <View style={[styles.legendDot, { backgroundColor: '#00d4ff' }]} />
+                      <Text style={styles.legendText}>rutt</Text>
+                    </View>
                   </View>
-                  <View style={styles.mapLayerControls}>
-                    {['Karta', 'Stopp'].map((label, index) => (
-                      <View key={label} style={[styles.mapLayerChip, index === 0 && styles.mapLayerChipActive]}>
-                        <Text style={[styles.mapLayerText, index === 0 && styles.mapLayerTextActive]}>{label}</Text>
+                  <View style={styles.routeStageFooter}>
+                    <Text style={styles.routeStageMeta}>{formatDistance(routeSummary.distanceMeters)} rutt</Text>
+                    <Text style={styles.routeStageMeta}>{formatDuration(routeSummary.durationSeconds)} körning</Text>
+                    {missingCoordinateCount > 0 ? <Text style={styles.routeStageMeta}>{missingCoordinateCount} saknar kartposition</Text> : null}
+                  </View>
+                </View>
+
+                <View style={[styles.statsRow, isMobile && styles.singleColumnGrid]}>
+                  <Metric label="Stopp" value={`${displayedNodes.length}`} accent="#0f766e" dark={isDark} />
+                  <Metric label="Rutt" value={formatDistance(routeSummary.distanceMeters)} accent="#2563eb" dark={isDark} />
+                  <Metric label="Körning" value={formatDuration(routeSummary.durationSeconds)} accent="#d97706" dark={isDark} />
+                </View>
+
+                <View style={[styles.panelSection, isDark && styles.panelDark]}>
+                  <View style={styles.sectionHeaderRow}>
+                    <SectionTitle title="Stopp i ordning" dark={isDark} />
+                    <Text style={styles.overviewMeta}>{displayedNodes.length} stopp</Text>
+                  </View>
+                  <View style={styles.routeStopList}>
+                    {displayedNodes.map((node, index) => (
+                      <View key={node.id} style={styles.routeStopItem}>
+                        <View style={styles.routeStopNumber}>
+                          <Text style={styles.routeStopNumberText}>{index + 1}</Text>
+                        </View>
+                        <View style={styles.routeStopCopy}>
+                          <Text style={styles.routeStopTitle}>{node.title}</Text>
+                          <Text style={styles.routeStopMeta}>
+                            {[formatDateLabel(node.startsAt?.slice(0, 10) ?? 'unscheduled'), formatTime(node.startsAt), node.location ? 'kartposition klar' : 'saknar kartposition'].filter(Boolean).join(' / ')}
+                          </Text>
+                        </View>
                       </View>
                     ))}
                   </View>
-                  <View style={styles.mapLegend}>
-                    <View style={[styles.legendDot, { backgroundColor: '#635bff' }]} />
-                    <Text style={styles.legendText}>planerat stopp</Text>
-                    <View style={[styles.legendDot, { backgroundColor: '#00d4ff' }]} />
-                    <Text style={styles.legendText}>rutt</Text>
-                  </View>
-                </View>
-                <View style={styles.routeStageFooter}>
-                  <Text style={styles.routeStageMeta}>{formatDistance(routeSummary.distanceMeters)} rutt</Text>
-                  <Text style={styles.routeStageMeta}>{formatDuration(routeSummary.durationSeconds)} körning</Text>
-                  {missingCoordinateCount > 0 ? <Text style={styles.routeStageMeta}>{missingCoordinateCount} saknar kartposition</Text> : null}
-                </View>
-              </View>
-              ) : null}
-
-              {activeView === 'route' ? (
-              <View style={[styles.statsRow, isMobile && styles.singleColumnGrid]}>
-                <Metric label="Stopp" value={`${displayedNodes.length}`} accent="#0f766e" dark={isDark} />
-                <Metric label="Rutt" value={formatDistance(routeSummary.distanceMeters)} accent="#2563eb" dark={isDark} />
-                <Metric label="Körning" value={formatDuration(routeSummary.durationSeconds)} accent="#d97706" dark={isDark} />
-              </View>
-              ) : null}
-
-              {activeView === 'route' ? (
-              <View style={[styles.panelSection, isDark && styles.panelDark]}>
-                <View style={styles.sectionHeaderRow}>
-                  <SectionTitle title="Stopp i ordning" dark={isDark} />
-                  <Text style={styles.overviewMeta}>{displayedNodes.length} stopp</Text>
-                </View>
-                <View style={styles.routeStopList}>
-                  {displayedNodes.map((node, index) => (
-                    <View key={node.id} style={styles.routeStopItem}>
-                      <View style={styles.routeStopNumber}>
-                        <Text style={styles.routeStopNumberText}>{index + 1}</Text>
-                      </View>
-                      <View style={styles.routeStopCopy}>
-                        <Text style={styles.routeStopTitle}>{node.title}</Text>
-                        <Text style={styles.routeStopMeta}>
-                          {[formatDateLabel(node.startsAt?.slice(0, 10) ?? 'unscheduled'), formatTime(node.startsAt), node.location ? 'kartposition klar' : 'saknar kartposition'].filter(Boolean).join(' / ')}
-                        </Text>
-                      </View>
-                    </View>
-                  ))}
                 </View>
               </View>
               ) : null}
@@ -3342,6 +3340,10 @@ const styles = StyleSheet.create({
   },
   mainColumnMobile: {
     minWidth: 0,
+    width: '100%',
+  },
+  routeView: {
+    gap: 14,
     width: '100%',
   },
   routeStage: {
