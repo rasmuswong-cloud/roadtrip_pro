@@ -54,6 +54,7 @@ import {
   type InlineFieldValue,
 } from '@/services/planning/inlineEdit';
 import { applyGooglePlaceCoordinateUpdate } from '@/services/planning/placeCoordinateUpdate';
+import { planReseplanrareImport } from '@/services/planning/reseplanrareImport';
 import { estimateRouteSummary } from '@/services/routing/routeEstimate';
 import { useTripStore } from '@/store/tripStore';
 import { formatDistance, formatDuration } from '@/utils/formatters';
@@ -1654,11 +1655,7 @@ export default function App() {
     setStatusMessage('Laddar resplan...');
 
     try {
-      const seedRowsById = new Map(reseplanrareSeedRows.map((row) => [row.sourceRow, row]));
-      const existingImportedNodes = itineraryNodes.filter((node) => node.metadata.source === 'reseplanrare.xlsx');
-      const existingNodesByRow = new Map(existingImportedNodes
-        .map((node) => [typeof node.metadata.sourceRow === 'number' ? node.metadata.sourceRow : null, node] as const)
-        .filter((entry): entry is readonly [number, ItineraryNode] => entry[0] !== null));
+      const importPlan = planReseplanrareImport(itineraryNodes, reseplanrareSeedRows);
       if (reseplanrareSeedRows.length === 0) {
         setStatusMessage('Resplanen är redan laddad.');
         return;
@@ -1666,7 +1663,7 @@ export default function App() {
 
       const importedNodes: ItineraryNode[] = [];
       for (const row of reseplanrareSeedRows) {
-        const existingNode = existingNodesByRow.get(row.sourceRow);
+        const existingNode = importPlan.existingNodesBySourceRow.get(row.sourceRow);
         const nextNode = existingNode
           ? applySeedRowToExistingNode(existingNode, row)
           : buildNodeFromSeedRow(row, activeTripId, userId);
@@ -1674,11 +1671,9 @@ export default function App() {
       }
 
       const now = new Date().toISOString();
-      const obsoleteNodes = existingImportedNodes
-        .filter((node) => {
-          const sourceRow = typeof node.metadata.sourceRow === 'number' ? node.metadata.sourceRow : null;
-          return sourceRow !== null && !seedRowsById.has(sourceRow);
-        })
+      const importedNodeIds = new Set(importedNodes.map((node) => node.id));
+      const obsoleteNodes = importPlan.obsoleteNodes
+        .filter((node) => !importedNodeIds.has(node.id))
         .map((node) => ({
           ...node,
           deletedAt: now,
@@ -1690,13 +1685,13 @@ export default function App() {
         await saveItineraryNodeOnline(node);
       }
 
-      const importedNodeIds = new Set(importedNodes.map((node) => node.id));
       const obsoleteNodeIds = new Set(obsoleteNodes.map((node) => node.id));
       setItineraryNodes((current) => sortNodes([
         ...current.filter((node) => !importedNodeIds.has(node.id) && !obsoleteNodeIds.has(node.id)),
         ...importedNodes,
       ]));
-      setStatusMessage(`Laddade ${importedNodes.length} steg till dagplaneringen. Idéplatser sparade: ${reseplanrareIdeaPlaces.length}.`);
+      const cleanupText = obsoleteNodes.length > 0 ? ` Rensade ${obsoleteNodes.length} gamla importerade stopp.` : '';
+      setStatusMessage(`Laddade ${importedNodes.length} steg till dagplaneringen.${cleanupText} Idéplatser sparade: ${reseplanrareIdeaPlaces.length}.`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
     } finally {

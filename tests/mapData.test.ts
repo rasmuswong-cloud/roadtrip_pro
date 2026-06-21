@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { ItineraryNode } from '../src/models';
-import { calculateMapViewport, extractValidMapMarkers } from '../src/components/map/mapData';
+import { DEFAULT_MAP_CENTER, calculateMapViewport, extractValidMapMarkers, mapInitialCenter } from '../src/components/map/mapData';
 
 function node(overrides: Partial<ItineraryNode> = {}): ItineraryNode {
   const now = '2026-06-11T09:00:00.000Z';
@@ -49,6 +49,7 @@ test('extractValidMapMarkers ignores missing and invalid coordinates', () => {
     node({ id: 'nan', location: { latitude: Number.NaN, longitude: 11 } }),
     node({ id: 'bad-lat', location: { latitude: 91, longitude: 11 } }),
     node({ id: 'bad-lng', location: { latitude: 48, longitude: 181 } }),
+    node({ id: 'deleted', deletedAt: '2026-06-12T09:00:00.000Z', location: { latitude: 48, longitude: 11 } }),
     node({ id: 'valid', location: { latitude: 48, longitude: 11 } }),
   ]);
 
@@ -58,6 +59,7 @@ test('extractValidMapMarkers ignores missing and invalid coordinates', () => {
 
 test('calculateMapViewport reports empty, single center, and bounds states', () => {
   assert.deepEqual(calculateMapViewport([]), { state: 'empty', center: null, bounds: null });
+  assert.deepEqual(mapInitialCenter(calculateMapViewport([])), DEFAULT_MAP_CENTER);
 
   const one = extractValidMapMarkers([node({ location: { latitude: 50, longitude: 14 } })]);
   assert.deepEqual(calculateMapViewport(one), {
@@ -65,6 +67,7 @@ test('calculateMapViewport reports empty, single center, and bounds states', () 
     center: { latitude: 50, longitude: 14 },
     bounds: null,
   });
+  assert.deepEqual(mapInitialCenter(calculateMapViewport(one)), { latitude: 50, longitude: 14 });
 
   const many = extractValidMapMarkers([
     node({ location: { latitude: 48, longitude: 11 } }),

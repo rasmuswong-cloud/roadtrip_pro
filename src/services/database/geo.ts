@@ -17,6 +17,11 @@ export function parsePostgisPoint(value: unknown): Coordinates | null {
     if (match?.[1] && match[2]) {
       return { longitude: Number(match[1]), latitude: Number(match[2]) };
     }
+
+    const ewkbPoint = parseEwkbPoint(value);
+    if (ewkbPoint) {
+      return ewkbPoint;
+    }
   }
 
   return null;
@@ -28,4 +33,37 @@ export function toPostgisPoint(coordinates?: Coordinates | null): string | null 
   }
 
   return `SRID=4326;POINT(${coordinates.longitude} ${coordinates.latitude})`;
+}
+
+function parseEwkbPoint(value: string): Coordinates | null {
+  if (!/^[0-9a-f]+$/i.test(value) || value.length < 42 || value.length % 2 !== 0) {
+    return null;
+  }
+
+  const bytes = new Uint8Array(value.length / 2);
+  for (let index = 0; index < value.length; index += 2) {
+    bytes[index / 2] = Number.parseInt(value.slice(index, index + 2), 16);
+  }
+
+  const view = new DataView(bytes.buffer);
+  const littleEndian = view.getUint8(0) === 1;
+  const type = view.getUint32(1, littleEndian);
+  const hasSrid = Boolean(type & 0x20000000);
+  const geometryType = type & 0x000000ff;
+  if (geometryType !== 1) {
+    return null;
+  }
+
+  const coordinateOffset = hasSrid ? 9 : 5;
+  if (bytes.length < coordinateOffset + 16) {
+    return null;
+  }
+
+  const longitude = view.getFloat64(coordinateOffset, littleEndian);
+  const latitude = view.getFloat64(coordinateOffset + 8, littleEndian);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return null;
+  }
+
+  return { longitude, latitude };
 }

@@ -23,7 +23,7 @@ export type BulkCoordinateSummary = {
 export function getBulkCoordinateCandidates(nodes: ItineraryNode[]): BulkCoordinateCandidate[] {
   return nodes.flatMap((node) => {
     const query = coordinateSearchText(node);
-    if (hasValidCoordinates(node.location) || !query) {
+    if (node.deletedAt || hasValidCoordinates(node.location) || !query) {
       return [];
     }
 

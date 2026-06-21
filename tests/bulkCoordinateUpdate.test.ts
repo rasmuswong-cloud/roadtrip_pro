@@ -43,6 +43,7 @@ test('bulk coordinate candidates include only searchable stops missing coordinat
     node({ id: 'missing-title', title: 'Bolzano' }),
     node({ id: 'valid', location: { latitude: 46.49, longitude: 11.35 }, metadata: { place: 'Valid' } }),
     node({ id: 'blank', title: '   ', metadata: {} }),
+    node({ id: 'deleted', deletedAt: '2026-06-12T10:00:00.000Z', metadata: { place: 'Deleted' } }),
   ]);
 
   assert.deepEqual(candidates.map((candidate) => candidate.node.id), ['missing-place', 'missing-title']);

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import type { Coordinates, ItineraryNode, RouteSummary } from '@/models';
-import { calculateMapViewport, extractValidMapMarkers, type MapMarkerData } from './mapData';
+import { calculateMapViewport, extractValidMapMarkers, mapInitialCenter, type MapMarkerData } from './mapData';
 
 type NavigationMapProps = {
   nodes: ItineraryNode[];
@@ -51,7 +51,7 @@ export function NavigationMap({ nodes, compact = false }: NavigationMapProps) {
   const viewport = useMemo(() => calculateMapViewport(markers), [markers]);
 
   useEffect(() => {
-    if (!googleMapsApiKey || viewport.state === 'empty') {
+    if (!googleMapsApiKey) {
       return;
     }
 
@@ -66,7 +66,7 @@ export function NavigationMap({ nodes, compact = false }: NavigationMapProps) {
 
         if (!mapRef.current) {
           mapRef.current = new maps.Map(mapElementRef.current, {
-            center: toLatLng(viewport.center),
+            center: toLatLng(mapInitialCenter(viewport)),
             zoom: viewport.state === 'single' ? 11 : 8,
             mapTypeControl: false,
             streetViewControl: false,
@@ -100,16 +100,12 @@ export function NavigationMap({ nodes, compact = false }: NavigationMapProps) {
     markerRefs.current = [];
   }, []);
 
-  if (viewport.state === 'empty') {
-    return <MapFallback compact={compact} title="Saknar koordinater för kartvisning" detail="Lägg till eller uppdatera kartpositioner för stoppen." />;
-  }
-
   if (loadState === 'missing-key') {
-    return <MapFallback compact={compact} title="Google Maps är inte konfigurerat" detail="Lägg till EXPO_PUBLIC_GOOGLE_MAPS_API_KEY eller återanvänd Places-nyckeln." />;
+    return <MapFallback compact={compact} title="Google Maps är inte konfigurerat" detail="Lägg till EXPO_PUBLIC_GOOGLE_MAPS_API_KEY eller återanvänd EXPO_PUBLIC_GOOGLE_PLACES_API_KEY." />;
   }
 
   if (loadState === 'error') {
-    return <MapFallback compact={compact} title="Kartan kunde inte laddas" detail="Kontrollera Google Maps-nyckeln och försök igen." />;
+    return <MapFallback compact={compact} title="Kartan kunde inte laddas" detail="Kontrollera att Maps JavaScript API är aktiverat och att nyckelns referrer-regler tillåter appens domän." />;
   }
 
   return (
@@ -118,6 +114,12 @@ export function NavigationMap({ nodes, compact = false }: NavigationMapProps) {
       {loadState !== 'ready' ? (
         <View style={styles.loadingOverlay}>
           <Text style={styles.loadingText}>Laddar karta...</Text>
+        </View>
+      ) : null}
+      {loadState === 'ready' && viewport.state === 'empty' ? (
+        <View style={styles.emptyOverlay}>
+          <Text style={styles.emptyTitle}>Saknar koordinater för kartvisning</Text>
+          <Text style={styles.emptyText}>Lägg till eller uppdatera kartpositioner för stoppen.</Text>
         </View>
       ) : null}
     </View>
@@ -178,6 +180,12 @@ function loadGoogleMaps(apiKey: string): Promise<GoogleMapsNamespace> {
 function applyViewport(map: GoogleMapInstance, maps: GoogleMapsNamespace, markers: MapMarkerData[]) {
   const viewport = calculateMapViewport(markers);
 
+  if (viewport.state === 'empty') {
+    map.setCenter(toLatLng(mapInitialCenter(viewport)));
+    map.setZoom(5);
+    return;
+  }
+
   if (viewport.state === 'single') {
     map.setCenter(toLatLng(viewport.center));
     map.setZoom(11);
@@ -226,6 +234,32 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 12,
     fontWeight: '800',
+  },
+  emptyOverlay: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 12,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.94)',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(37,99,235,0.16)',
+  },
+  emptyTitle: {
+    color: '#0a2540',
+    fontSize: 13,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  emptyText: {
+    color: '#425466',
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 16,
+    marginTop: 3,
+    textAlign: 'center',
   },
   fallback: {
     flex: 1,

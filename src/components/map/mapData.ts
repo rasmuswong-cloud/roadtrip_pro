@@ -12,9 +12,11 @@ export type MapViewport =
   | { state: 'single'; center: Coordinates; bounds: null }
   | { state: 'bounds'; center: Coordinates; bounds: { north: number; south: number; east: number; west: number } };
 
+export const DEFAULT_MAP_CENTER: Coordinates = { latitude: 55.604981, longitude: 13.003822 };
+
 export function extractValidMapMarkers(nodes: ItineraryNode[]): MapMarkerData[] {
   return nodes
-    .filter((node): node is ItineraryNode & { location: Coordinates } => isValidCoordinate(node.location))
+    .filter((node): node is ItineraryNode & { location: Coordinates } => !node.deletedAt && isValidCoordinate(node.location))
     .map((node, index) => ({
       id: node.id,
       title: markerTitle(node),
@@ -47,6 +49,10 @@ export function calculateMapViewport(markers: MapMarkerData[]): MapViewport {
     },
     bounds: { north, south, east, west },
   };
+}
+
+export function mapInitialCenter(viewport: MapViewport): Coordinates {
+  return viewport.center ?? DEFAULT_MAP_CENTER;
 }
 
 function isValidCoordinate(coordinates?: Coordinates | null): coordinates is Coordinates {
