@@ -58,6 +58,7 @@ import { planReseplanrareImport } from '@/services/planning/reseplanrareImport';
 import { buildTripReadiness } from '@/services/planning/tripReadiness';
 import { estimateRouteSummary } from '@/services/routing/routeEstimate';
 import { useTripStore } from '@/store/tripStore';
+import { formatDateLabel as formatSafeDateLabel, formatTimeLabel } from '@/utils/dateTimeLabels';
 import { formatDistance, formatDuration } from '@/utils/formatters';
 
 const PERSISTED_APP_STATE_KEY = 'roadtrip:persisted-app-state:v1';
@@ -2776,8 +2777,7 @@ function cleanItineraryNodeImportNotes(node: ItineraryNode): ItineraryNode {
 }
 
 function formatDateLabel(dateKey: string): string {
-  const date = new Date(`${dateKey}T12:00:00`);
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date);
+  return formatSafeDateLabel(dateKey);
 }
 
 function formatDayKey(dayKey: string): string {
@@ -2881,11 +2881,7 @@ function notesFromSeedRow(row: ReseplanrareSeedRow): string | null {
 }
 
 function formatTime(value?: string | null): string {
-  if (!value) {
-    return '--:--';
-  }
-
-  return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(new Date(value));
+  return formatTimeLabel(value);
 }
 
 function toTimeInput(value: string): string {
