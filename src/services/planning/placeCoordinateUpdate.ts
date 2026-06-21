@@ -25,7 +25,10 @@ export function applyGooglePlaceCoordinateUpdate(
     nextMetadata.address = place.formattedAddress.trim();
   }
 
-  nextMetadata.source = 'google_places';
+  if (typeof nextMetadata.source !== 'string' || !nextMetadata.source.trim()) {
+    nextMetadata.source = 'google_places';
+  }
+  nextMetadata.coordinateSource = 'google_places';
   nextMetadata.externalRef = place.id;
 
   return {

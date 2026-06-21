@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { ItineraryNode } from '../src/models';
+import { extractValidMapMarkers } from '../src/components/map/mapData';
 import {
+  formatBulkCoordinateDiagnostics,
   formatBulkCoordinateSummary,
   getBulkCoordinateCandidates,
   summarizeBulkCoordinateOutcomes,
@@ -47,8 +49,34 @@ test('bulk coordinate candidates include only searchable stops missing coordinat
   assert.deepEqual(candidates.map((candidate) => candidate.query), ['Cortina', 'Bolzano']);
 });
 
+test('bulk coordinate diagnostics include useful per-stop failure messages', () => {
+  const diagnostics = formatBulkCoordinateDiagnostics([
+    { nodeId: 'a', title: 'Malmö', status: 'failed', step: 'search', message: 'Google Places API-nyckel saknas.' },
+    { nodeId: 'b', title: 'Hotel Mondial', status: 'failed', step: 'save', message: 'new row violates row-level security policy' },
+  ]);
+
+  assert.equal(
+    diagnostics,
+    'Fel: Malmö: sökning - Google Places API-nyckel saknas. | Hotel Mondial: sparning - new row violates row-level security policy',
+  );
+});
+
+test('bulk coordinate update keeps numeric coordinates that map marker extraction can use', () => {
+  const updated = applyGooglePlaceCoordinateUpdate(node({ id: 'malmo', title: 'Malmö' }), {
+    id: 'places/malmo',
+    displayName: { text: 'Malmö' },
+    formattedAddress: 'Malmö, Sweden',
+    location: { latitude: 55.605, longitude: 13.0038 },
+  });
+  const markers = extractValidMapMarkers([updated]);
+
+  assert.equal(typeof updated.location?.latitude, 'number');
+  assert.equal(typeof updated.location?.longitude, 'number');
+  assert.deepEqual(markers.map((marker) => marker.id), ['malmo']);
+});
+
 test('bulk coordinate update helper preserves stop details when a place is applied', () => {
-  const original = node({ metadata: { place: 'Cortina', cost: '450', currency: 'EUR', bookingStatus: 'confirmed' } });
+  const original = node({ metadata: { source: 'reseplanrare.xlsx', sourceRow: 4, place: 'Cortina', cost: '450', currency: 'EUR', bookingStatus: 'confirmed' } });
   const updated = applyGooglePlaceCoordinateUpdate(original, {
     id: 'places/cortina',
     displayName: { text: 'Cortina d Ampezzo' },
@@ -65,6 +93,9 @@ test('bulk coordinate update helper preserves stop details when a place is appli
   assert.equal(updated.metadata.cost, original.metadata.cost);
   assert.equal(updated.metadata.currency, original.metadata.currency);
   assert.equal(updated.metadata.bookingStatus, original.metadata.bookingStatus);
+  assert.equal(updated.metadata.source, 'reseplanrare.xlsx');
+  assert.equal(updated.metadata.sourceRow, 4);
+  assert.equal(updated.metadata.coordinateSource, 'google_places');
   assert.deepEqual(updated.location, { latitude: 46.5405, longitude: 12.1357 });
 });
 

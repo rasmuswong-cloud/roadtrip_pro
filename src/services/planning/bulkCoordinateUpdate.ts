@@ -8,6 +8,8 @@ export type BulkCoordinateCandidate = {
 export type BulkCoordinateOutcome = {
   nodeId: string;
   status: 'updated' | 'not_found' | 'failed';
+  title?: string;
+  step?: 'search' | 'save';
   message?: string;
 };
 
@@ -52,6 +54,22 @@ export function formatBulkCoordinateSummary(summary: BulkCoordinateSummary): str
   }
 
   return parts.join(', ') + '.';
+}
+
+export function formatBulkCoordinateDiagnostics(outcomes: BulkCoordinateOutcome[], maxItems = 3): string | null {
+  const failures = outcomes.filter((outcome) => outcome.status === 'failed' && outcome.message);
+  if (failures.length === 0) {
+    return null;
+  }
+
+  const details = failures.slice(0, maxItems).map((outcome) => {
+    const title = outcome.title?.trim() || outcome.nodeId;
+    const step = outcome.step === 'save' ? 'sparning' : 'sökning';
+    return `${title}: ${step} - ${outcome.message}`;
+  });
+  const remaining = failures.length - details.length;
+
+  return `Fel: ${details.join(' | ')}${remaining > 0 ? ` | +${remaining} till` : ''}`;
 }
 
 function coordinateSearchText(node: ItineraryNode): string {

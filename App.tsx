@@ -29,10 +29,17 @@ import {
   moveItineraryNode,
   upsertItineraryNode,
 } from '@/services/database/tripRepository';
-import { googlePlaceToPoi, searchGooglePlaces, type GooglePlace } from '@/services/google/googlePlaces';
+import {
+  googlePlaceToPoi,
+  googlePlacesMissingApiKeyMessage,
+  hasGooglePlacesApiKey,
+  searchGooglePlaces,
+  type GooglePlace,
+} from '@/services/google/googlePlaces';
 import { analyzeDayWarnings, moveNodeToDay, summarizeDay, validatePlannerDraft, type DaySummary } from '@/services/planning/dayAnalysis';
 import {
   formatBulkCoordinateSummary,
+  formatBulkCoordinateDiagnostics,
   getBulkCoordinateCandidates,
   summarizeBulkCoordinateOutcomes,
   type BulkCoordinateOutcome,
@@ -1282,6 +1289,11 @@ export default function App() {
       return;
     }
 
+    if (!hasGooglePlacesApiKey()) {
+      setStatusMessage(googlePlacesMissingApiKeyMessage());
+      return;
+    }
+
     rememberUndo('uppdatera kartpositioner');
     setIsLoading(true);
     const outcomes: BulkCoordinateOutcome[] = [];
@@ -1291,48 +1303,73 @@ export default function App() {
         const candidate = candidates[index]!;
         setStatusMessage(`Uppdaterar ${index + 1} av ${candidates.length} stopp...`);
 
+        let place: GooglePlace | undefined;
         try {
           const results = await searchGooglePlaces({
             query: candidate.query,
             languageCode: 'sv',
             maxResultCount: 1,
           });
-          const place = results.find((result) => {
+          place = results.find((result) => {
             const latitude = result.location?.latitude;
             const longitude = result.location?.longitude;
             return typeof latitude === 'number' && typeof longitude === 'number';
           });
+        } catch (error) {
+          outcomes.push({
+            nodeId: candidate.node.id,
+            title: candidate.node.title,
+            status: 'failed',
+            step: 'search',
+            message: error instanceof Error ? error.message : String(error),
+          });
+          continue;
+        }
 
-          if (!place) {
-            outcomes.push({ nodeId: candidate.node.id, status: 'not_found' });
-            continue;
-          }
+        if (!place) {
+          outcomes.push({ nodeId: candidate.node.id, title: candidate.node.title, status: 'not_found' });
+          continue;
+        }
+
+        try {
+          const savedCoordinateNode = await saveItineraryNodeOnline(applyGooglePlaceCoordinateUpdate(candidate.node, place));
+          let savedNode = savedCoordinateNode;
 
           const poi = googlePlaceToPoi(place, activeTripId, userId);
-          if (!poi) {
-            outcomes.push({ nodeId: candidate.node.id, status: 'not_found' });
-            continue;
+          if (poi) {
+            try {
+              const savedPoi = await upsertPoi(poi);
+              savedNode = await saveItineraryNodeOnline({
+                ...savedCoordinateNode,
+                poiId: savedPoi.id,
+                updatedAt: new Date().toISOString(),
+                version: savedCoordinateNode.version + 1,
+              });
+              upsertPoiInStore(savedPoi);
+            } catch {
+              savedNode = savedCoordinateNode;
+            }
           }
 
-          const savedPoi = await upsertPoi(poi);
-          const savedNode = await saveItineraryNodeOnline(applyGooglePlaceCoordinateUpdate(candidate.node, place, savedPoi.id));
-
-          upsertPoiInStore(savedPoi);
           setItineraryNodes((current) => sortNodes(current.map((node) => (node.id === savedNode.id ? savedNode : node))));
           if (selectedPlannerNodeId === savedNode.id) {
             populatePlannerEditor(savedNode);
           }
-          outcomes.push({ nodeId: candidate.node.id, status: 'updated' });
+          outcomes.push({ nodeId: candidate.node.id, title: candidate.node.title, status: 'updated' });
         } catch (error) {
           outcomes.push({
             nodeId: candidate.node.id,
+            title: candidate.node.title,
             status: 'failed',
+            step: 'save',
             message: error instanceof Error ? error.message : String(error),
           });
         }
       }
 
-      setStatusMessage(formatBulkCoordinateSummary(summarizeBulkCoordinateOutcomes(candidates.length, outcomes)));
+      const summary = formatBulkCoordinateSummary(summarizeBulkCoordinateOutcomes(candidates.length, outcomes));
+      const diagnostics = formatBulkCoordinateDiagnostics(outcomes);
+      setStatusMessage(diagnostics ? `${summary} ${diagnostics}` : summary);
     } finally {
       setIsLoading(false);
     }

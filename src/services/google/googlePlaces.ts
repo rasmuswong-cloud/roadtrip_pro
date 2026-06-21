@@ -39,10 +39,18 @@ type GooglePlacesResponse = {
   places?: GooglePlace[];
 };
 
+export function hasGooglePlacesApiKey(): boolean {
+  return Boolean(resolveGooglePlacesApiKey());
+}
+
+export function googlePlacesMissingApiKeyMessage(): string {
+  return 'Google Places API-nyckel saknas. Lägg till EXPO_PUBLIC_GOOGLE_PLACES_API_KEY i Vercel, eller återanvänd EXPO_PUBLIC_GOOGLE_MAPS_API_KEY om den har Places API-behörighet.';
+}
+
 export async function searchGooglePlaces(input: GooglePlaceSearchInput): Promise<GooglePlace[]> {
-  const apiKey = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
+  const apiKey = resolveGooglePlacesApiKey();
   if (!apiKey) {
-    throw new Error('Missing EXPO_PUBLIC_GOOGLE_PLACES_API_KEY.');
+    throw new Error(googlePlacesMissingApiKeyMessage());
   }
 
   const body: Record<string, unknown> = {
@@ -71,11 +79,28 @@ export async function searchGooglePlaces(input: GooglePlaceSearchInput): Promise
   });
 
   if (!response.ok) {
-    throw new Error(`Google Places search failed with status ${response.status}.`);
+    throw new Error(await formatGooglePlacesError(response));
   }
 
   const data = (await response.json()) as GooglePlacesResponse;
   return data.places ?? [];
+}
+
+function resolveGooglePlacesApiKey(): string | undefined {
+  return process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY || process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+}
+
+async function formatGooglePlacesError(response: Response): Promise<string> {
+  let statusText = '';
+
+  try {
+    const data = (await response.json()) as { error?: { status?: unknown } };
+    statusText = typeof data.error?.status === 'string' ? ` (${data.error.status})` : '';
+  } catch {
+    statusText = '';
+  }
+
+  return `Google Places-sökningen misslyckades med status ${response.status}${statusText}. Kontrollera att Places API (New) är aktiverat och att nyckelns browser/referrer-regler tillåter appens domän.`;
 }
 
 export function googlePlaceToPoi(place: GooglePlace, tripId: string, actorId: string): Poi | null {
