@@ -1909,6 +1909,42 @@ export default function App() {
           </View>
 
           <View style={[styles.dashboardGrid, isMobile && styles.dashboardGridMobile]}>
+            {!isMobile ? (
+              <View style={styles.workspaceSidebar}>
+                <Text style={styles.workspaceSidebarKicker}>Resa</Text>
+                <Text style={styles.workspaceSidebarTitle}>{demoTrip.name}</Text>
+                <View style={styles.workspaceNavList}>
+                  {appTabs.map((tab) => (
+                    <Pressable
+                      key={tab.key}
+                      style={[styles.workspaceNavItem, activeView === tab.key && styles.workspaceNavItemActive]}
+                      onPress={() => goToView(tab.key)}
+                    >
+                      <Text style={[styles.workspaceNavText, activeView === tab.key && styles.workspaceNavTextActive]}>{tab.label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <View style={styles.workspaceDivider} />
+                <Text style={styles.workspaceSidebarKicker}>Dagar</Text>
+                <View style={styles.dayShortcutList}>
+                  {dayPlans.slice(0, 9).map((dayPlan) => (
+                    <Pressable
+                      key={dayPlan.key}
+                      style={[styles.dayShortcut, selectedDayPlan?.key === dayPlan.key && activeView === 'days' && styles.dayShortcutActive]}
+                      onPress={() => {
+                        setSelectedDayKey(dayPlan.key);
+                        goToView('days');
+                      }}
+                    >
+                      <Text style={[styles.dayShortcutTitle, selectedDayPlan?.key === dayPlan.key && activeView === 'days' && styles.dayShortcutTitleActive]}>{dayPlan.shortTitle}</Text>
+                      <Text style={[styles.dayShortcutMeta, selectedDayPlan?.key === dayPlan.key && activeView === 'days' && styles.dayShortcutMetaActive]} numberOfLines={1}>
+                        {dayPlan.nodes.length} steg / {dayPlan.summary.startPlace} → {dayPlan.summary.endPlace}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            ) : null}
             {!isDemoMode && activeView === 'tools' ? (
             <View style={styles.sidebarColumn}>
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
@@ -2342,9 +2378,62 @@ export default function App() {
                     onRemoveStop={removeStop}
                   />
                 ) : null}
+                {isMobile && selectedDayPlan ? (
+                  <View style={styles.mobileMapContext}>
+                    <View style={styles.contextMapHeader}>
+                      <View>
+                        <Text style={styles.overviewMapKicker}>Kartkontext</Text>
+                        <Text style={styles.contextMapTitle}>{selectedDayPlan.shortTitle}</Text>
+                      </View>
+                      <Pressable style={styles.secondarySmallButton} onPress={() => goToView('route')}>
+                        <Text style={styles.secondarySmallButtonText}>Rutt</Text>
+                      </Pressable>
+                    </View>
+                    <View style={styles.contextMapShell}>
+                      <NavigationMap nodes={selectedDayPlan.nodes} activeRoute={routeSummary.geometry ? routeSummary : demoRoute} followUser={false} compact />
+                    </View>
+                  </View>
+                ) : null}
               </View>
               ) : null}
             </View>
+            {!isMobile ? (
+              <View style={styles.workspaceMapContext}>
+                <View style={styles.contextMapCard}>
+                  <View style={styles.contextMapHeader}>
+                    <View>
+                      <Text style={styles.overviewMapKicker}>Kartkontext</Text>
+                      <Text style={styles.contextMapTitle}>{activeView === 'days' && selectedDayPlan ? selectedDayPlan.shortTitle : 'Hela resan'}</Text>
+                    </View>
+                    <Pressable style={styles.secondarySmallButton} onPress={() => goToView('route')}>
+                      <Text style={styles.secondarySmallButtonText}>Rutt</Text>
+                    </Pressable>
+                  </View>
+                  <View style={styles.contextMapShell}>
+                    <NavigationMap
+                      nodes={activeView === 'days' && selectedDayPlan ? selectedDayPlan.nodes : displayedNodes}
+                      activeRoute={routeSummary.geometry ? routeSummary : demoRoute}
+                      followUser={false}
+                      compact
+                    />
+                  </View>
+                </View>
+                <View style={styles.contextPanel}>
+                  <Text style={styles.packingTitle}>Nästa steg</Text>
+                  <Text style={styles.contextPanelTitle}>{tripReadiness.nextStep.label}</Text>
+                  <Text style={styles.contextPanelText}>{tripReadiness.nextStep.detail}</Text>
+                  <Pressable style={styles.smallButton} onPress={() => goToView(tripReadiness.nextStep.target)}>
+                    <Text style={styles.smallButtonText}>Öppna</Text>
+                  </Pressable>
+                </View>
+                <View style={styles.contextPanel}>
+                  <Text style={styles.packingTitle}>Rutt</Text>
+                  <Text style={styles.contextPanelTitle}>{formatDistance(routeSummary.distanceMeters)}</Text>
+                  <Text style={styles.contextPanelText}>{formatDuration(routeSummary.durationSeconds)} / {displayedNodes.length} stopp</Text>
+                  {missingCoordinateCount > 0 ? <Text style={styles.warningText}>{missingCoordinateCount} stopp saknar kartposition.</Text> : null}
+                </View>
+              </View>
+            ) : null}
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -3126,6 +3215,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   navLinks: {
+    display: 'none',
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -3134,6 +3224,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   navLinksMobile: {
+    display: 'flex',
     flex: 0,
     justifyContent: 'flex-start',
     width: '100%',
@@ -3517,6 +3608,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   flowRail: {
+    display: 'none',
     minHeight: 56,
     flexDirection: 'row',
     alignItems: 'center',
@@ -3534,6 +3626,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   flowRailMobile: {
+    display: 'flex',
     alignItems: 'stretch',
   },
   flowStep: {
@@ -3603,19 +3696,104 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 16,
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
   },
   dashboardGridMobile: {
     flexDirection: 'column',
     gap: 12,
   },
+  workspaceSidebar: {
+    width: 230,
+    flexShrink: 0,
+    gap: 12,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: 'rgba(16,42,67,0.92)',
+    padding: 14,
+    shadowColor: '#020617',
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 3,
+  },
+  workspaceSidebarKicker: {
+    color: '#f6b35f',
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  workspaceSidebarTitle: {
+    color: '#ffffff',
+    fontSize: 17,
+    fontWeight: '900',
+    lineHeight: 22,
+  },
+  workspaceNavList: {
+    gap: 6,
+  },
+  workspaceNavItem: {
+    minHeight: 38,
+    justifyContent: 'center',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  workspaceNavItemActive: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  workspaceNavText: {
+    color: '#dbeafe',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  workspaceNavTextActive: {
+    color: '#ffffff',
+  },
+  workspaceDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  dayShortcutList: {
+    gap: 6,
+  },
+  dayShortcut: {
+    gap: 3,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
+  dayShortcutActive: {
+    borderColor: 'rgba(246,179,95,0.6)',
+    backgroundColor: 'rgba(246,179,95,0.16)',
+  },
+  dayShortcutTitle: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  dayShortcutTitleActive: {
+    color: '#fef3c7',
+  },
+  dayShortcutMeta: {
+    color: '#bfdbfe',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  dayShortcutMetaActive: {
+    color: '#ffffff',
+  },
   sidebarColumn: {
     width: 320,
+    flexShrink: 0,
     gap: 12,
   },
   mainColumn: {
     flex: 1,
-    minWidth: 520,
+    minWidth: 0,
     gap: 14,
   },
   mainColumnMobile: {
@@ -3625,6 +3803,72 @@ const styles = StyleSheet.create({
   routeView: {
     gap: 14,
     width: '100%',
+  },
+  workspaceMapContext: {
+    width: 310,
+    flexShrink: 0,
+    gap: 12,
+  },
+  contextMapCard: {
+    gap: 10,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d8e2eb',
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    padding: 12,
+    shadowColor: '#0a2540',
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 2,
+  },
+  contextMapHeader: {
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  contextMapTitle: {
+    color: '#0a2540',
+    fontSize: 15,
+    fontWeight: '900',
+    marginTop: 2,
+  },
+  contextMapShell: {
+    height: 260,
+    overflow: 'hidden',
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d8e2eb',
+    backgroundColor: '#fbfdff',
+  },
+  contextPanel: {
+    gap: 8,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d8e2eb',
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    padding: 14,
+  },
+  contextPanelTitle: {
+    color: '#0a2540',
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  contextPanelText: {
+    color: '#425466',
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  mobileMapContext: {
+    gap: 10,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d8e2eb',
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    padding: 12,
   },
   routeStage: {
     gap: 12,
