@@ -11,9 +11,13 @@ export type TripReadinessItem = {
   detail: string;
 };
 
+export const TRIP_READINESS_TARGETS = ['overview', 'route', 'budget', 'days', 'tools'] as const;
+
+export type TripReadinessTarget = typeof TRIP_READINESS_TARGETS[number];
+
 export type TripNextStep = {
   label: string;
-  target: 'route' | 'days' | 'budget' | 'tools';
+  target: TripReadinessTarget;
   detail: string;
 };
 
