@@ -1815,7 +1815,14 @@ export default function App() {
         </View>
 
         <ScrollView ref={contentScrollRef} style={styles.content} contentContainerStyle={[styles.contentInner, isMobile && styles.contentInnerMobile]}>
+          <View pointerEvents="none" style={styles.backgroundWash}>
+            <View style={styles.backgroundTopBand} />
+            <View style={styles.backgroundWarmBand} />
+          </View>
           <View style={[styles.tripHero, isMobile && styles.tripHeroMobile]}>
+            <View style={styles.heroPlaneOne} />
+            <View style={styles.heroPlaneTwo} />
+            <View style={styles.heroPlaneThree} />
             <View style={[styles.tripHeroCopy, isMobile && styles.tripHeroCopyMobile]}>
               <Text style={styles.heroEyebrow}>{activeHeroCopy.eyebrow}</Text>
               <Text style={styles.heroTitle}>{activeHeroCopy.title}</Text>
@@ -2028,9 +2035,9 @@ export default function App() {
                       ))}
                     </View>
                     <View style={[styles.mapLegend, isMobile && styles.mapLegendMobile]}>
-                      <View style={[styles.legendDot, { backgroundColor: '#635bff' }]} />
+                      <View style={[styles.legendDot, { backgroundColor: '#0f766e' }]} />
                       <Text style={styles.legendText}>planerat stopp</Text>
-                      <View style={[styles.legendDot, { backgroundColor: '#00d4ff' }]} />
+                      <View style={[styles.legendDot, { backgroundColor: '#f6b35f' }]} />
                       <Text style={styles.legendText}>rutt</Text>
                     </View>
                   </View>
@@ -2082,7 +2089,7 @@ export default function App() {
                     label="Plan"
                     title={`${dayPlans.length} dagar`}
                     detail={`${displayedNodes.length} stopp / ${firstRouteStop?.title ?? 'start'} → ${lastRouteStop?.title ?? 'mål'}`}
-                    accent="#635bff"
+                    accent="#f6b35f"
                   />
                   <OverviewFocusCard
                     label="Rutt"
@@ -2160,8 +2167,8 @@ export default function App() {
                   <BudgetCard label="Snitt per dag" value={costPerDay} detail={`${dayPlans.length} dagar`} accent="#0f766e" />
                   <BudgetCard label="Boende" value={budgetSummary.categories.lodging} detail={formatBudgetShare(budgetSummary.categories.lodging, totalSpend)} accent="#2563eb" />
                   <BudgetCard label="Aktiviteter" value={budgetSummary.categories.activity} detail={formatBudgetShare(budgetSummary.categories.activity, totalSpend)} accent="#d97706" />
-                  <BudgetCard label="Transport" value={budgetSummary.categories.transport} detail={formatBudgetShare(budgetSummary.categories.transport, totalSpend)} accent="#00d4ff" />
-                  <BudgetCard label="Mat/övrigt" value={budgetSummary.categories.food + budgetSummary.categories.other} detail={formatBudgetShare(budgetSummary.categories.food + budgetSummary.categories.other, totalSpend)} accent="#635bff" />
+                  <BudgetCard label="Transport" value={budgetSummary.categories.transport} detail={formatBudgetShare(budgetSummary.categories.transport, totalSpend)} accent="#0ea5a3" />
+                  <BudgetCard label="Mat/övrigt" value={budgetSummary.categories.food + budgetSummary.categories.other} detail={formatBudgetShare(budgetSummary.categories.food + budgetSummary.categories.other, totalSpend)} accent="#f6b35f" />
                 </View>
                 {budgetSummary.missingCostCount > 0 ? (
                   <Text style={styles.budgetMissingText}>{budgetSummary.missingCostCount} steg saknar kostnad, så totalsumman är troligen för låg.</Text>
@@ -2997,7 +3004,7 @@ function cryptoRandomId(): string {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#eef3f6',
+    backgroundColor: '#081a2a',
   },
   screenDark: {
     backgroundColor: '#050505',
@@ -3009,7 +3016,7 @@ const styles = StyleSheet.create({
     gap: 24,
     paddingHorizontal: 32,
     paddingVertical: 16,
-    backgroundColor: 'rgba(255,255,255,0.98)',
+    backgroundColor: 'rgba(248,251,252,0.97)',
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#d8e2eb',
     shadowColor: '#0a2540',
@@ -3030,7 +3037,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#242424',
   },
   kicker: {
-    color: '#635bff',
+    color: '#0f766e',
     fontSize: 12,
     fontWeight: '900',
     textTransform: 'uppercase',
@@ -3065,6 +3072,8 @@ const styles = StyleSheet.create({
     minHeight: 38,
     justifyContent: 'center',
     borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'transparent',
     paddingHorizontal: 15,
     paddingVertical: 8,
   },
@@ -3075,6 +3084,7 @@ const styles = StyleSheet.create({
   },
   navTabActive: {
     backgroundColor: '#102a43',
+    borderColor: '#24445d',
   },
   navLink: {
     color: '#425466',
@@ -3103,7 +3113,7 @@ const styles = StyleSheet.create({
     minWidth: 190,
     maxWidth: 240,
     justifyContent: 'center',
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#d8e2eb',
     backgroundColor: '#fbfdff',
@@ -3140,8 +3150,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   tripStatePillActive: {
-    borderColor: '#00d4ff',
-    backgroundColor: '#e7f8ff',
+    borderColor: '#8bd8c3',
+    backgroundColor: '#ecfdf5',
   },
   tripStateText: {
     color: '#425466',
@@ -3150,7 +3160,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   tripStateTextActive: {
-    color: '#0073e6',
+    color: '#0f766e',
   },
   saveStatePill: {
     minHeight: 34,
@@ -3205,8 +3215,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d7e1ea',
-    backgroundColor: '#f6f9fc',
+    borderColor: '#d8e2eb',
+    backgroundColor: '#ffffff',
     paddingHorizontal: 14,
     paddingVertical: 9,
   },
@@ -3271,11 +3281,38 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     padding: 28,
     gap: 18,
+    position: 'relative',
   },
   contentInnerMobile: {
     maxWidth: '100%',
     paddingHorizontal: 12,
     paddingVertical: 12,
+  },
+  backgroundWash: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    height: 560,
+    overflow: 'hidden',
+  },
+  backgroundTopBand: {
+    position: 'absolute',
+    left: -80,
+    right: -80,
+    top: -180,
+    height: 420,
+    backgroundColor: '#12324a',
+    transform: [{ rotate: '-4deg' }],
+  },
+  backgroundWarmBand: {
+    position: 'absolute',
+    right: -120,
+    top: 120,
+    width: 520,
+    height: 130,
+    backgroundColor: 'rgba(246,179,95,0.18)',
+    transform: [{ rotate: '-10deg' }],
   },
   tripHero: {
     minHeight: 190,
@@ -3286,15 +3323,15 @@ const styles = StyleSheet.create({
     gap: 22,
     overflow: 'hidden',
     borderRadius: 16,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#102a43',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d8e2eb',
+    borderColor: '#24445d',
     padding: 28,
-    shadowColor: '#0a2540',
-    shadowOpacity: 0.07,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 4,
+    shadowColor: '#020617',
+    shadowOpacity: 0.24,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 16 },
+    elevation: 6,
   },
   tripHeroMobile: {
     minHeight: 0,
@@ -3302,33 +3339,30 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   heroPlaneOne: {
-    display: 'none',
     position: 'absolute',
-    right: -160,
-    top: -112,
+    right: -180,
+    top: -120,
     width: 560,
     height: 190,
-    backgroundColor: '#7a73ff',
+    backgroundColor: 'rgba(15,118,110,0.32)',
     transform: [{ rotate: '-12deg' }],
   },
   heroPlaneTwo: {
-    display: 'none',
     position: 'absolute',
-    right: 10,
-    bottom: -86,
+    right: -20,
+    bottom: -94,
     width: 520,
     height: 180,
-    backgroundColor: '#00d4ff',
+    backgroundColor: 'rgba(246,179,95,0.24)',
     transform: [{ rotate: '-12deg' }],
   },
   heroPlaneThree: {
-    display: 'none',
     position: 'absolute',
-    right: 210,
-    bottom: -110,
+    right: 230,
+    bottom: -118,
     width: 380,
     height: 160,
-    backgroundColor: '#ffcf5c',
+    backgroundColor: 'rgba(14,165,163,0.16)',
     transform: [{ rotate: '-12deg' }],
   },
   tripHeroCopy: {
@@ -3336,27 +3370,28 @@ const styles = StyleSheet.create({
     minWidth: 320,
     justifyContent: 'center',
     gap: 10,
+    zIndex: 1,
   },
   tripHeroCopyMobile: {
     minWidth: 0,
     width: '100%',
   },
   heroEyebrow: {
-    color: '#0f766e',
+    color: '#f6b35f',
     fontSize: 12,
     fontWeight: '900',
     textTransform: 'uppercase',
   },
   heroTitle: {
     maxWidth: 760,
-    color: '#0a2540',
+    color: '#ffffff',
     fontSize: 34,
     lineHeight: 40,
     fontWeight: '900',
   },
   heroBody: {
     maxWidth: 660,
-    color: '#425466',
+    color: '#dbeafe',
     fontSize: 16,
     lineHeight: 24,
     fontWeight: '600',
@@ -3368,21 +3403,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     borderRadius: 999,
-    backgroundColor: '#fbfdff',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d8e2eb',
+    borderColor: 'rgba(255,255,255,0.18)',
     paddingHorizontal: 12,
     paddingVertical: 8,
     marginTop: 4,
     flexWrap: 'wrap',
   },
   tripRouteText: {
-    color: '#0a2540',
+    color: '#ffffff',
     fontSize: 13,
     fontWeight: '900',
   },
   tripRouteArrow: {
-    color: '#64748b',
+    color: '#f6b35f',
     fontSize: 14,
     fontWeight: '900',
   },
@@ -3394,6 +3429,7 @@ const styles = StyleSheet.create({
     gap: 12,
     alignItems: 'stretch',
     justifyContent: 'center',
+    zIndex: 1,
   },
   heroStatsMobile: {
     width: '100%',
@@ -3404,9 +3440,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     borderRadius: 12,
-    backgroundColor: '#fbfdff',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d8e2eb',
+    borderColor: 'rgba(255,255,255,0.18)',
     padding: 16,
   },
   flowRail: {
@@ -3417,8 +3453,8 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d8e2eb',
-    backgroundColor: '#ffffff',
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(248,251,252,0.94)',
     padding: 10,
     shadowColor: '#0a2540',
     shadowOpacity: 0.04,
@@ -3435,11 +3471,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'transparent',
     paddingHorizontal: 10,
     paddingVertical: 7,
   },
   flowStepActive: {
     backgroundColor: '#102a43',
+    borderColor: '#24445d',
   },
   flowStepNumber: {
     minWidth: 22,
@@ -3479,12 +3518,12 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   heroStatValue: {
-    color: '#0a2540',
+    color: '#ffffff',
     fontSize: 19,
     fontWeight: '900',
   },
   heroStatLabel: {
-    color: '#425466',
+    color: '#bfdbfe',
     fontSize: 11,
     fontWeight: '900',
     textTransform: 'uppercase',
@@ -3744,15 +3783,15 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 300,
     gap: 14,
-    backgroundColor: '#ffffff',
+    backgroundColor: 'rgba(255,255,255,0.96)',
     borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#d8e2eb',
     padding: 18,
     shadowColor: '#0a2540',
-    shadowOpacity: 0.05,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
     elevation: 2,
   },
   statsRow: {
@@ -3770,12 +3809,12 @@ const styles = StyleSheet.create({
     minWidth: 190,
     minHeight: 116,
     justifyContent: 'space-between',
-    borderRadius: 8,
+    borderRadius: 14,
     borderTopWidth: 3,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#e6edf5',
-    backgroundColor: '#f6f9fc',
-    padding: 14,
+    borderColor: '#dce5ee',
+    backgroundColor: '#f8fbf9',
+    padding: 16,
   },
   overviewFocusLabel: {
     color: '#425466',
@@ -3824,7 +3863,7 @@ const styles = StyleSheet.create({
   readinessItem: {
     flex: 1,
     minWidth: 150,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#ffe3a3',
     backgroundColor: '#fff7df',
@@ -3900,7 +3939,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   overviewMapKicker: {
-    color: '#635bff',
+    color: '#0f766e',
     fontSize: 11,
     fontWeight: '900',
     textTransform: 'uppercase',
@@ -4006,7 +4045,7 @@ const styles = StyleSheet.create({
     minWidth: 170,
     minHeight: 78,
     justifyContent: 'space-between',
-    borderRadius: 8,
+    borderRadius: 14,
     borderTopWidth: 3,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#dce5ee',
@@ -4319,7 +4358,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   checkActionText: {
-    color: '#635bff',
+    color: '#0f766e',
     fontSize: 11,
     fontWeight: '900',
     textTransform: 'uppercase',
@@ -4359,7 +4398,7 @@ const styles = StyleSheet.create({
     borderColor: '#b8ead1',
   },
   packingChipText: {
-    color: '#635bff',
+    color: '#0f766e',
     fontSize: 10,
     fontWeight: '900',
     textTransform: 'uppercase',
