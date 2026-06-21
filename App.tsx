@@ -42,6 +42,7 @@ import {
   type GooglePlace,
 } from '@/services/google/googlePlaces';
 import { analyzeDayWarnings, moveNodeToDay, summarizeDay, validatePlannerDraft, type DaySummary } from '@/services/planning/dayAnalysis';
+import { buildTravelBudgetCenter } from '@/services/planning/budgetAnalysis';
 import {
   formatBulkCoordinateSummary,
   formatBulkCoordinateDiagnostics,
@@ -368,8 +369,8 @@ export default function App() {
   const activeHeroCopy = viewHeroCopy[activeView];
   const totalSpend = budgetSummary.total;
   const travelerCount = parseTravelerCount(travelerCountText);
+  const budgetCenter = useMemo(() => buildTravelBudgetCenter(displayedNodes, travelerCount), [displayedNodes, travelerCount]);
   const costPerTraveler = travelerCount > 0 ? totalSpend / travelerCount : totalSpend;
-  const costPerDay = dayPlans.length > 0 ? totalSpend / dayPlans.length : totalSpend;
   const onlineSaveLabel = formatOnlineSaveLabel(onlineSaveState, lastOnlineSavedAt, Boolean(activeTripId));
 
   useEffect(() => {
@@ -1044,6 +1045,26 @@ export default function App() {
     }
 
     populatePlannerEditor(node);
+  }
+
+  function openBudgetCostEditor(nodeId: string) {
+    const node = displayedNodes.find((candidate) => candidate.id === nodeId);
+    if (!node) {
+      return;
+    }
+
+    selectPlannerNode(nodeId);
+    goToView('days');
+
+    if (isDemoMode) {
+      setStatusMessage('Anslut resan innan du lägger till kostnader.');
+      return;
+    }
+
+    const opened = startInlineEdit(nodeId, 'cost');
+    setStatusMessage(opened
+      ? `Öppnade kostnadsfältet för ${node.title}.`
+      : 'Spara eller avbryt det öppna fältet innan du redigerar kostnad.');
   }
 
   function populatePlannerEditor(node: ItineraryNode) {
@@ -2175,9 +2196,12 @@ export default function App() {
               {activeView === 'budget' ? (
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
                 <View style={styles.sectionHeaderRow}>
-                  <SectionTitle title="Budget" dark={isDark} />
+                  <View>
+                    <SectionTitle title="Budget" dark={isDark} />
+                    <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>Kostnadscenter för totaler, kategorier, dagar och saknade belopp.</Text>
+                  </View>
                   <View style={styles.budgetHeaderTools}>
-                    <Text style={styles.budgetTotal}>{formatSek(totalSpend)}</Text>
+                    <Text style={styles.budgetTotal}>{formatSek(budgetCenter.total)}</Text>
                     <View style={styles.travelerControl}>
                       <Text style={styles.travelerLabel}>Personer</Text>
                       <TextInput
@@ -2192,20 +2216,96 @@ export default function App() {
                   </View>
                 </View>
                 <View style={[styles.budgetGrid, isMobile && styles.singleColumnGrid]}>
-                  <BudgetCard label="Totalt per person" value={costPerTraveler} detail={`${travelerCount} personer`} accent="#7c3aed" />
-                  <BudgetCard label="Snitt per dag" value={costPerDay} detail={`${dayPlans.length} dagar`} accent="#0f766e" />
-                  <BudgetCard label="Boende" value={budgetSummary.categories.lodging} detail={formatBudgetShare(budgetSummary.categories.lodging, totalSpend)} accent="#2563eb" />
-                  <BudgetCard label="Aktiviteter" value={budgetSummary.categories.activity} detail={formatBudgetShare(budgetSummary.categories.activity, totalSpend)} accent="#d97706" />
-                  <BudgetCard label="Transport" value={budgetSummary.categories.transport} detail={formatBudgetShare(budgetSummary.categories.transport, totalSpend)} accent="#0ea5a3" />
-                  <BudgetCard label="Mat/övrigt" value={budgetSummary.categories.food + budgetSummary.categories.other} detail={formatBudgetShare(budgetSummary.categories.food + budgetSummary.categories.other, totalSpend)} accent="#f6b35f" />
+                  <BudgetMetricCard label="Total kostnad" value={formatSek(budgetCenter.total)} detail={budgetCenter.hasRegisteredCosts ? `${budgetCenter.costItemCount} kostnadsposter` : 'Resan har inga registrerade kostnader än'} accent="#0a2540" />
+                  <BudgetMetricCard label="Per person" value={formatSek(budgetCenter.perPerson)} detail={`${budgetCenter.travelerCount} personer`} accent="#7c3aed" />
+                  <BudgetMetricCard label="Kostnadsposter" value={`${budgetCenter.costItemCount}`} detail={`${displayedNodes.length} planerade stopp`} accent="#2563eb" />
+                  <BudgetMetricCard label="Saknade kostnader" value={`${budgetCenter.missingCostCount}`} detail={budgetCenter.missingCostCount > 0 ? 'Behöver fyllas i' : 'Inga saknade kostnader'} accent={budgetCenter.missingCostCount > 0 ? '#d97706' : '#0f766e'} />
+                  <BudgetMetricCard label="Dyraste dag" value={budgetCenter.mostExpensiveDay ? formatSek(budgetCenter.mostExpensiveDay.total) : 'Saknas'} detail={budgetCenter.mostExpensiveDay ? `${budgetCenter.mostExpensiveDay.label} / ${budgetCenter.mostExpensiveDay.dateLabel}` : 'Ingen dagskostnad än'} accent="#0ea5a3" />
+                  <BudgetMetricCard label="Dyraste kategori" value={budgetCenter.mostExpensiveCategory ? budgetCenter.mostExpensiveCategory.label : 'Saknas'} detail={budgetCenter.mostExpensiveCategory ? formatSek(budgetCenter.mostExpensiveCategory.total) : 'Ingen kategori än'} accent="#f6b35f" />
                 </View>
-                {budgetSummary.missingCostCount > 0 ? (
-                  <Text style={styles.budgetMissingText}>{budgetSummary.missingCostCount} steg saknar kostnad, så totalsumman är troligen för låg.</Text>
+
+                {!budgetCenter.hasItineraryItems ? (
+                  <View style={styles.budgetEmptyState}>
+                    <Text style={styles.emptySearchTitle}>Inga stopp i resplanen</Text>
+                    <Text style={styles.emptySearchText}>Lägg till stopp i Dagar för att börja bygga en resebudget.</Text>
+                  </View>
+                ) : !budgetCenter.hasRegisteredCosts ? (
+                  <View style={styles.budgetEmptyState}>
+                    <Text style={styles.emptySearchTitle}>Resan har inga registrerade kostnader än</Text>
+                    <Text style={styles.emptySearchText}>Fyll i boende, aktiviteter, mat, bränsle och transport för att se totalen.</Text>
+                  </View>
                 ) : null}
-                <View style={styles.warningList}>
-                  {budgetSummary.warnings.map((warning) => (
-                    <Text key={warning} style={styles.warningText}>{warning}</Text>
-                  ))}
+
+                <View style={styles.budgetSection}>
+                  <View style={styles.budgetSectionHeader}>
+                    <Text style={styles.budgetSectionTitle}>Kostnad per kategori</Text>
+                    <Text style={styles.budgetSectionMeta}>{formatSek(budgetCenter.total)} totalt</Text>
+                  </View>
+                  <View style={styles.budgetCategoryList}>
+                    {budgetCenter.categories.map((category) => (
+                      <View key={category.key} style={styles.budgetCategoryRow}>
+                        <View style={styles.budgetCategoryText}>
+                          <Text style={styles.budgetCategoryLabel}>{category.label}</Text>
+                          <Text style={styles.budgetCategoryMeta}>{category.itemCount} poster / {formatPercentage(category.percentage)}</Text>
+                        </View>
+                        <View style={styles.budgetCategoryAmountWrap}>
+                          <Text style={styles.budgetCategoryAmount}>{formatSek(category.total)}</Text>
+                          <View style={styles.budgetProgressTrack}>
+                            <View style={[styles.budgetProgressFill, { width: `${Math.round(category.percentage * 100)}%` }]} />
+                          </View>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+
+                <View style={styles.budgetSection}>
+                  <View style={styles.budgetSectionHeader}>
+                    <Text style={styles.budgetSectionTitle}>Kostnad per dag</Text>
+                    <Text style={styles.budgetSectionMeta}>{budgetCenter.days.length} dagar</Text>
+                  </View>
+                  {budgetCenter.days.length > 0 ? (
+                    <View style={styles.budgetDayList}>
+                      {budgetCenter.days.map((day) => (
+                        <View key={day.key} style={styles.budgetDayRow}>
+                          <View style={styles.budgetDayCopy}>
+                            <Text style={styles.budgetDayTitle}>{day.label}</Text>
+                            <Text style={styles.budgetDayMeta}>{day.dateLabel} / {day.routeLabel}</Text>
+                          </View>
+                          <View style={styles.budgetDayStats}>
+                            <Text style={styles.budgetDayTotal}>{formatSek(day.total)}</Text>
+                            <Text style={styles.budgetDayMeta}>{day.itemCount} poster{day.missingCostCount > 0 ? ` / ${day.missingCostCount} saknas` : ''}</Text>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <Text style={styles.emptySearchText}>Inga dagar att visa.</Text>
+                  )}
+                </View>
+
+                <View style={styles.budgetSection}>
+                  <View style={styles.budgetSectionHeader}>
+                    <Text style={styles.budgetSectionTitle}>Saknar kostnad</Text>
+                    <Text style={styles.budgetSectionMeta}>{budgetCenter.missingCostCount} stopp</Text>
+                  </View>
+                  {budgetCenter.missingItems.length > 0 ? (
+                    <View style={styles.missingCostList}>
+                      {budgetCenter.missingItems.map((item) => (
+                        <View key={item.nodeId} style={styles.missingCostItem}>
+                          <View style={styles.missingCostCopy}>
+                            <Text style={styles.missingCostTitle}>{item.title}</Text>
+                            <Text style={styles.missingCostMeta}>{item.dayLabel} / {item.typeLabel} / {item.place}</Text>
+                          </View>
+                          <Pressable style={styles.secondarySmallButton} onPress={() => openBudgetCostEditor(item.nodeId)}>
+                            <Text style={styles.secondarySmallButtonText}>Lägg till kostnad</Text>
+                          </Pressable>
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <Text style={styles.budgetReadyText}>Inga saknade kostnader.</Text>
+                  )}
                 </View>
               </View>
               ) : null}
@@ -2376,11 +2476,11 @@ function Metric({ label, value, accent, dark }: { label: string; value: string; 
   );
 }
 
-function BudgetCard({ label, value, detail, accent }: { label: string; value: number; detail: string; accent: string }) {
+function BudgetMetricCard({ label, value, detail, accent }: { label: string; value: string; detail: string; accent: string }) {
   return (
     <View style={[styles.budgetCard, { borderTopColor: accent }]}>
       <Text style={styles.budgetLabel}>{label}</Text>
-      <Text style={styles.budgetValue}>{formatSek(value)}</Text>
+      <Text style={styles.budgetValue}>{value}</Text>
       <Text style={styles.budgetDetail}>{detail}</Text>
     </View>
   );
@@ -2866,12 +2966,12 @@ function parseTravelerCount(value: string): number {
   return Math.min(parsed, 20);
 }
 
-function formatBudgetShare(value: number, total: number): string {
-  if (total <= 0 || value <= 0) {
-    return '0 % av budget';
+function formatPercentage(value: number): string {
+  if (value <= 0) {
+    return '0 %';
   }
 
-  return `${Math.round((value / total) * 100)} % av budget`;
+  return `${Math.round(value * 100)} %`;
 }
 
 function formatRawNodeCost(node: ItineraryNode): string {
@@ -4319,6 +4419,172 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff7df',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#ffe3a3',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  budgetEmptyState: {
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#dce5ee',
+    backgroundColor: '#f6f9fc',
+    padding: 16,
+    gap: 6,
+  },
+  budgetSection: {
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#dce5ee',
+    backgroundColor: '#ffffff',
+    padding: 16,
+    gap: 12,
+  },
+  budgetSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    flexWrap: 'wrap',
+  },
+  budgetSectionTitle: {
+    color: '#0a2540',
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  budgetSectionMeta: {
+    color: '#60758a',
+    fontSize: 12,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  budgetCategoryList: {
+    gap: 10,
+  },
+  budgetCategoryRow: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 14,
+    borderRadius: 12,
+    backgroundColor: '#f8fbfd',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e3edf5',
+    padding: 12,
+  },
+  budgetCategoryText: {
+    flex: 1,
+    minWidth: 140,
+    gap: 4,
+  },
+  budgetCategoryLabel: {
+    color: '#0a2540',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  budgetCategoryMeta: {
+    color: '#60758a',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  budgetCategoryAmountWrap: {
+    minWidth: 120,
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  budgetCategoryAmount: {
+    color: '#0a2540',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  budgetProgressTrack: {
+    width: 108,
+    height: 6,
+    borderRadius: 999,
+    overflow: 'hidden',
+    backgroundColor: '#dce5ee',
+  },
+  budgetProgressFill: {
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: '#f6b35f',
+  },
+  budgetDayList: {
+    gap: 10,
+  },
+  budgetDayRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e3edf5',
+    backgroundColor: '#fbfdff',
+    padding: 12,
+  },
+  budgetDayCopy: {
+    flex: 1,
+    minWidth: 160,
+    gap: 4,
+  },
+  budgetDayTitle: {
+    color: '#0a2540',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  budgetDayMeta: {
+    color: '#60758a',
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 17,
+  },
+  budgetDayStats: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  budgetDayTotal: {
+    color: '#0a2540',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  missingCostList: {
+    gap: 10,
+  },
+  missingCostItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#ffe3a3',
+    backgroundColor: '#fffaf0',
+    padding: 12,
+  },
+  missingCostCopy: {
+    flex: 1,
+    minWidth: 160,
+    gap: 4,
+  },
+  missingCostTitle: {
+    color: '#4f2e00',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  missingCostMeta: {
+    color: '#7a4b00',
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 17,
+  },
+  budgetReadyText: {
+    color: '#0f766e',
+    fontSize: 13,
+    fontWeight: '900',
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#b9eee7',
+    backgroundColor: '#ecfdf9',
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
