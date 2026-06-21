@@ -11,6 +11,11 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { NavigationMap } from '@/components/map/NavigationMap';
+import { MapRail } from '@/components/layout/MapRail';
+import { MobileFlowNav } from '@/components/layout/MobileFlowNav';
+import { SidebarNav } from '@/components/layout/SidebarNav';
+import { TripHero } from '@/components/layout/TripHero';
+import type { AppTab, AppView } from '@/components/layout/workspaceTypes';
 import DayCard from '@/components/planning/DayCard';
 import { reseplanrareIdeaPlaces, reseplanrareSeedRows, type ReseplanrareSeedRow } from '@/data/reseplanrareSeed';
 import type { BudgetCategories, BudgetSummary, DayChecklistItem, DayInsightSummary, DayPlan, Expense, ItineraryNode, ItineraryNodeType, Poi, RouteSummary, Trip } from '@/models';
@@ -76,9 +81,7 @@ type UndoSnapshot = {
   itineraryNodes: ItineraryNode[];
 };
 
-type AppView = 'overview' | 'route' | 'budget' | 'days' | 'tools';
-
-const appTabs: { key: AppView; label: string }[] = [
+const appTabs: AppTab[] = [
   { key: 'overview', label: 'Översikt' },
   { key: 'route', label: 'Rutt' },
   { key: 'days', label: 'Dagar' },
@@ -363,7 +366,6 @@ export default function App() {
   const firstRouteStop = displayedNodes[0] ?? null;
   const lastRouteStop = displayedNodes[displayedNodes.length - 1] ?? null;
   const activeHeroCopy = viewHeroCopy[activeView];
-  const activeTabIndex = appTabs.findIndex((tab) => tab.key === activeView);
   const totalSpend = budgetSummary.total;
   const travelerCount = parseTravelerCount(travelerCountText);
   const costPerTraveler = travelerCount > 0 ? totalSpend / travelerCount : totalSpend;
@@ -1863,87 +1865,34 @@ export default function App() {
             <View style={styles.backgroundTopBand} />
             <View style={styles.backgroundWarmBand} />
           </View>
-          <View style={[styles.tripHero, isMobile && styles.tripHeroMobile]}>
-            <View style={styles.heroPlaneOne} />
-            <View style={styles.heroPlaneTwo} />
-            <View style={styles.heroPlaneThree} />
-            <View style={[styles.tripHeroCopy, isMobile && styles.tripHeroCopyMobile]}>
-              <Text style={styles.heroEyebrow}>{activeHeroCopy.eyebrow}</Text>
-              <Text style={styles.heroTitle}>{activeHeroCopy.title}</Text>
-              <Text style={styles.heroBody}>{activeHeroCopy.body}</Text>
-              <View style={styles.tripRouteLine}>
-                <Text style={styles.tripRouteText}>{firstRouteStop?.title ?? 'Start'}</Text>
-                <Text style={styles.tripRouteArrow}>→</Text>
-                <Text style={styles.tripRouteText}>{lastRouteStop?.title ?? 'Mål'}</Text>
-              </View>
-            </View>
-            <View style={[styles.heroStats, isMobile && styles.heroStatsMobile]}>
-              <View style={styles.heroStat}>
-                <Text style={styles.heroStatValue}>{displayedNodes.length}</Text>
-                <Text style={styles.heroStatLabel}>Stopp</Text>
-              </View>
-              <View style={styles.heroStat}>
-                <Text style={styles.heroStatValue}>{formatDistance(routeSummary.distanceMeters)}</Text>
-                <Text style={styles.heroStatLabel}>Rutt</Text>
-              </View>
-              <View style={styles.heroStat}>
-                <Text style={styles.heroStatValue}>{formatDuration(routeSummary.durationSeconds)}</Text>
-                <Text style={styles.heroStatLabel}>Körning</Text>
-              </View>
-            </View>
-          </View>
+          <TripHero
+            copy={activeHeroCopy}
+            drivingLabel={formatDuration(routeSummary.durationSeconds)}
+            isMobile={isMobile}
+            routeLabel={formatDistance(routeSummary.distanceMeters)}
+            startTitle={firstRouteStop?.title ?? 'Start'}
+            stopCount={displayedNodes.length}
+            styles={styles}
+            targetTitle={lastRouteStop?.title ?? 'Mål'}
+          />
 
-          <View style={[styles.flowRail, isMobile && styles.flowRailMobile]}>
-            {appTabs.map((tab, index) => (
-              <Pressable
-                key={tab.key}
-                style={[styles.flowStep, activeView === tab.key && styles.flowStepActive]}
-                onPress={() => goToView(tab.key)}
-              >
-                <Text style={[styles.flowStepNumber, activeView === tab.key && styles.flowStepNumberActive]}>{index + 1}</Text>
-                <Text style={[styles.flowStepText, activeView === tab.key && styles.flowStepTextActive]}>{tab.label}</Text>
-                {index < appTabs.length - 1 && !isMobile ? <Text style={styles.flowStepConnector}>/</Text> : null}
-              </Pressable>
-            ))}
-            <Text style={styles.flowCurrentText}>{activeTabIndex + 1} av {appTabs.length}</Text>
-          </View>
+          {isMobile ? <MobileFlowNav activeView={activeView} appTabs={appTabs} styles={styles} onGoToView={goToView} /> : null}
 
           <View style={[styles.dashboardGrid, isMobile && styles.dashboardGridMobile]}>
             {!isMobile ? (
-              <View style={styles.workspaceSidebar}>
-                <Text style={styles.workspaceSidebarKicker}>Resa</Text>
-                <Text style={styles.workspaceSidebarTitle}>{demoTrip.name}</Text>
-                <View style={styles.workspaceNavList}>
-                  {appTabs.map((tab) => (
-                    <Pressable
-                      key={tab.key}
-                      style={[styles.workspaceNavItem, activeView === tab.key && styles.workspaceNavItemActive]}
-                      onPress={() => goToView(tab.key)}
-                    >
-                      <Text style={[styles.workspaceNavText, activeView === tab.key && styles.workspaceNavTextActive]}>{tab.label}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-                <View style={styles.workspaceDivider} />
-                <Text style={styles.workspaceSidebarKicker}>Dagar</Text>
-                <View style={styles.dayShortcutList}>
-                  {dayPlans.slice(0, 9).map((dayPlan) => (
-                    <Pressable
-                      key={dayPlan.key}
-                      style={[styles.dayShortcut, selectedDayPlan?.key === dayPlan.key && activeView === 'days' && styles.dayShortcutActive]}
-                      onPress={() => {
-                        setSelectedDayKey(dayPlan.key);
-                        goToView('days');
-                      }}
-                    >
-                      <Text style={[styles.dayShortcutTitle, selectedDayPlan?.key === dayPlan.key && activeView === 'days' && styles.dayShortcutTitleActive]}>{dayPlan.shortTitle}</Text>
-                      <Text style={[styles.dayShortcutMeta, selectedDayPlan?.key === dayPlan.key && activeView === 'days' && styles.dayShortcutMetaActive]} numberOfLines={1}>
-                        {dayPlan.nodes.length} steg / {dayPlan.summary.startPlace} → {dayPlan.summary.endPlace}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
+              <SidebarNav
+                activeView={activeView}
+                appTabs={appTabs}
+                dayPlans={dayPlans}
+                selectedDayKey={selectedDayPlan?.key ?? null}
+                styles={styles}
+                tripName={demoTrip.name}
+                onGoToView={goToView}
+                onSelectDay={(dayKey) => {
+                  setSelectedDayKey(dayKey);
+                  goToView('days');
+                }}
+              />
             ) : null}
             {!isDemoMode && activeView === 'tools' ? (
             <View style={styles.sidebarColumn}>
@@ -2398,41 +2347,18 @@ export default function App() {
               ) : null}
             </View>
             {!isMobile ? (
-              <View style={styles.workspaceMapContext}>
-                <View style={styles.contextMapCard}>
-                  <View style={styles.contextMapHeader}>
-                    <View>
-                      <Text style={styles.overviewMapKicker}>Kartkontext</Text>
-                      <Text style={styles.contextMapTitle}>{activeView === 'days' && selectedDayPlan ? selectedDayPlan.shortTitle : 'Hela resan'}</Text>
-                    </View>
-                    <Pressable style={styles.secondarySmallButton} onPress={() => goToView('route')}>
-                      <Text style={styles.secondarySmallButtonText}>Rutt</Text>
-                    </Pressable>
-                  </View>
-                  <View style={styles.contextMapShell}>
-                    <NavigationMap
-                      nodes={activeView === 'days' && selectedDayPlan ? selectedDayPlan.nodes : displayedNodes}
-                      activeRoute={routeSummary.geometry ? routeSummary : demoRoute}
-                      followUser={false}
-                      compact
-                    />
-                  </View>
-                </View>
-                <View style={styles.contextPanel}>
-                  <Text style={styles.packingTitle}>Nästa steg</Text>
-                  <Text style={styles.contextPanelTitle}>{tripReadiness.nextStep.label}</Text>
-                  <Text style={styles.contextPanelText}>{tripReadiness.nextStep.detail}</Text>
-                  <Pressable style={styles.smallButton} onPress={() => goToView(tripReadiness.nextStep.target)}>
-                    <Text style={styles.smallButtonText}>Öppna</Text>
-                  </Pressable>
-                </View>
-                <View style={styles.contextPanel}>
-                  <Text style={styles.packingTitle}>Rutt</Text>
-                  <Text style={styles.contextPanelTitle}>{formatDistance(routeSummary.distanceMeters)}</Text>
-                  <Text style={styles.contextPanelText}>{formatDuration(routeSummary.durationSeconds)} / {displayedNodes.length} stopp</Text>
-                  {missingCoordinateCount > 0 ? <Text style={styles.warningText}>{missingCoordinateCount} stopp saknar kartposition.</Text> : null}
-                </View>
-              </View>
+              <MapRail
+                activeRoute={routeSummary.geometry ? routeSummary : demoRoute}
+                activeView={activeView}
+                displayedNodes={displayedNodes}
+                formatDistance={formatDistance}
+                formatDuration={formatDuration}
+                missingCoordinateCount={missingCoordinateCount}
+                nextStep={tripReadiness.nextStep}
+                selectedDayPlan={selectedDayPlan}
+                styles={styles}
+                onGoToView={goToView}
+              />
             ) : null}
           </View>
         </ScrollView>
