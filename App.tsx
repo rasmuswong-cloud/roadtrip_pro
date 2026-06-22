@@ -1982,17 +1982,6 @@ export default function App() {
             <View style={styles.backgroundTopBand} />
             <View style={styles.backgroundWarmBand} />
           </View>
-          <TripHero
-            copy={activeHeroCopy}
-            drivingLabel={formatDuration(routeSummary.durationSeconds)}
-            isMobile={isMobile}
-            routeLabel={formatDistance(routeSummary.distanceMeters)}
-            startTitle={firstRouteStop?.title ?? 'Start'}
-            stopCount={displayedNodes.length}
-            styles={styles}
-            targetTitle={lastRouteStop?.title ?? 'Mål'}
-          />
-
           {isMobile ? <MobileFlowNav activeView={activeView} appTabs={appTabs} styles={styles} onGoToView={goToView} /> : null}
 
           <View style={[styles.dashboardGrid, isMobile && styles.dashboardGridMobile]}>
@@ -2118,6 +2107,16 @@ export default function App() {
             ) : null}
 
             <View style={[styles.mainColumn, isMobile && styles.mainColumnMobile]}>
+              <TripHero
+                copy={activeHeroCopy}
+                drivingLabel={formatDuration(routeSummary.durationSeconds)}
+                isMobile={isMobile}
+                routeLabel={formatDistance(routeSummary.distanceMeters)}
+                startTitle={firstRouteStop?.title ?? 'Start'}
+                stopCount={displayedNodes.length}
+                styles={styles}
+                targetTitle={lastRouteStop?.title ?? 'Mål'}
+              />
               {activeView === 'tools' ? (
                 <View style={[styles.panelSection, isDark && styles.panelDark]}>
                   <View style={styles.sectionHeaderRow}>
@@ -3808,10 +3807,11 @@ const styles = StyleSheet.create({
   },
   contentInner: {
     width: '100%',
-    maxWidth: 1760,
+    maxWidth: 1900,
     alignSelf: 'center',
-    padding: 18,
-    gap: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 12,
     position: 'relative',
   },
   contentInnerMobile: {
@@ -3846,18 +3846,18 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '-10deg' }],
   },
   tripHero: {
-    minHeight: 176,
+    minHeight: 154,
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'stretch',
     justifyContent: 'space-between',
-    gap: 22,
+    gap: 18,
     overflow: 'hidden',
-    borderRadius: 22,
+    borderRadius: 20,
     backgroundColor: '#ffffff',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#e1ddd4',
-    padding: 26,
+    padding: 22,
     shadowColor: '#5f4b32',
     shadowOpacity: 0.08,
     shadowRadius: 24,
@@ -3916,15 +3916,15 @@ const styles = StyleSheet.create({
   heroTitle: {
     maxWidth: 760,
     color: '#1f2933',
-    fontSize: 32,
-    lineHeight: 38,
+    fontSize: 28,
+    lineHeight: 34,
     fontWeight: '900',
   },
   heroBody: {
     maxWidth: 660,
     color: '#52616f',
-    fontSize: 16,
-    lineHeight: 24,
+    fontSize: 14,
+    lineHeight: 21,
     fontWeight: '600',
   },
   tripRouteLine: {
@@ -3953,7 +3953,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   heroStats: {
-    width: 360,
+    width: 292,
     maxWidth: '100%',
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -3974,7 +3974,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8faf7',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#e1ddd4',
-    padding: 16,
+    padding: 14,
   },
   flowRail: {
     display: 'none',
@@ -4064,22 +4064,24 @@ const styles = StyleSheet.create({
   dashboardGrid: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    gap: 18,
+    gap: 14,
     flexWrap: 'nowrap',
+    minHeight: 760,
   },
   dashboardGridMobile: {
     flexDirection: 'column',
     gap: 12,
+    minHeight: 0,
   },
   workspaceSidebar: {
-    width: 248,
+    width: 232,
     flexShrink: 0,
     gap: 14,
     borderRadius: 20,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#e1ddd4',
     backgroundColor: 'rgba(255,255,255,0.96)',
-    padding: 16,
+    padding: 14,
     shadowColor: '#5f4b32',
     shadowOpacity: 0.07,
     shadowRadius: 18,
@@ -4183,28 +4185,29 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   mainColumn: {
-    flex: 1,
+    flex: 0.92,
     minWidth: 0,
     gap: 16,
   },
   mainColumnMobile: {
     minWidth: 0,
     width: '100%',
+    flex: 0,
   },
   routeView: {
     gap: 14,
     width: '100%',
   },
   workspaceMapContext: {
-    width: '44%',
-    minWidth: 380,
-    maxWidth: 760,
+    width: '48%',
+    minWidth: 520,
+    maxWidth: 880,
     flexShrink: 0,
     gap: 14,
   },
   contextMapCard: {
     flex: 1,
-    minHeight: 620,
+    minHeight: 720,
     gap: 12,
     borderRadius: 22,
     borderWidth: StyleSheet.hairlineWidth,
@@ -4232,7 +4235,7 @@ const styles = StyleSheet.create({
   },
   contextMapShell: {
     flex: 1,
-    minHeight: 540,
+    minHeight: 640,
     overflow: 'hidden',
     borderRadius: 18,
     borderWidth: StyleSheet.hairlineWidth,
