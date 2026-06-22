@@ -6,6 +6,7 @@ const schemaSql = readFileSync('supabase/schema.sql', 'utf8');
 const shareCodesSql = readFileSync('supabase/share_codes.sql', 'utf8');
 const inviteHardeningSql = readFileSync('supabase/migrations/202606170001_harden_trip_invite_rpcs.sql', 'utf8');
 const moveNodeSql = readFileSync('supabase/migrations/202606120001_atomic_move_itinerary_node.sql', 'utf8');
+const exploreItemsSql = readFileSync('supabase/migrations/202606220001_create_trip_explore_items.sql', 'utf8');
 
 const appTables = [
   'user_profiles',
@@ -61,6 +62,18 @@ test('move itinerary RPC remains invoker-scoped and authenticated-only', () => {
   assert.match(moveNodeSql, /public\.is_trip_editor\(moving_node\.trip_id\)/i);
   assert.match(moveNodeSql, /revoke all on function public\.move_itinerary_node\(uuid, integer\) from anon/i);
   assert.match(moveNodeSql, /grant execute on function public\.move_itinerary_node\(uuid, integer\) to authenticated/i);
+});
+
+test('explore items migration is trip scoped and authenticated only', () => {
+  assert.match(exploreItemsSql, /create table if not exists public\.trip_explore_items/i);
+  assert.match(exploreItemsSql, /alter table public\.trip_explore_items enable row level security/i);
+  assert.match(exploreItemsSql, /public\.is_trip_member\(trip_id\) or public\.is_trip_owner\(trip_id\)/i);
+  assert.match(exploreItemsSql, /public\.is_trip_editor\(trip_id\)/i);
+  assert.match(exploreItemsSql, /revoke all on public\.trip_explore_items from public/i);
+  assert.match(exploreItemsSql, /revoke all on public\.trip_explore_items from anon/i);
+  assert.match(exploreItemsSql, /grant select, insert, update, delete on public\.trip_explore_items to authenticated/i);
+  assert.doesNotMatch(exploreItemsSql, /using\s*\(\s*true\s*\)/i);
+  assert.doesNotMatch(exploreItemsSql, /with check\s*\(\s*true\s*\)/i);
 });
 
 test('PostGIS spatial_ref_sys is not treated as a Roadtrip app table', () => {

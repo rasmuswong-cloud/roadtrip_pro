@@ -62,3 +62,31 @@ export type ExpenseRow = {
   updated_at: string;
   deleted_at: string | null;
 };
+
+export type TripExploreItemRow = {
+  id: string;
+  trip_id: string;
+  created_by: string;
+  item_type: 'note' | 'place' | 'section';
+  title: string;
+  description: string | null;
+  category: string | null;
+  place_name: string | null;
+  formatted_address: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  google_place_id: string | null;
+  google_maps_url: string | null;
+  google_rating: number | null;
+  google_primary_type: string | null;
+  photo_name: string | null;
+  photo_reference: string | null;
+  photo_url: string | null;
+  photo_attributions: unknown[];
+  image_source: 'google_place_photo' | 'placeholder' | 'manual';
+  sort_order: number;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+};

@@ -24,6 +24,15 @@ import { getCurrentUser, getOrCreateAnonymousUser, sendMagicLink, signOut } from
 import { applyConfirmedMutationPlan } from '@/services/ai/applyMutationPlan';
 import { parseItineraryCommand } from '@/services/ai/agent';
 import type { ItineraryMutationPlan } from '@/services/ai/itineraryMutationSchema';
+import {
+  deleteTripExploreItem,
+  explorePlaceFromItem,
+  explorePlaceToItem,
+  listTripExploreItems,
+  noteToExploreItem,
+  upsertTripExploreItem,
+  type TripExploreItem,
+} from '@/services/database/exploreRepository';
 import { upsertPoi } from '@/services/database/poiRepository';
 import { ensureUserProfile } from '@/services/database/profileRepository';
 import {
@@ -318,6 +327,7 @@ export default function App() {
   const [exploreSearchQuery, setExploreSearchQuery] = useState('');
   const [exploreResults, setExploreResults] = useState<GooglePlace[]>([]);
   const [explorePlaces, setExplorePlaces] = useState<ExplorePlace[]>([]);
+  const [exploreNoteItemId, setExploreNoteItemId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<AppView>('overview');
   const [itineraryNodes, setItineraryNodes] = useState<ItineraryNode[]>(() => initialPersistedState?.itineraryNodes ?? []);
   const [latestAiPlan, setLatestAiPlan] = useState<ItineraryMutationPlan | null>(null);
@@ -603,12 +613,16 @@ export default function App() {
       setUserId(user.id);
       await ensureUserProfile(user.id, user.email ?? 'Reseplanerare');
       const trip = await ensureFirstTrip(user.id);
-      const nodes = await listItineraryNodes(trip.id);
+      const [nodes, exploreItems] = await Promise.all([
+        listItineraryNodes(trip.id),
+        listTripExploreItems(trip.id),
+      ]);
       const cleanedNodes = await cleanLoadedNodesOnline(nodes);
 
       upsertTrip(trip);
       setActiveTrip(trip.id);
       setItineraryNodes(cleanedNodes);
+      applyLoadedExploreItems(exploreItems);
       markOnlineSaveSuccess();
       setStatusMessage(`Ansluten: ${trip.name}`);
     } catch (error) {
@@ -712,12 +726,16 @@ export default function App() {
 
       await ensureUserProfile(user.id, user.email ?? 'Reseplanerare');
       const trip = await joinTripByShareCode(normalizedShareCode);
-      const nodes = await listItineraryNodes(trip.id);
+      const [nodes, exploreItems] = await Promise.all([
+        listItineraryNodes(trip.id),
+        listTripExploreItems(trip.id),
+      ]);
       const cleanedNodes = await cleanLoadedNodesOnline(nodes);
       setUserId(user.id);
       upsertTrip(trip);
       setActiveTrip(trip.id);
       setItineraryNodes(cleanedNodes);
+      applyLoadedExploreItems(exploreItems);
       setShareCode('');
       markOnlineSaveSuccess();
       setStatusMessage(`Gick med i: ${trip.name}`);
@@ -822,26 +840,112 @@ export default function App() {
     }
   }
 
+  function applyLoadedExploreItems(items: TripExploreItem[]) {
+    const noteItem = items.find((item) => item.itemType === 'note') ?? null;
+    const places = items
+      .map(explorePlaceFromItem)
+      .filter((place): place is ExplorePlace => Boolean(place));
+
+    setExploreNoteItemId(noteItem?.id ?? null);
+    setExploreNotes(noteItem?.description ?? '');
+    setExplorePlaces(places);
+  }
+
+  async function saveExploreNotes() {
+    if (!activeTripId || !userId) {
+      setStatusMessage('Anteckningen sparas lokalt tills resan är ansluten.');
+      return;
+    }
+
+    setIsLoading(true);
+    setStatusMessage('Sparar anteckningar...');
+
+    try {
+      const savedItem = await upsertTripExploreItem(noteToExploreItem({
+        ...(exploreNoteItemId ? { existingId: exploreNoteItemId } : {}),
+        tripId: activeTripId,
+        userId,
+        description: exploreNotes,
+      }));
+      setExploreNoteItemId(savedItem.id);
+      markOnlineSaveSuccess();
+      setStatusMessage('Anteckningar sparade i Utforska.');
+    } catch (error) {
+      markOnlineSaveError();
+      setStatusMessage(`Kunde inte spara anteckningar. Texten ligger kvar lokalt. ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   function saveExploreGooglePlace(place: GooglePlace) {
     const explorePlace = explorePlaceFromGooglePlace(place);
-    setExplorePlaces((current) => [
-      explorePlace,
-      ...current.filter((candidate) => candidate.id !== explorePlace.id),
-    ]);
-    setStatusMessage(`${explorePlace.title} sparades i Utforska. Anteckningar och idéplatser sparas lokalt i denna version.`);
+    void saveExplorePlace(explorePlace, `${explorePlace.title} sparades i Utforska.`);
+  }
+
+  async function saveExplorePlace(explorePlace: ExplorePlace, successMessage: string) {
+    if (!activeTripId || !userId) {
+      setExplorePlaces((current) => [
+        explorePlace,
+        ...current.filter((candidate) => candidate.id !== explorePlace.id),
+      ]);
+      setStatusMessage(`${successMessage} Idéplatser sparas lokalt tills resan är ansluten.`);
+      return;
+    }
+
+    setIsLoading(true);
+    setStatusMessage(`Sparar ${explorePlace.title} i Utforska...`);
+
+    try {
+      const savedItem = await upsertTripExploreItem(explorePlaceToItem({
+        place: explorePlace,
+        tripId: activeTripId,
+        userId,
+        sortOrder: explorePlaces.length + 1,
+      }));
+      const savedPlace = explorePlaceFromItem(savedItem);
+      if (savedPlace) {
+        setExplorePlaces((current) => [
+          savedPlace,
+          ...current.filter((candidate) => candidate.id !== savedPlace.id && candidate.id !== explorePlace.id),
+        ]);
+      }
+      markOnlineSaveSuccess();
+      setStatusMessage(successMessage);
+    } catch (error) {
+      markOnlineSaveError();
+      setStatusMessage(`Kunde inte spara platsen i Utforska. Platsen är inte ändrad. ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   function saveRecommendedExplorePlace(place: ExplorePlace) {
-    setExplorePlaces((current) => [
-      { ...place, id: `saved:${place.id}` },
-      ...current.filter((candidate) => candidate.title !== place.title || candidate.place !== place.place),
-    ]);
-    setStatusMessage(`${place.title} sparades i Platser att besöka.`);
+    const nextPlace = { ...place, id: `saved:${place.id}` };
+    void saveExplorePlace(nextPlace, `${place.title} sparades i Platser att besöka.`);
   }
 
-  function removeExplorePlace(placeId: string) {
-    setExplorePlaces((current) => current.filter((place) => place.id !== placeId));
-    setStatusMessage('Platsen togs bort från Utforska.');
+  async function removeExplorePlace(placeId: string) {
+    if (!activeTripId) {
+      setExplorePlaces((current) => current.filter((place) => place.id !== placeId));
+      setStatusMessage('Platsen togs bort från Utforska.');
+      return;
+    }
+
+    setIsLoading(true);
+    setStatusMessage('Tar bort plats från Utforska...');
+
+    try {
+      await deleteTripExploreItem(placeId);
+      setExplorePlaces((current) => current.filter((place) => place.id !== placeId));
+      markOnlineSaveSuccess();
+      setStatusMessage('Platsen togs bort från Utforska.');
+    } catch (error) {
+      markOnlineSaveError();
+      setStatusMessage(`Kunde inte ta bort platsen. Den ligger kvar i Utforska. ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   function showExplorePlaceOnMap(place: ExplorePlace) {
@@ -2170,6 +2274,12 @@ export default function App() {
                     style={[styles.exploreNotesInput, isDark && styles.inputDark]}
                     multiline
                   />
+                  <View style={styles.exploreNoteActions}>
+                    <Text style={styles.exploreLocalHint}>{activeTripId ? 'Sparas i den anslutna resan.' : 'Sparas lokalt tills resan är ansluten.'}</Text>
+                    <Pressable style={[styles.smallButton, isLoading && styles.disabledButton]} onPress={() => void saveExploreNotes()} disabled={isLoading}>
+                      <Text style={styles.smallButtonText}>Spara anteckningar</Text>
+                    </Pressable>
+                  </View>
                 </View>
 
                 <View style={styles.exploreSearchCard}>
@@ -2237,7 +2347,7 @@ export default function App() {
                                 primaryLabel="Lägg till i dag"
                                 onPrimary={() => addExplorePlaceToSelectedDay(place)}
                                 onMap={() => showExplorePlaceOnMap(place)}
-                                onRemove={() => removeExplorePlace(place.id)}
+                                onRemove={() => void removeExplorePlace(place.id)}
                               />
                             ))}
                           </View>
@@ -4320,6 +4430,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     paddingHorizontal: 14,
     paddingVertical: 12,
+  },
+  exploreNoteActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    flexWrap: 'wrap',
+  },
+  exploreLocalHint: {
+    flex: 1,
+    minWidth: 180,
+    color: '#6b7280',
+    fontSize: 12,
+    fontWeight: '800',
   },
   exploreSearchCard: {
     gap: 12,
