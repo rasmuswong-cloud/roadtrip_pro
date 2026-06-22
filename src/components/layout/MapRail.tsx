@@ -40,7 +40,7 @@ export function MapRail({
       <View style={styles.contextMapCard}>
         <View style={styles.contextMapHeader}>
           <View>
-            <Text style={styles.overviewMapKicker}>Kartkontext</Text>
+            <Text style={styles.overviewMapKicker}>Karta</Text>
             <Text style={styles.contextMapTitle}>{activeView === 'days' && selectedDayPlan ? selectedDayPlan.shortTitle : 'Hela resan'}</Text>
           </View>
           <Pressable style={styles.secondarySmallButton} onPress={() => onGoToView('route')}>

@@ -18,11 +18,11 @@ export const dayCardStyles = StyleSheet.create({
   },
   collapsiblePanel: {
     gap: 8,
-    borderRadius: 8,
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d8e5f2',
-    backgroundColor: '#ffffff',
-    padding: 10,
+    borderColor: '#ebe7df',
+    backgroundColor: '#fffefa',
+    padding: 12,
   },
   collapsibleHeader: {
     minHeight: 32,
@@ -38,7 +38,7 @@ export const dayCardStyles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#d8e5f2',
+    borderTopColor: '#ebe7df',
     paddingTop: 12,
   },
   timeRailCompact: {
@@ -83,7 +83,7 @@ export const dayCardStyles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#ffe3a3',
-    backgroundColor: '#fff7df',
+    backgroundColor: '#fff8e8',
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
@@ -115,7 +115,7 @@ export const dayCardStyles = StyleSheet.create({
     gap: 8,
     flexWrap: 'wrap',
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#e6edf5',
+    borderTopColor: '#ebe7df',
     paddingTop: 10,
   },
   stopMenuWrap: {

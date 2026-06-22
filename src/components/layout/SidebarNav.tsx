@@ -8,6 +8,8 @@ type SidebarNavProps = {
   appTabs: AppTab[];
   dayPlans: DayPlan[];
   selectedDayKey: string | null;
+  statusLabel?: string;
+  statusMeta?: string;
   styles: any;
   tripName: string;
   onGoToView: (view: AppView) => void;
@@ -19,6 +21,8 @@ export function SidebarNav({
   appTabs,
   dayPlans,
   selectedDayKey,
+  statusLabel,
+  statusMeta,
   styles,
   tripName,
   onGoToView,
@@ -60,6 +64,12 @@ export function SidebarNav({
           );
         })}
       </View>
+      {statusLabel || statusMeta ? (
+        <View style={styles.sidebarStatusCard}>
+          {statusLabel ? <Text style={styles.sidebarStatusLabel}>{statusLabel}</Text> : null}
+          {statusMeta ? <Text style={styles.sidebarStatusMeta} numberOfLines={2}>{statusMeta}</Text> : null}
+        </View>
+      ) : null}
     </View>
   );
 }

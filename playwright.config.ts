@@ -11,7 +11,7 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   webServer: {
-    command: 'node scripts/serve-dist.mjs --idle-timeout=3000',
+    command: 'node scripts/serve-dist.mjs --idle-timeout=15000',
     url: 'http://127.0.0.1:8081',
     reuseExistingServer: false,
     timeout: 30_000,
