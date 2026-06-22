@@ -52,6 +52,20 @@ test('calculateDayCost sums known node costs', () => {
   assert.equal(total, 1600);
 });
 
+test('validatePlannerDraft rejects impossible calendar dates and invalid coordinates', () => {
+  const result = validatePlannerDraft({
+    title: 'Bad map stop',
+    type: 'activity',
+    date: '2026-02-30',
+    latitude: '91,5',
+    longitude: 'not-a-number',
+  });
+
+  assert.equal(result.valid, false);
+  assert.ok(result.errors.some((error) => error.startsWith('Datum ska anges')));
+  assert.ok(result.errors.some((error) => error.startsWith('Longitud')));
+});
+
 test('summarizeDay returns day overview fields', () => {
   const summary = summarizeDay([
     node({ id: 'start', title: 'Start', metadata: { place: 'München', cost: 100 } }),

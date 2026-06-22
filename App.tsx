@@ -15,7 +15,8 @@ import { MapRail } from '@/components/layout/MapRail';
 import { MobileFlowNav } from '@/components/layout/MobileFlowNav';
 import { SidebarNav } from '@/components/layout/SidebarNav';
 import { TripHero } from '@/components/layout/TripHero';
-import type { AppTab, AppView } from '@/components/layout/workspaceTypes';
+import { APP_TABS, budgetCostEditorTarget, dayShortcutTarget, resolveSelectedDayKey } from '@/components/layout/workspaceLogic';
+import type { AppView } from '@/components/layout/workspaceTypes';
 import DayCard from '@/components/planning/DayCard';
 import { reseplanrareIdeaPlaces, reseplanrareSeedRows, type ReseplanrareSeedRow } from '@/data/reseplanrareSeed';
 import type { BudgetCategories, BudgetSummary, DayChecklistItem, DayInsightSummary, DayPlan, Expense, ItineraryNode, ItineraryNodeType, Poi, RouteSummary, Trip } from '@/models';
@@ -62,6 +63,7 @@ import {
 import { applyGooglePlaceCoordinateUpdate } from '@/services/planning/placeCoordinateUpdate';
 import { planReseplanrareImport } from '@/services/planning/reseplanrareImport';
 import { buildTripReadiness } from '@/services/planning/tripReadiness';
+import { buildTripQualityCounts } from '@/services/planning/tripQuality';
 import { estimateRouteSummary } from '@/services/routing/routeEstimate';
 import { useTripStore } from '@/store/tripStore';
 import { formatDateLabel as formatSafeDateLabel, formatTimeLabel } from '@/utils/dateTimeLabels';
@@ -82,13 +84,7 @@ type UndoSnapshot = {
   itineraryNodes: ItineraryNode[];
 };
 
-const appTabs: AppTab[] = [
-  { key: 'overview', label: 'Översikt' },
-  { key: 'route', label: 'Rutt' },
-  { key: 'days', label: 'Dagar' },
-  { key: 'budget', label: 'Budget' },
-  { key: 'tools', label: 'Verktyg' },
-];
+const appTabs = APP_TABS;
 
 const viewHeroCopy: Record<AppView, { eyebrow: string; title: string; body: string }> = {
   overview: {
@@ -359,9 +355,8 @@ export default function App() {
   const budgetCenter = useMemo(() => buildTravelBudgetCenter(displayedNodes, travelerCount), [displayedNodes, travelerCount]);
   const bulkCoordinateCandidates = useMemo(() => getBulkCoordinateCandidates(displayedNodes), [displayedNodes]);
   const missingCoordinateCount = bulkCoordinateCandidates.length;
-  const missingBookingCount = useMemo(() => countMissingBookingReferences(displayedNodes), [displayedNodes]);
-  const missingTimeCount = useMemo(() => countMissingTimes(displayedNodes), [displayedNodes]);
-  const planningGapCount = useMemo(() => countPlanningGaps(displayedNodes), [displayedNodes]);
+  const tripQualityCounts = useMemo(() => buildTripQualityCounts(displayedNodes), [displayedNodes]);
+  const { missingBookingCount, missingTimeCount, planningGapCount } = tripQualityCounts;
   const tripReadiness = useMemo(() => buildTripReadiness({
     stopCount: displayedNodes.length,
     dayCount: dayPlans.filter((dayPlan) => dayPlan.key !== 'unscheduled').length,
@@ -402,16 +397,9 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (visibleDayPlans.length === 0) {
-      if (selectedDayKey !== null) {
-        setSelectedDayKey(null);
-      }
-      return;
-    }
-
-    const firstVisibleDay = visibleDayPlans[0];
-    if (firstVisibleDay && (!selectedDayKey || !visibleDayPlans.some((dayPlan) => dayPlan.key === selectedDayKey))) {
-      setSelectedDayKey(firstVisibleDay.key);
+    const nextSelectedDayKey = resolveSelectedDayKey(visibleDayPlans.map((dayPlan) => dayPlan.key), selectedDayKey);
+    if (nextSelectedDayKey !== selectedDayKey) {
+      setSelectedDayKey(nextSelectedDayKey);
     }
   }, [selectedDayKey, visibleDayPlans]);
 
@@ -1053,22 +1041,22 @@ export default function App() {
   }
 
   function openBudgetCostEditor(nodeId: string) {
-    const node = displayedNodes.find((candidate) => candidate.id === nodeId);
-    if (!node) {
+    const target = budgetCostEditorTarget(displayedNodes, nodeId);
+    if (!target) {
       return;
     }
 
-    selectPlannerNode(nodeId);
-    goToView('days');
+    selectPlannerNode(target.nodeId);
+    goToView(target.view);
 
     if (isDemoMode) {
       setStatusMessage('Anslut resan innan du lägger till kostnader.');
       return;
     }
 
-    const opened = startInlineEdit(nodeId, 'cost');
+    const opened = startInlineEdit(target.nodeId, 'cost');
     setStatusMessage(opened
-      ? `Öppnade kostnadsfältet för ${node.title}.`
+      ? `Öppnade kostnadsfältet för ${target.title}.`
       : 'Spara eller avbryt det öppna fältet innan du redigerar kostnad.');
   }
 
@@ -1865,6 +1853,7 @@ export default function App() {
             {appTabs.map((tab) => (
               <Pressable
                 key={tab.key}
+                testID={`top-nav-${tab.key}`}
                 style={[styles.navTab, isMobile && styles.navTabMobile, activeView === tab.key && styles.navTabActive]}
                 onPress={() => goToView(tab.key)}
               >
@@ -1915,8 +1904,9 @@ export default function App() {
                 tripName={demoTrip.name}
                 onGoToView={goToView}
                 onSelectDay={(dayKey) => {
-                  setSelectedDayKey(dayKey);
-                  goToView('days');
+                  const target = dayShortcutTarget(dayKey);
+                  setSelectedDayKey(target.selectedDayKey);
+                  goToView(target.view);
                 }}
               />
             ) : null}
@@ -2367,7 +2357,7 @@ export default function App() {
                       <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={() => startNewPlannerStep('unscheduled')} disabled={isLoading}>
                         <Text style={styles.secondaryButtonText}>Lägg till oschemalagt</Text>
                       </Pressable>
-                      <Pressable style={[styles.commandButton, (isLoading || !selectedDayPlan) && styles.disabledButton]} onPress={() => selectedDayPlan && startNewPlannerStep(selectedDayPlan.key)} disabled={isLoading || !selectedDayPlan}>
+                      <Pressable testID="add-to-selected-day" style={[styles.commandButton, (isLoading || !selectedDayPlan) && styles.disabledButton]} onPress={() => selectedDayPlan && startNewPlannerStep(selectedDayPlan.key)} disabled={isLoading || !selectedDayPlan}>
                         <Text style={styles.commandButtonText}>Lägg till i dag</Text>
                       </Pressable>
                     </View>
@@ -2867,33 +2857,6 @@ function buildBudgetSummary(nodes: ItineraryNode[]): BudgetSummary {
     missingCostCount,
     warnings,
   };
-}
-
-function countMissingBookingReferences(nodes: ItineraryNode[]): number {
-  return nodes.filter((node) => (node.type === 'lodging' || node.type === 'transport') && !node.reservation.reference).length;
-}
-
-function countMissingTimes(nodes: ItineraryNode[]): number {
-  return nodes.filter((node) => node.type !== 'note' && !isValidDateTimeValue(node.startsAt)).length;
-}
-
-function countPlanningGaps(nodes: ItineraryNode[]): number {
-  return nodes.filter((node) => {
-    if (!node.title.trim()) {
-      return true;
-    }
-
-    return Boolean(node.startsAt) && !isValidDateTimeValue(node.startsAt);
-  }).length;
-}
-
-function isValidDateTimeValue(value?: string | null): boolean {
-  if (!value) {
-    return false;
-  }
-
-  const timestamp = new Date(value).getTime();
-  return Number.isFinite(timestamp);
 }
 
 function buildBudgetWarnings(nodes: ItineraryNode[], total: number, missingCostCount: number): string[] {

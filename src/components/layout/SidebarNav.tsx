@@ -32,6 +32,7 @@ export function SidebarNav({
         {appTabs.map((tab) => (
           <Pressable
             key={tab.key}
+            testID={`sidebar-nav-${tab.key}`}
             style={[styles.workspaceNavItem, activeView === tab.key && styles.workspaceNavItemActive]}
             onPress={() => onGoToView(tab.key)}
           >
@@ -47,6 +48,7 @@ export function SidebarNav({
           return (
             <Pressable
               key={dayPlan.key}
+              testID={`day-shortcut-${dayPlan.key}`}
               style={[styles.dayShortcut, active && styles.dayShortcutActive]}
               onPress={() => onSelectDay(dayPlan.key)}
             >

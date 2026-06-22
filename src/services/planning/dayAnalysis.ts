@@ -137,11 +137,11 @@ export function validatePlannerDraft(draft: PlannerDraft): PlannerValidationResu
     errors.push('Ange både latitud och longitud, eller lämna båda tomma.');
   }
 
-  if (hasLatitude && Number.isNaN(parseCoordinate(draft.latitude))) {
+  if (hasLatitude && !isValidLatitude(parseCoordinate(draft.latitude))) {
     errors.push('Latitud behöver vara ett giltigt nummer.');
   }
 
-  if (hasLongitude && Number.isNaN(parseCoordinate(draft.longitude))) {
+  if (hasLongitude && !isValidLongitude(parseCoordinate(draft.longitude))) {
     errors.push('Longitud behöver vara ett giltigt nummer.');
   }
 
@@ -261,7 +261,19 @@ function keepTimeOnDay(value: string | null | undefined, dayKey: string): string
 }
 
 function isValidDateInput(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(`${value}T12:00:00`).getTime());
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return false;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+
+  return date.getUTCFullYear() === year
+    && date.getUTCMonth() === month - 1
+    && date.getUTCDate() === day;
 }
 
 function isValidTimeInput(value: string): boolean {
@@ -270,4 +282,12 @@ function isValidTimeInput(value: string): boolean {
 
 function parseCoordinate(value: string | undefined): number {
   return Number(value?.replace(',', '.'));
+}
+
+function isValidLatitude(value: number): boolean {
+  return Number.isFinite(value) && value >= -90 && value <= 90;
+}
+
+function isValidLongitude(value: number): boolean {
+  return Number.isFinite(value) && value >= -180 && value <= 180;
 }
