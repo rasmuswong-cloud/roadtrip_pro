@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildGooglePlacePhotoUrl,
   googlePlacesMissingApiKeyMessage,
   hasGooglePlacesApiKey,
   searchGooglePlaces,
@@ -66,4 +67,15 @@ test('Google Places search reports a clear missing key message', async () => {
   } finally {
     restoreEnvironment();
   }
+});
+
+test('Google Place photo URL helper returns null without key or photo name', () => {
+  assert.equal(buildGooglePlacePhotoUrl(undefined, 'public-key'), null);
+  assert.equal(buildGooglePlacePhotoUrl('places/abc/photos/def', undefined), null);
+});
+
+test('Google Place photo URL helper builds media URL without network calls', () => {
+  const url = buildGooglePlacePhotoUrl('places/abc/photos/def', 'public-key', { maxWidthPx: 320, maxHeightPx: 200 });
+
+  assert.equal(url, 'https://places.googleapis.com/v1/places/abc/photos/def/media?key=public-key&skipHttpRedirect=true&maxWidthPx=320&maxHeightPx=200');
 });

@@ -45,6 +45,18 @@ import {
 import { analyzeDayWarnings, moveNodeToDay, summarizeDay, validatePlannerDraft, type DaySummary } from '@/services/planning/dayAnalysis';
 import { buildTravelBudgetCenter } from '@/services/planning/budgetAnalysis';
 import {
+  addExplorePlaceTarget,
+  emptyExploreState,
+  explorePlaceFromGooglePlace,
+  groupExplorePlaces,
+  imageSourceForPlace,
+  placeholderTypeForPlace,
+  recommendedPlacesFromNodes,
+  type ExploreCategory,
+  type ExplorePlace,
+  type TravelPlaceholderType,
+} from '@/services/planning/exploreBoard';
+import {
   formatBulkCoordinateSummary,
   formatBulkCoordinateDiagnostics,
   getBulkCoordinateCandidates,
@@ -91,6 +103,11 @@ const viewHeroCopy: Record<AppView, { eyebrow: string; title: string; body: stri
     eyebrow: 'Resestatus',
     title: 'Din roadtrip i ett lugnt beslutsflöde',
     body: 'Se vad som är klart, vad som saknas och vilket steg som för resan framåt.',
+  },
+  explore: {
+    eyebrow: 'Utforska',
+    title: 'Samla idéer innan de blir resplan',
+    body: 'Spara tips, platser, restauranger och anteckningar innan du bestämmer vilken dag de hör hemma.',
   },
   route: {
     eyebrow: 'Kontrollera rutten',
@@ -297,6 +314,10 @@ export default function App() {
   const [placeQuery, setPlaceQuery] = useState('camping nära Cortina');
   const [activePlaceDayKey, setActivePlaceDayKey] = useState<string | null>(null);
   const [placeResults, setPlaceResults] = useState<GooglePlace[]>([]);
+  const [exploreNotes, setExploreNotes] = useState('');
+  const [exploreSearchQuery, setExploreSearchQuery] = useState('');
+  const [exploreResults, setExploreResults] = useState<GooglePlace[]>([]);
+  const [explorePlaces, setExplorePlaces] = useState<ExplorePlace[]>([]);
   const [activeView, setActiveView] = useState<AppView>('overview');
   const [itineraryNodes, setItineraryNodes] = useState<ItineraryNode[]>(() => initialPersistedState?.itineraryNodes ?? []);
   const [latestAiPlan, setLatestAiPlan] = useState<ItineraryMutationPlan | null>(null);
@@ -369,6 +390,9 @@ export default function App() {
   const firstRouteStop = displayedNodes[0] ?? null;
   const lastRouteStop = displayedNodes[displayedNodes.length - 1] ?? null;
   const activeHeroCopy = viewHeroCopy[activeView];
+  const exploreGroups = useMemo(() => groupExplorePlaces(explorePlaces), [explorePlaces]);
+  const exploreEmptyState = useMemo(() => emptyExploreState(explorePlaces), [explorePlaces]);
+  const recommendedPlaces = useMemo(() => recommendedPlacesFromNodes(displayedNodes), [displayedNodes]);
   const totalSpend = budgetSummary.total;
   const costPerTraveler = travelerCount > 0 ? totalSpend / travelerCount : totalSpend;
   const onlineSaveLabel = formatOnlineSaveLabel(onlineSaveState, lastOnlineSavedAt, Boolean(activeTripId));
@@ -768,6 +792,84 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
+  }
+
+  async function searchExplorePlaces() {
+    if (!exploreSearchQuery.trim()) {
+      setStatusMessage('Skriv vad du vill söka efter först.');
+      return;
+    }
+
+    setIsLoading(true);
+    setStatusMessage(`Söker idéer för ${exploreSearchQuery.trim()}...`);
+
+    try {
+      const center = selectedDayPlan?.nodes.find((node) => node.location)?.location ?? displayedNodes.find((node) => node.location)?.location ?? null;
+      const input = {
+        query: exploreSearchQuery.trim(),
+        radiusMeters: 35_000,
+        languageCode: 'sv',
+        maxResultCount: 6,
+        ...(center ? { center } : {}),
+      };
+      const results = await searchGooglePlaces(input);
+      setExploreResults(results);
+      setStatusMessage(`Hittade ${results.length} platser att spara i Utforska.`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  function saveExploreGooglePlace(place: GooglePlace) {
+    const explorePlace = explorePlaceFromGooglePlace(place);
+    setExplorePlaces((current) => [
+      explorePlace,
+      ...current.filter((candidate) => candidate.id !== explorePlace.id),
+    ]);
+    setStatusMessage(`${explorePlace.title} sparades i Utforska. Anteckningar och idéplatser sparas lokalt i denna version.`);
+  }
+
+  function saveRecommendedExplorePlace(place: ExplorePlace) {
+    setExplorePlaces((current) => [
+      { ...place, id: `saved:${place.id}` },
+      ...current.filter((candidate) => candidate.title !== place.title || candidate.place !== place.place),
+    ]);
+    setStatusMessage(`${place.title} sparades i Platser att besöka.`);
+  }
+
+  function removeExplorePlace(placeId: string) {
+    setExplorePlaces((current) => current.filter((place) => place.id !== placeId));
+    setStatusMessage('Platsen togs bort från Utforska.');
+  }
+
+  function showExplorePlaceOnMap(place: ExplorePlace) {
+    goToView('route');
+    setStatusMessage(place.coordinates ? `${place.title} har kartposition. Lägg den i Dagar för att visa den som ruttstopp.` : `${place.title} saknar kartposition.`);
+  }
+
+  function addExplorePlaceToSelectedDay(place: ExplorePlace) {
+    const dayKey = selectedDayPlan?.key ?? visibleDayPlans[0]?.key ?? null;
+    const target = addExplorePlaceTarget(place, dayKey);
+    if (!target) {
+      setStatusMessage('Skapa eller välj en dag innan platsen läggs till.');
+      return;
+    }
+
+    clearPlannerEditor();
+    setDraftPlannerDayKey(target.dayKey);
+    setSelectedDayKey(target.dayKey);
+    setPlannerTitle(target.title);
+    setPlannerType(target.type);
+    setPlannerPlace(target.place);
+    setPlannerDate(target.dayKey === 'unscheduled' ? '' : target.dayKey);
+    setPlannerLatitude(target.latitude);
+    setPlannerLongitude(target.longitude);
+    setPlannerNotes(target.notes);
+    setShowPlannerTechnicalDetails(false);
+    goToView(target.view);
+    setStatusMessage(`${target.title} är förifylld i Dagar. Kontrollera detaljer och tryck Spara steg.`);
   }
 
   async function parseAiCommand() {
@@ -2044,6 +2146,126 @@ export default function App() {
                   ) : null}
                 </View>
               ) : null}
+              {activeView === 'explore' ? (
+              <View style={[styles.panelSection, isDark && styles.panelDark]}>
+                <View style={styles.sectionHeaderRow}>
+                  <View>
+                    <SectionTitle title="Utforska" dark={isDark} />
+                    <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>Samla tips, platser och lösa idéer innan de blir stopp i Dagar.</Text>
+                  </View>
+                  <View style={styles.exploreSaveHint}>
+                    <Text style={styles.exploreSaveHintText}>Lokalt idébord</Text>
+                  </View>
+                </View>
+
+                <View style={styles.exploreNotesCard}>
+                  <View style={styles.exploreSectionHeader}>
+                    <Text style={styles.exploreSectionTitle}>Anteckningar</Text>
+                    <Text style={styles.exploreSectionMeta}>Tips, länkar och kom ihåg</Text>
+                  </View>
+                  <TextInput
+                    value={exploreNotes}
+                    onChangeText={setExploreNotes}
+                    placeholder="Skriv eller klistra in tips, länkar och saker att komma ihåg"
+                    placeholderTextColor={isDark ? '#737373' : '#78716c'}
+                    style={[styles.exploreNotesInput, isDark && styles.inputDark]}
+                    multiline
+                  />
+                </View>
+
+                <View style={styles.exploreSearchCard}>
+                  <View style={styles.exploreSectionHeader}>
+                    <Text style={styles.exploreSectionTitle}>Lägg till plats</Text>
+                    <Text style={styles.exploreSectionMeta}>Sök plats</Text>
+                  </View>
+                  <View style={styles.exploreSearchRow}>
+                    <TextInput
+                      value={exploreSearchQuery}
+                      onChangeText={setExploreSearchQuery}
+                      placeholder="Sök restaurang, hotell, utsikt, parkering..."
+                      placeholderTextColor={isDark ? '#737373' : '#78716c'}
+                      style={[styles.exploreSearchInput, isDark && styles.inputDark]}
+                      onSubmitEditing={() => void searchExplorePlaces()}
+                    />
+                    <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={() => void searchExplorePlaces()} disabled={isLoading}>
+                      <Text style={styles.commandButtonText}>Sök</Text>
+                    </Pressable>
+                  </View>
+                  {exploreResults.length > 0 ? (
+                    <View style={styles.exploreResultGrid}>
+                      {exploreResults.map((place) => {
+                        const explorePlace = explorePlaceFromGooglePlace(place);
+                        return (
+                          <ExplorePlaceCard
+                            key={place.id}
+                            place={explorePlace}
+                            styles={styles}
+                            primaryLabel="Spara"
+                            onPrimary={() => saveExploreGooglePlace(place)}
+                            onMap={() => showExplorePlaceOnMap(explorePlace)}
+                            onRemove={null}
+                          />
+                        );
+                      })}
+                    </View>
+                  ) : null}
+                </View>
+
+                <View style={styles.exploreBoardSection}>
+                  <View style={styles.exploreSectionHeader}>
+                    <Text style={styles.exploreSectionTitle}>Platser att besöka</Text>
+                    <Text style={styles.exploreSectionMeta}>{exploreEmptyState.message}</Text>
+                  </View>
+                  {exploreEmptyState.isEmpty ? (
+                    <View style={styles.exploreEmptyState}>
+                      <TravelPlaceholder type="notes-explore" styles={styles} />
+                      <View style={styles.exploreEmptyCopy}>
+                        <Text style={styles.emptySearchTitle}>Inga idéplatser sparade än</Text>
+                        <Text style={styles.emptySearchText}>Sök efter en plats eller spara en rekommendation för att bygga din lista.</Text>
+                      </View>
+                    </View>
+                  ) : (
+                    (Object.keys(exploreGroups) as ExploreCategory[]).map((category) => (
+                      exploreGroups[category].length > 0 ? (
+                        <View key={category} style={styles.exploreCategoryBlock}>
+                          <Text style={styles.exploreCategoryTitle}>{category}</Text>
+                          <View style={styles.explorePlaceGrid}>
+                            {exploreGroups[category].map((place) => (
+                              <ExplorePlaceCard
+                                key={place.id}
+                                place={place}
+                                styles={styles}
+                                primaryLabel="Lägg till i dag"
+                                onPrimary={() => addExplorePlaceToSelectedDay(place)}
+                                onMap={() => showExplorePlaceOnMap(place)}
+                                onRemove={() => removeExplorePlace(place.id)}
+                              />
+                            ))}
+                          </View>
+                        </View>
+                      ) : null
+                    ))
+                  )}
+                </View>
+
+                <View style={styles.exploreBoardSection}>
+                  <View style={styles.exploreSectionHeader}>
+                    <Text style={styles.exploreSectionTitle}>Rekommenderade platser</Text>
+                    <Text style={styles.exploreSectionMeta}>Från din nuvarande resplan</Text>
+                  </View>
+                  <View style={styles.recommendedPlaceRow}>
+                    {recommendedPlaces.map((place) => (
+                      <RecommendedPlaceCard
+                        key={place.id}
+                        place={place}
+                        styles={styles}
+                        onAdd={() => saveRecommendedExplorePlace(place)}
+                      />
+                    ))}
+                  </View>
+                </View>
+              </View>
+              ) : null}
               {activeView === 'route' ? (
               <View style={styles.routeView}>
                 <View style={styles.routeStage}>
@@ -2526,6 +2748,108 @@ function OverviewFocusCard({ label, title, detail, accent }: { label: string; ti
       <Text style={styles.overviewFocusDetail}>{detail}</Text>
     </View>
   );
+}
+
+function ExplorePlaceCard({
+  place,
+  primaryLabel,
+  styles: cardStyles,
+  onPrimary,
+  onMap,
+  onRemove,
+}: {
+  place: ExplorePlace;
+  primaryLabel: string;
+  styles: typeof styles;
+  onPrimary: () => void;
+  onMap: () => void;
+  onRemove: (() => void) | null;
+}) {
+  const placeholderType = placeholderTypeForPlace(place);
+  const imageSource = imageSourceForPlace(place);
+
+  return (
+    <View style={cardStyles.explorePlaceCard}>
+      <TravelPlaceholder
+        type={placeholderType}
+        styles={cardStyles}
+        {...(imageSource === 'google_place_photo' ? { label: 'Google bild redo' } : {})}
+      />
+      <View style={cardStyles.explorePlaceBody}>
+        <Text style={cardStyles.explorePlaceTitle} numberOfLines={2}>{place.title}</Text>
+        <Text style={cardStyles.explorePlaceSubtitle} numberOfLines={2}>{place.place || place.description || place.category}</Text>
+        {place.description ? <Text style={cardStyles.explorePlaceDescription} numberOfLines={2}>{place.description}</Text> : null}
+        <View style={cardStyles.exploreChipRow}>
+          <Text style={cardStyles.exploreTypeChip}>{place.category}</Text>
+          {place.statusChips.slice(0, 2).map((chip) => (
+            <Text key={chip} style={cardStyles.exploreStatusChip}>{chip}</Text>
+          ))}
+        </View>
+      </View>
+      <View style={cardStyles.exploreActionRow}>
+        <Pressable style={cardStyles.smallButton} onPress={onPrimary}>
+          <Text style={cardStyles.smallButtonText}>{primaryLabel}</Text>
+        </Pressable>
+        <Pressable style={cardStyles.secondarySmallButton} onPress={onMap}>
+          <Text style={cardStyles.secondarySmallButtonText}>Visa på karta</Text>
+        </Pressable>
+        {onRemove ? (
+          <Pressable style={cardStyles.ghostSmallButton} onPress={onRemove}>
+            <Text style={cardStyles.ghostSmallButtonText}>Ta bort</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+function RecommendedPlaceCard({ place, styles: cardStyles, onAdd }: { place: ExplorePlace; styles: typeof styles; onAdd: () => void }) {
+  return (
+    <View style={cardStyles.recommendedPlaceCard}>
+      <TravelPlaceholder type={placeholderTypeForPlace(place)} styles={cardStyles} compact />
+      <View style={cardStyles.recommendedPlaceCopy}>
+        <Text style={cardStyles.recommendedPlaceTitle} numberOfLines={2}>{place.title}</Text>
+        <Text style={cardStyles.recommendedPlaceMeta} numberOfLines={1}>{place.category}{place.place ? ` / ${place.place}` : ''}</Text>
+      </View>
+      <Pressable style={cardStyles.plusButton} onPress={onAdd}>
+        <Text style={cardStyles.plusButtonText}>+</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function TravelPlaceholder({ type, styles: cardStyles, compact = false, label }: { type: TravelPlaceholderType; styles: typeof styles; compact?: boolean; label?: string }) {
+  const visual = placeholderVisual(type);
+  return (
+    <View style={[cardStyles.travelPlaceholder, compact && cardStyles.travelPlaceholderCompact, { backgroundColor: visual.backgroundColor }]}>
+      <View style={[cardStyles.travelPlaceholderShape, { backgroundColor: visual.accentColor }]} />
+      <Text style={[cardStyles.travelPlaceholderIcon, { color: visual.accentColor }]}>{visual.icon}</Text>
+      <Text style={cardStyles.travelPlaceholderLabel}>{label ?? visual.label}</Text>
+    </View>
+  );
+}
+
+function placeholderVisual(type: TravelPlaceholderType): { icon: string; label: string; backgroundColor: string; accentColor: string } {
+  switch (type) {
+    case 'lodging':
+      return { icon: 'H', label: 'Boende', backgroundColor: '#eef7f2', accentColor: '#0f766e' };
+    case 'activity':
+      return { icon: 'A', label: 'Aktivitet', backgroundColor: '#fff7df', accentColor: '#d97706' };
+    case 'food':
+      return { icon: 'F', label: 'Mat', backgroundColor: '#fff1f2', accentColor: '#be123c' };
+    case 'fuel':
+      return { icon: 'B', label: 'Bränsle', backgroundColor: '#eef2ff', accentColor: '#4f46e5' };
+    case 'transport':
+      return { icon: 'T', label: 'Transport', backgroundColor: '#eff6ff', accentColor: '#2563eb' };
+    case 'budget':
+      return { icon: 'SEK', label: 'Budget', backgroundColor: '#f8faf7', accentColor: '#475569' };
+    case 'notes-explore':
+      return { icon: 'i', label: 'Tips', backgroundColor: '#fffefa', accentColor: '#d97706' };
+    case 'route-day':
+      return { icon: 'R', label: 'Rutt', backgroundColor: '#eef7f2', accentColor: '#0f766e' };
+    default:
+      return { icon: 'P', label: 'Plats', backgroundColor: '#f8faf7', accentColor: '#52616f' };
+  }
 }
 
 function SectionTitle({ title, dark }: { title: string; dark: boolean }) {
@@ -3941,6 +4265,272 @@ const styles = StyleSheet.create({
     borderColor: '#d8e2eb',
     backgroundColor: 'rgba(255,255,255,0.96)',
     padding: 12,
+  },
+  exploreSaveHint: {
+    minHeight: 34,
+    justifyContent: 'center',
+    borderRadius: 999,
+    backgroundColor: '#fff7df',
+    paddingHorizontal: 12,
+  },
+  exploreSaveHintText: {
+    color: '#8a4b00',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  exploreNotesCard: {
+    gap: 12,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#ebe7df',
+    backgroundColor: '#fffefa',
+    padding: 18,
+  },
+  exploreSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    flexWrap: 'wrap',
+  },
+  exploreSectionTitle: {
+    color: '#1f2933',
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  exploreSectionMeta: {
+    color: '#6b7280',
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  exploreNotesInput: {
+    minHeight: 110,
+    color: '#1f2933',
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 20,
+    textAlignVertical: 'top',
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e1ddd4',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  exploreSearchCard: {
+    gap: 12,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#ebe7df',
+    backgroundColor: '#f8faf7',
+    padding: 18,
+  },
+  exploreSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  exploreSearchInput: {
+    flex: 1,
+    minWidth: 220,
+    minHeight: 44,
+    color: '#1f2933',
+    fontSize: 14,
+    fontWeight: '800',
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e1ddd4',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 16,
+  },
+  exploreResultGrid: {
+    flexDirection: 'row',
+    gap: 12,
+    flexWrap: 'wrap',
+  },
+  exploreBoardSection: {
+    gap: 14,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#ebe7df',
+    backgroundColor: '#ffffff',
+    padding: 18,
+  },
+  exploreEmptyState: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    borderRadius: 18,
+    backgroundColor: '#f8faf7',
+    padding: 14,
+    flexWrap: 'wrap',
+  },
+  exploreEmptyCopy: {
+    flex: 1,
+    minWidth: 220,
+    gap: 4,
+  },
+  exploreCategoryBlock: {
+    gap: 10,
+  },
+  exploreCategoryTitle: {
+    color: '#0f766e',
+    fontSize: 13,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  explorePlaceGrid: {
+    flexDirection: 'row',
+    gap: 12,
+    flexWrap: 'wrap',
+  },
+  explorePlaceCard: {
+    flex: 1,
+    minWidth: 240,
+    maxWidth: 360,
+    gap: 12,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#ebe7df',
+    backgroundColor: '#fffefa',
+    padding: 12,
+    shadowColor: '#5f4b32',
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+  },
+  travelPlaceholder: {
+    height: 132,
+    overflow: 'hidden',
+    borderRadius: 16,
+    justifyContent: 'space-between',
+    padding: 12,
+    position: 'relative',
+  },
+  travelPlaceholderCompact: {
+    width: 72,
+    height: 72,
+    flexShrink: 0,
+  },
+  travelPlaceholderShape: {
+    position: 'absolute',
+    right: -22,
+    top: -18,
+    width: 92,
+    height: 92,
+    borderRadius: 46,
+    opacity: 0.16,
+  },
+  travelPlaceholderIcon: {
+    fontSize: 24,
+    fontWeight: '900',
+  },
+  travelPlaceholderLabel: {
+    color: '#52616f',
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  explorePlaceBody: {
+    gap: 7,
+  },
+  explorePlaceTitle: {
+    color: '#1f2933',
+    fontSize: 16,
+    fontWeight: '900',
+    lineHeight: 21,
+  },
+  explorePlaceSubtitle: {
+    color: '#52616f',
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 18,
+  },
+  explorePlaceDescription: {
+    color: '#6b7280',
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 17,
+  },
+  exploreChipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  exploreTypeChip: {
+    color: '#0f766e',
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    borderRadius: 999,
+    backgroundColor: '#e8f3ee',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  exploreStatusChip: {
+    color: '#7a4b00',
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    borderRadius: 999,
+    backgroundColor: '#fff7df',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  exploreActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  recommendedPlaceRow: {
+    flexDirection: 'row',
+    gap: 12,
+    flexWrap: 'wrap',
+  },
+  recommendedPlaceCard: {
+    width: 220,
+    maxWidth: '100%',
+    gap: 10,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#ebe7df',
+    backgroundColor: '#fffefa',
+    padding: 10,
+  },
+  recommendedPlaceCopy: {
+    gap: 3,
+  },
+  recommendedPlaceTitle: {
+    color: '#1f2933',
+    fontSize: 14,
+    fontWeight: '900',
+    lineHeight: 18,
+  },
+  recommendedPlaceMeta: {
+    color: '#6b7280',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  plusButton: {
+    position: 'absolute',
+    right: 10,
+    top: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0f766e',
+  },
+  plusButtonText: {
+    color: '#ffffff',
+    fontSize: 19,
+    fontWeight: '900',
+    lineHeight: 22,
   },
   routeStage: {
     gap: 12,
@@ -5414,6 +6004,16 @@ const styles = StyleSheet.create({
   },
   secondarySmallButtonText: {
     color: '#102a43',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  ghostSmallButton: {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  ghostSmallButtonText: {
+    color: '#6b7280',
     fontSize: 12,
     fontWeight: '900',
   },

@@ -3,8 +3,9 @@ import type { AppTab, AppView } from './workspaceTypes';
 
 export const APP_TABS: AppTab[] = [
   { key: 'overview', label: 'Översikt' },
-  { key: 'route', label: 'Rutt' },
+  { key: 'explore', label: 'Utforska' },
   { key: 'days', label: 'Dagar' },
+  { key: 'route', label: 'Rutt' },
   { key: 'budget', label: 'Budget' },
   { key: 'tools', label: 'Verktyg' },
 ];

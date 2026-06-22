@@ -15,6 +15,11 @@ test('main workspaces open and no obvious white screen appears', async ({ page }
   await page.getByTestId('sidebar-nav-overview').click();
   await expect(page.getByText('Trip Readiness').or(page.getByText('Resestatus')).first()).toBeVisible();
 
+  await page.getByTestId('sidebar-nav-explore').click();
+  await expect(page.getByText('Anteckningar', { exact: true })).toBeVisible();
+  await expect(page.getByText('Platser att besöka', { exact: true })).toBeVisible();
+  await expect(page.getByText('Rekommenderade platser', { exact: true })).toBeVisible();
+
   await page.getByTestId('sidebar-nav-route').click();
   await expect(page.getByText('Kontrollera rutten')).toBeVisible();
 

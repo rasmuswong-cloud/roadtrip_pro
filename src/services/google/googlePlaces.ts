@@ -12,6 +12,7 @@ const FIELD_MASK = [
   'places.websiteUri',
   'places.nationalPhoneNumber',
   'places.regularOpeningHours',
+  'places.photos',
 ].join(',');
 
 export type GooglePlaceSearchInput = {
@@ -33,6 +34,18 @@ export type GooglePlace = {
   websiteUri?: string;
   nationalPhoneNumber?: string;
   regularOpeningHours?: Record<string, unknown>;
+  photos?: GooglePlacePhoto[];
+};
+
+export type GooglePlacePhoto = {
+  name?: string;
+  widthPx?: number;
+  heightPx?: number;
+  authorAttributions?: Array<{
+    displayName?: string;
+    uri?: string;
+    photoUri?: string;
+  }>;
 };
 
 type GooglePlacesResponse = {
@@ -131,13 +144,43 @@ export function googlePlaceToPoi(place: GooglePlace, tripId: string, actorId: st
       phone: place.nationalPhoneNumber ?? '',
     },
     imagery: [],
-    metadata: { provider: 'google_places_new' },
+    metadata: {
+      provider: 'google_places_new',
+      googlePlaceId: place.id,
+      formattedAddress: place.formattedAddress ?? '',
+      mapsUrl: place.googleMapsUri ?? '',
+      rating: place.rating ?? null,
+      primaryType: place.primaryType ?? '',
+      photoName: place.photos?.[0]?.name ?? '',
+      photoAttributions: place.photos?.[0]?.authorAttributions ?? [],
+      imageSource: place.photos?.[0]?.name ? 'google_place_photo' : 'placeholder',
+    },
     isPrivate: true,
     createdAt: now,
     updatedAt: now,
     deletedAt: null,
     version: 1,
   };
+}
+
+export function buildGooglePlacePhotoUrl(
+  photoName: string | undefined,
+  apiKey: string | undefined,
+  options: { maxWidthPx?: number; maxHeightPx?: number } = {},
+): string | null {
+  if (!photoName?.trim() || !apiKey?.trim()) {
+    return null;
+  }
+
+  const params = new URLSearchParams();
+  params.set('key', apiKey);
+  params.set('skipHttpRedirect', 'true');
+  params.set('maxWidthPx', String(options.maxWidthPx ?? 600));
+  if (options.maxHeightPx) {
+    params.set('maxHeightPx', String(options.maxHeightPx));
+  }
+
+  return `https://places.googleapis.com/v1/${photoName.trim()}/media?${params.toString()}`;
 }
 
 function stableGooglePoiId(placeId: string): string {

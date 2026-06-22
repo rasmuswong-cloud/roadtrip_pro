@@ -37,8 +37,8 @@ function node(overrides: Partial<ItineraryNode> = {}): ItineraryNode {
 }
 
 test('workspace navigation keys match supported readiness targets', () => {
-  assert.deepEqual(APP_VIEW_KEYS, ['overview', 'route', 'days', 'budget', 'tools']);
-  assert.deepEqual(APP_TABS.map((tab) => tab.label), ['Översikt', 'Rutt', 'Dagar', 'Budget', 'Verktyg']);
+  assert.deepEqual(APP_VIEW_KEYS, ['overview', 'explore', 'days', 'route', 'budget', 'tools']);
+  assert.deepEqual(APP_TABS.map((tab) => tab.key), ['overview', 'explore', 'days', 'route', 'budget', 'tools']);
 
   const appViewSet = new Set(APP_VIEW_KEYS);
   TRIP_READINESS_TARGETS.forEach((target) => {

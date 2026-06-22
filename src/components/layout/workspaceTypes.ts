@@ -1,4 +1,4 @@
-export type AppView = 'overview' | 'route' | 'budget' | 'days' | 'tools';
+export type AppView = 'overview' | 'explore' | 'route' | 'budget' | 'days' | 'tools';
 
 export type AppTab = {
   key: AppView;
