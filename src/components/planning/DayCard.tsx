@@ -12,6 +12,8 @@ import {
   nodeColor,
 } from './dayCardViewModel';
 import { DayHeader } from './DayHeader';
+import { DayChecklistPanel } from './DayChecklistPanel';
+import { DayPackingPanel } from './DayPackingPanel';
 import { DaySummary } from './DaySummary';
 import { MissingInfoChips } from './MissingInfoChips';
 
@@ -427,71 +429,28 @@ export default function DayCard(props: DayCardProps) {
       {renderDayPlaceSearch(dayPlan.key)}
       {draftPlannerDayKey === dayPlan.key ? renderPlannerInlineEditor('new') : null}
       <DaySummary dayPlan={dayPlan} styles={styles} />
-      <View style={dayCardStyles.collapsiblePanel}>
-        <Pressable style={dayCardStyles.collapsibleHeader} onPress={() => setChecklistExpanded((current) => !current)}>
-          <Text style={styles.packingTitle}>Checklista</Text>
-          <Text style={styles.secondarySmallButtonText}>{checklistExpanded ? 'Dölj' : `Visa ${dayPlan.insight.checklist.length}`}</Text>
-        </Pressable>
-        {checklistExpanded ? (
-          <View style={styles.dayChecklist}>
-            {dayPlan.insight.checklist.map((item) => (
-              <Pressable
-                key={item.label}
-                style={[styles.checkItem, item.done && styles.checkItemDone, isDemoMode && styles.checkItemStatic]}
-                onPress={() => onRunChecklistAction(dayPlan, item)}
-                disabled={item.done || isDemoMode || isLoading}
-              >
-                <Text style={[styles.checkMark, item.done && styles.checkMarkDone]}>{item.done ? 'Klar' : 'Att fixa'}</Text>
-                <Text style={styles.checkLabel}>{item.label}</Text>
-                {!item.done && !isDemoMode ? <Text style={styles.checkActionText}>Öppna</Text> : null}
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
-      </View>
-      <View style={styles.packingPanel}>
-        <Pressable style={dayCardStyles.collapsibleHeader} onPress={() => setPackingExpanded((current) => !current)}>
-          <Text style={styles.packingTitle}>Packa / ta med</Text>
-          <Text style={styles.secondarySmallButtonText}>{packingExpanded ? 'Dölj' : `Visa ${dayPlan.insight.packingItems.length}`}</Text>
-        </Pressable>
-        {packingExpanded ? (
-          <>
-            <View style={styles.packingList}>
-              {dayPlan.insight.packingItems.map((item) => (
-                <Pressable
-                  key={item}
-                  style={[
-                    styles.packingChip,
-                    dayPlan.insight.packedItems.includes(item) && styles.packingChipDone,
-                    isDemoMode && styles.checkItemStatic,
-                  ]}
-                  onPress={() => void onTogglePackingItem(dayPlan, item)}
-                  disabled={isDemoMode || isLoading}
-                >
-                  <Text style={[styles.packingChipText, dayPlan.insight.packedItems.includes(item) && styles.packingChipTextDone]}>
-                    {dayPlan.insight.packedItems.includes(item) ? 'Packad' : 'Ta med'}
-                  </Text>
-                  <Text style={styles.packingChipLabel}>{item}</Text>
-                </Pressable>
-              ))}
-            </View>
-            {!isDemoMode ? (
-              <View style={styles.packingAddRow}>
-                <TextInput
-                  value={packingDraft}
-                  onChangeText={(text) => onSetPackingDraft(dayPlan.key, text)}
-                  placeholder="Lägg till egen sak"
-                  placeholderTextColor={isDark ? '#737373' : '#78716c'}
-                  style={[styles.packingInput, isDark && styles.inputDark]}
-                />
-                <Pressable style={[styles.secondarySmallButton, isLoading && styles.disabledButton]} onPress={() => void onAddPackingItem(dayPlan)} disabled={isLoading}>
-                  <Text style={styles.secondarySmallButtonText}>Lägg till</Text>
-                </Pressable>
-              </View>
-            ) : null}
-          </>
-        ) : null}
-      </View>
+      <DayChecklistPanel
+        dayPlan={dayPlan}
+        expanded={checklistExpanded}
+        isDemoMode={isDemoMode}
+        isLoading={isLoading}
+        styles={styles}
+        onToggleExpanded={() => setChecklistExpanded((current) => !current)}
+        onRunChecklistAction={onRunChecklistAction}
+      />
+      <DayPackingPanel
+        dayPlan={dayPlan}
+        expanded={packingExpanded}
+        isDark={isDark}
+        isDemoMode={isDemoMode}
+        isLoading={isLoading}
+        packingDraft={packingDraft}
+        styles={styles}
+        onToggleExpanded={() => setPackingExpanded((current) => !current)}
+        onTogglePackingItem={onTogglePackingItem}
+        onAddPackingItem={onAddPackingItem}
+        onSetPackingDraft={onSetPackingDraft}
+      />
       <View style={dayCardStyles.timelineHeader}>
         <Text style={styles.packingTitle}>Tidslinje</Text>
         <Text style={styles.secondarySmallButtonText}>{dayPlan.nodes.length > 0 ? `${dayPlan.nodes.length} steg` : 'Tom dag'}</Text>
