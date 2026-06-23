@@ -11,11 +11,6 @@ type MapRailProps = {
   formatDistance: (meters: number) => string;
   formatDuration: (seconds: number) => string;
   missingCoordinateCount: number;
-  nextStep: {
-    label: string;
-    detail: string;
-    target: AppView;
-  };
   selectedDayPlan: DayPlan | null;
   styles: any;
   onGoToView: (view: AppView) => void;
@@ -28,7 +23,6 @@ export function MapRail({
   formatDistance,
   formatDuration,
   missingCoordinateCount,
-  nextStep,
   selectedDayPlan,
   styles,
   onGoToView,
@@ -52,18 +46,17 @@ export function MapRail({
         </View>
       </View>
       <View style={styles.contextPanel}>
-        <Text style={styles.packingTitle}>Nästa steg</Text>
-        <Text style={styles.contextPanelTitle}>{nextStep.label}</Text>
-        <Text style={styles.contextPanelText}>{nextStep.detail}</Text>
-        <Pressable style={styles.smallButton} onPress={() => onGoToView(nextStep.target)}>
-          <Text style={styles.smallButtonText}>Öppna</Text>
-        </Pressable>
-      </View>
-      <View style={styles.contextPanel}>
         <Text style={styles.packingTitle}>Rutt</Text>
         <Text style={styles.contextPanelTitle}>{formatDistance(activeRoute.distanceMeters)}</Text>
         <Text style={styles.contextPanelText}>{formatDuration(activeRoute.durationSeconds)} / {displayedNodes.length} stopp</Text>
-        {missingCoordinateCount > 0 ? <Text style={styles.warningText}>{missingCoordinateCount} stopp saknar kartposition.</Text> : null}
+        {missingCoordinateCount > 0 ? (
+          <>
+            <Text style={styles.warningText}>Vissa stopp saknar position.</Text>
+            <Pressable style={styles.secondarySmallButton} onPress={() => onGoToView('days')}>
+              <Text style={styles.secondarySmallButtonText}>Gå till Dagar</Text>
+            </Pressable>
+          </>
+        ) : null}
       </View>
     </View>
   );

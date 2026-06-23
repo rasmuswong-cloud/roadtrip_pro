@@ -383,7 +383,7 @@ export default function DayCard(props: DayCardProps) {
                       showInactiveLabel={false}
                     />
                   ) : (
-                    <Text style={dayCardStyles.inlineCostText}>{formatRawNodeCost(node) || 'Kostnad saknas'}</Text>
+                    <Text style={dayCardStyles.inlineCostText}>{formatRawNodeCost(node) || 'Fyll i kostnad'}</Text>
                   )}
                   {canEdit ? (
                     <View style={dayCardStyles.stopMenuWrap}>
@@ -406,7 +406,7 @@ export default function DayCard(props: DayCardProps) {
                               setMovePickerNodeId(null);
                             }}
                           >
-                            <Text style={styles.secondarySmallButtonText}>{detailsExpanded ? 'Dölj detaljer' : 'Snabbdetaljer'}</Text>
+                            <Text style={styles.secondarySmallButtonText}>{detailsExpanded ? 'Dölj detaljer' : 'Visa detaljer'}</Text>
                           </Pressable>
                           <Pressable
                             testID="stop-menu-full-editor"

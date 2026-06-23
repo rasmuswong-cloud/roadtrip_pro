@@ -13,9 +13,7 @@ export function MissingInfoChips({ chips }: MissingInfoChipsProps) {
 
   return (
     <View style={dayCardStyles.missingChipRow}>
-      {chips.map((chip) => (
-        <Text key={chip} style={dayCardStyles.missingChip}>{chip}</Text>
-      ))}
+      <Text style={dayCardStyles.missingChip}>{chips.length > 1 ? `Att komplettera (${chips.length})` : 'Att komplettera'}</Text>
     </View>
   );
 }

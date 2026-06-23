@@ -166,7 +166,7 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
                 </View>
                 <Text style={[styles.daySelectorDate, isSelected && styles.daySelectorDateActive]}>{formatDayKey(dayPlan.key)}</Text>
                 <Text style={[styles.daySelectorRoute, isSelected && styles.daySelectorRouteActive]} numberOfLines={1}>{routeText}</Text>
-                <Text style={[styles.daySelectorMissing, missingInfoCount === 0 && styles.daySelectorReady]}>{missingInfoCount > 0 ? `${missingInfoCount} att kolla` : 'Redo'}</Text>
+                <Text style={[styles.daySelectorMissing, missingInfoCount === 0 && styles.daySelectorReady]}>{missingInfoCount > 0 ? 'Att komplettera' : 'Klar för nu'}</Text>
               </Pressable>
             );
           })}

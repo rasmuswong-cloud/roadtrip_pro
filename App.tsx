@@ -299,6 +299,15 @@ function formatOnlineSaveLabel(state: OnlineSaveState, lastSavedAt: string | nul
   return 'Online redo';
 }
 
+function formatStatusMessage(value: unknown, fallback: string): string {
+  if (typeof value !== 'string') {
+    return fallback;
+  }
+
+  const trimmed = value.trim();
+  return trimmed && trimmed !== '[object Object]' ? trimmed : fallback;
+}
+
 function formatShortTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -407,6 +416,7 @@ export default function App() {
   const totalSpend = budgetSummary.total;
   const costPerTraveler = travelerCount > 0 ? totalSpend / travelerCount : totalSpend;
   const onlineSaveLabel = formatOnlineSaveLabel(onlineSaveState, lastOnlineSavedAt, Boolean(activeTripId));
+  const visibleStatusMessage = formatStatusMessage(statusMessage, onlineSaveLabel);
 
   useEffect(() => {
     setHasLoadedPersistentState(true);
@@ -2071,7 +2081,7 @@ export default function App() {
           <View style={[styles.headerActions, isMobile && styles.headerActionsMobile]}>
             <View style={[styles.headerStatusSummary, isMobile && styles.headerStatusSummaryMobile, isDark && styles.headerStatusSummaryDark]}>
               <Text style={[styles.headerStatusTitle, isDark && styles.textDark]}>{activeTripId ? 'Ansluten resa' : 'Lokalt läge'}</Text>
-              <Text style={[styles.headerStatusMeta, isDark && styles.textMutedDark]} numberOfLines={1}>{statusMessage || onlineSaveLabel}</Text>
+              <Text style={[styles.headerStatusMeta, isDark && styles.textMutedDark]} numberOfLines={1}>{visibleStatusMessage}</Text>
             </View>
             <Pressable testID="edit-mode-toggle" style={[styles.modeButton, isEditMode && styles.modeButtonActive]} onPress={toggleEditMode}>
               <Text style={[styles.modeButtonText, isEditMode && styles.modeButtonTextActive]}>{isEditMode ? 'Redigerar' : 'Redigera'}</Text>
@@ -2097,7 +2107,7 @@ export default function App() {
                 dayPlans={dayPlans}
                 selectedDayKey={selectedDayPlan?.key ?? null}
                 statusLabel={activeTripId ? 'Ansluten resa' : 'Lokalt läge'}
-                statusMeta={statusMessage || onlineSaveLabel}
+                statusMeta={visibleStatusMessage}
                 styles={styles}
                 tripName={demoTrip.name}
                 onGoToView={goToView}
@@ -2376,7 +2386,6 @@ export default function App() {
                 formatDistance={formatDistance}
                 formatDuration={formatDuration}
                 missingCoordinateCount={missingCoordinateCount}
-                nextStep={tripReadiness.nextStep}
                 selectedDayPlan={selectedDayPlan}
                 styles={styles}
                 onGoToView={goToView}
@@ -2422,7 +2431,7 @@ function buildNodeInfoPills(node: ItineraryNode): string[] {
     pills.push(`${node.location.latitude.toFixed(2)}, ${node.location.longitude.toFixed(2)}`);
   }
 
-  pills.push(cost || 'Kostnad saknas');
+  pills.push(cost || 'Fyll i kostnad');
 
   if (reservation) {
     pills.push(reservation);
@@ -2667,19 +2676,17 @@ function readPackedItems(node: ItineraryNode): string[] {
 }
 
 function buildDaySmartFlags(nodes: ItineraryNode[], route: RouteSummary, budget: BudgetSummary): string[] {
-  const warningFlags = analyzeDayWarnings(nodes, route)
-    .map((warning) => warning.message)
-    .slice(0, 5);
+  const warningCount = analyzeDayWarnings(nodes, route).length;
 
   if (nodes.length === 0) {
     return ['Tom dag'];
   }
 
-  if (warningFlags.length === 0 && budget.total > 0) {
+  if (warningCount === 0 && budget.total > 0) {
     return ['Ser planerad ut'];
   }
 
-  return warningFlags;
+  return [`Att komplettera (${warningCount})`];
 }
 
 function buildBudgetSummary(nodes: ItineraryNode[]): BudgetSummary {
