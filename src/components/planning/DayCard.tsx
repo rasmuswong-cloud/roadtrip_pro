@@ -14,18 +14,16 @@ import { DayHeader } from './DayHeader';
 import { DayChecklistPanel } from './DayChecklistPanel';
 import { DayPackingPanel } from './DayPackingPanel';
 import { DaySummary } from './DaySummary';
-import { InlineEditableField, InlineEditableSelect, InlineEditableTextArea } from './InlineEditableControls';
+import { InlineEditableField, InlineEditableSelect } from './InlineEditableControls';
 import { MissingInfoChips } from './MissingInfoChips';
+import { StopDetailsGrid } from './StopDetailsGrid';
 
 import type { DayChecklistItem, DayPlan } from '@/models';
 import type { ItineraryNode } from '@/models';
 import type { GooglePlace } from '@/services/google/googlePlaces';
 import {
   displayInlineFieldValue,
-  formatBookingStatus,
   formatNodeType,
-  inlineBookingStatuses,
-  inlineCurrencies,
   inlineFieldValue,
   inlineNodeTypes,
   type ActiveInlineEdit,
@@ -491,104 +489,18 @@ export default function DayCard(props: DayCardProps) {
               {fullEditorOpen ? renderPlannerInlineEditor('edit') : null}
 
               {detailsExpanded && canEdit ? (
-                <View style={dayCardStyles.stopDetailsGrid}>
-                  <InlineEditableField
-                    node={node}
-                    field="date"
-                    activeInlineEdit={activeInlineEdit}
-                    label="Datum"
-                    placeholder="ÅÅÅÅ-MM-DD"
-                    isDark={isDark}
-                    loading={isLoading}
-                    disabled={isDemoMode || isLoading}
-                    styles={styles}
-                    onStart={onStartInlineEdit}
-                    onCancel={onClearInlineEdit}
-                    onDraftChange={onInlineDraftChange}
-                    onSave={onSaveInlineField}
-                    inputStyle={styles.quickCellDate}
-                    inactiveStyle={dayCardStyles.inlineDetailField}
-                  />
-                  <InlineEditableField
-                    node={node}
-                    field="endTime"
-                    activeInlineEdit={activeInlineEdit}
-                    label="Slut"
-                    placeholder="TT:MM"
-                    isDark={isDark}
-                    loading={isLoading}
-                    disabled={isDemoMode || isLoading}
-                    styles={styles}
-                    onStart={onStartInlineEdit}
-                    onCancel={onClearInlineEdit}
-                    onDraftChange={onInlineDraftChange}
-                    onSave={onSaveInlineField}
-                    inputStyle={styles.quickCellSmall}
-                    inactiveStyle={dayCardStyles.inlineDetailField}
-                  />
-                  <InlineEditableSelect
-                    node={node}
-                    field="currency"
-                    activeInlineEdit={activeInlineEdit}
-                    label="Valuta"
-                    options={inlineCurrencies.map((currency) => ({ value: currency, label: currency }))}
-                    isDark={isDark}
-                    loading={isLoading}
-                    disabled={isDemoMode || isLoading}
-                    styles={styles}
-                    onStart={onStartInlineEdit}
-                    onCancel={onClearInlineEdit}
-                    onDraftChange={onInlineDraftChange}
-                    onSave={onSaveInlineField}
-                    inactiveStyle={dayCardStyles.inlineDetailField}
-                  />
-                  <InlineEditableSelect
-                    node={node}
-                    field="bookingStatus"
-                    activeInlineEdit={activeInlineEdit}
-                    label="Bokning"
-                    options={inlineBookingStatuses.map((status) => ({ value: status, label: formatBookingStatus(status) }))}
-                    isDark={isDark}
-                    loading={isLoading}
-                    disabled={isDemoMode || isLoading}
-                    styles={styles}
-                    onStart={onStartInlineEdit}
-                    onCancel={onClearInlineEdit}
-                    onDraftChange={onInlineDraftChange}
-                    onSave={onSaveInlineField}
-                    inactiveStyle={dayCardStyles.inlineDetailField}
-                  />
-                  <InlineEditableField
-                    node={node}
-                    field="bookingReference"
-                    activeInlineEdit={activeInlineEdit}
-                    label="Referens"
-                    isDark={isDark}
-                    loading={isLoading}
-                    disabled={isDemoMode || isLoading}
-                    styles={styles}
-                    onStart={onStartInlineEdit}
-                    onCancel={onClearInlineEdit}
-                    onDraftChange={onInlineDraftChange}
-                    onSave={onSaveInlineField}
-                    inactiveStyle={dayCardStyles.inlineDetailFieldWide}
-                  />
-                  <InlineEditableTextArea
-                    node={node}
-                    field="notes"
-                    activeInlineEdit={activeInlineEdit}
-                    label="Anteckningar"
-                    isDark={isDark}
-                    loading={isLoading}
-                    disabled={isDemoMode || isLoading}
-                    styles={styles}
-                    onStart={onStartInlineEdit}
-                    onCancel={onClearInlineEdit}
-                    onDraftChange={onInlineDraftChange}
-                    onSave={onSaveInlineField}
-                    inactiveStyle={dayCardStyles.inlineDetailFieldWide}
-                  />
-                </View>
+                <StopDetailsGrid
+                  node={node}
+                  activeInlineEdit={activeInlineEdit}
+                  isDark={isDark}
+                  isDemoMode={isDemoMode}
+                  isLoading={isLoading}
+                  styles={styles}
+                  onStartInlineEdit={onStartInlineEdit}
+                  onClearInlineEdit={onClearInlineEdit}
+                  onInlineDraftChange={onInlineDraftChange}
+                  onSaveInlineField={onSaveInlineField}
+                />
               ) : null}
 
               {canEdit ? (
