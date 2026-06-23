@@ -14,6 +14,7 @@ import {
   formatSek,
   nodeColor,
 } from './dayCardViewModel';
+import { DaySummary } from './DaySummary';
 import { MissingInfoChips } from './MissingInfoChips';
 
 import type { DayChecklistItem, DayPlan } from '@/models';
@@ -454,25 +455,7 @@ export default function DayCard(props: DayCardProps) {
       </View>
       {renderDayPlaceSearch(dayPlan.key)}
       {draftPlannerDayKey === dayPlan.key ? renderPlannerInlineEditor('new') : null}
-      <View style={styles.dayInsightGrid}>
-        <View style={[styles.dayInsightCard, dayPlan.insight.hasLodging ? styles.dayInsightGood : styles.dayInsightWarn]}>
-          <Text style={styles.dayInsightLabel}>Boende</Text>
-          <Text style={styles.dayInsightValue}>{dayPlan.insight.lodgingLabel}</Text>
-        </View>
-        <View style={[styles.dayInsightCard, dayPlan.insight.activityCount > 0 ? styles.dayInsightGood : null]}>
-          <Text style={styles.dayInsightLabel}>Aktiviteter</Text>
-          <Text style={styles.dayInsightValue}>{dayPlan.insight.activitiesLabel}</Text>
-        </View>
-        <View style={[styles.dayInsightCard, dayPlan.insight.isLongDrive ? styles.dayInsightWarn : null]}>
-          <Text style={styles.dayInsightLabel}>KÃ¶rning</Text>
-          <Text style={styles.dayInsightValue}>{dayPlan.insight.driveLabel}</Text>
-        </View>
-        <View style={[styles.dayInsightCard, dayPlan.budget.missingCostCount > 0 ? styles.dayInsightWarn : styles.dayInsightGood]}>
-          <Text style={styles.dayInsightLabel}>Budget</Text>
-          <Text style={styles.dayInsightValue}>{dayPlan.insight.costLabel}</Text>
-        </View>
-      </View>
-      <Text style={styles.dayNextAction}>{dayPlan.insight.nextAction}</Text>
+      <DaySummary dayPlan={dayPlan} styles={styles} />
       <View style={dayCardStyles.collapsiblePanel}>
         <Pressable style={dayCardStyles.collapsibleHeader} onPress={() => setChecklistExpanded((current) => !current)}>
           <Text style={styles.packingTitle}>Checklista</Text>
