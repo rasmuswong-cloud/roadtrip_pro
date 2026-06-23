@@ -37,11 +37,13 @@ type DayCardProps = {
   itineraryNodesLength: number;
   packingDraft: string;
   draftPlannerDayKey: string | null;
+  selectedPlannerNodeId: string | null;
   styles: any;
   renderDayPlaceSearch: (dayKey: string) => React.ReactNode;
   renderPlannerInlineEditor: (mode: 'edit' | 'new') => React.ReactNode;
   onStartPlaceSearch: (dayKey: string, suggestedQuery?: string) => void;
   onStartNewPlannerStep: (dayKey: string) => void;
+  onSelectPlannerNode: (nodeId: string) => void;
   onRunChecklistAction: (dayPlan: DayPlan, item: DayChecklistItem) => void;
   onTogglePackingItem: (dayPlan: DayPlan, item: string) => Promise<void>;
   onAddPackingItem: (dayPlan: DayPlan) => Promise<void>;
@@ -437,11 +439,13 @@ export default function DayCard(props: DayCardProps) {
     itineraryNodesLength,
     packingDraft,
     draftPlannerDayKey,
+    selectedPlannerNodeId,
     styles,
     renderDayPlaceSearch,
     renderPlannerInlineEditor,
     onStartPlaceSearch,
     onStartNewPlannerStep,
+    onSelectPlannerNode,
     onRunChecklistAction,
     onTogglePackingItem,
     onAddPackingItem,
@@ -510,16 +514,17 @@ export default function DayCard(props: DayCardProps) {
               <Text style={styles.secondaryButtonText}>Sök plats</Text>
             </Pressable>
             <Pressable
-              style={[styles.commandButton, isLoading && styles.disabledButton]}
+              testID="day-card-add-stop"
+              style={styles.commandButton}
               onPress={() => onStartNewPlannerStep(dayPlan.key)}
-              disabled={isLoading}
             >
-              <Text style={styles.commandButtonText}>Lägg till i dag</Text>
+              <Text style={styles.commandButtonText}>Lägg till stopp i denna dag</Text>
             </Pressable>
           </View>
         ) : null}
       </View>
       {renderDayPlaceSearch(dayPlan.key)}
+      {draftPlannerDayKey === dayPlan.key ? renderPlannerInlineEditor('new') : null}
       <View style={styles.dayInsightGrid}>
         <View style={[styles.dayInsightCard, dayPlan.insight.hasLodging ? styles.dayInsightGood : styles.dayInsightWarn]}>
           <Text style={styles.dayInsightLabel}>Boende</Text>
@@ -604,7 +609,6 @@ export default function DayCard(props: DayCardProps) {
           </>
         ) : null}
       </View>
-      {draftPlannerDayKey === dayPlan.key ? renderPlannerInlineEditor('new') : null}
       <View style={dayCardStyles.timelineHeader}>
         <Text style={styles.packingTitle}>Tidslinje</Text>
         <Text style={styles.secondarySmallButtonText}>{dayPlan.nodes.length > 0 ? `${dayPlan.nodes.length} steg` : 'Tom dag'}</Text>
@@ -626,9 +630,14 @@ export default function DayCard(props: DayCardProps) {
         const showCoordinatePrompt = canEdit && Boolean(node.location && inlineFieldValue(node, 'place'));
         const coordinateSearchOpen = coordinateSearchNodeId === node.id;
         const missingInfoChips = buildMissingInfoChips(node);
+        const fullEditorOpen = selectedPlannerNodeId === node.id;
 
         return (
-          <View key={node.id} style={[styles.timelineItem, isDark && styles.innerPanelDark]}>
+          <View
+            key={node.id}
+            testID="day-stop-card"
+            style={[styles.timelineItem, fullEditorOpen && styles.timelineItemEditing, isDark && styles.innerPanelDark]}
+          >
             <View style={dayCardStyles.timeRailCompact}>
               {canEdit ? (
                 <InlineEditableField
@@ -820,6 +829,7 @@ export default function DayCard(props: DayCardProps) {
                   {canEdit ? (
                     <View style={dayCardStyles.stopMenuWrap}>
                       <Pressable
+                        testID="stop-menu-button"
                         style={[dayCardStyles.iconMenuButton, isLoading && styles.disabledButton]}
                         onPress={() => setOpenMenuNodeId((current) => (current === node.id ? null : node.id))}
                         disabled={isLoading}
@@ -829,6 +839,7 @@ export default function DayCard(props: DayCardProps) {
                       {menuOpen ? (
                         <View style={dayCardStyles.stopMenuPanel}>
                           <Pressable
+                            testID="stop-edit-form-action"
                             style={dayCardStyles.stopMenuItem}
                             onPress={() => {
                               toggleNodeDetails(node.id);
@@ -836,7 +847,18 @@ export default function DayCard(props: DayCardProps) {
                               setMovePickerNodeId(null);
                             }}
                           >
-                            <Text style={styles.secondarySmallButtonText}>{detailsExpanded ? 'Dölj detaljer' : 'Redigera'}</Text>
+                            <Text style={styles.secondarySmallButtonText}>{detailsExpanded ? 'Dölj detaljer' : 'Snabbdetaljer'}</Text>
+                          </Pressable>
+                          <Pressable
+                            testID="stop-menu-full-editor"
+                            style={dayCardStyles.stopMenuItem}
+                            onPress={() => {
+                              onSelectPlannerNode(node.id);
+                              setOpenMenuNodeId(null);
+                              setMovePickerNodeId(null);
+                            }}
+                          >
+                            <Text style={styles.secondarySmallButtonText}>Redigera stopp</Text>
                           </Pressable>
                           <Pressable
                             style={dayCardStyles.stopMenuItem}
@@ -904,6 +926,8 @@ export default function DayCard(props: DayCardProps) {
 
               {notePreview ? <Text style={[dayCardStyles.stopNotePreview, isDark && styles.textMutedDark]}>{notePreview}</Text> : null}
               {inlineEditMessage && activeInlineEdit?.nodeId === node.id ? <Text style={styles.validationText}>{inlineEditMessage}</Text> : null}
+
+              {fullEditorOpen ? renderPlannerInlineEditor('edit') : null}
 
               {detailsExpanded && canEdit ? (
                 <View style={dayCardStyles.stopDetailsGrid}>
@@ -1008,6 +1032,13 @@ export default function DayCard(props: DayCardProps) {
 
               {canEdit ? (
                 <View style={dayCardStyles.stopCompactActions}>
+                  <Pressable
+                    testID="stop-open-full-editor"
+                    style={styles.secondarySmallButton}
+                    onPress={() => onSelectPlannerNode(node.id)}
+                  >
+                    <Text style={styles.secondarySmallButtonText}>Redigera stopp</Text>
+                  </Pressable>
                   <Pressable style={styles.secondarySmallButton} onPress={() => void onMoveStop(node.id, -1)} disabled={isLoading}>
                     <Text style={styles.secondarySmallButtonText}>Upp</Text>
                   </Pressable>
