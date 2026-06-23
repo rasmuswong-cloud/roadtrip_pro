@@ -1,12 +1,52 @@
+import type { ImageStyle, StyleProp, TextStyle, ViewStyle } from 'react-native';
 import { Text, View } from 'react-native';
 
-type Styles = Record<string, any>;
+type WorkspaceStyle = StyleProp<ViewStyle & TextStyle & ImageStyle>;
 
-export function SectionTitle({ title, dark, styles }: { title: string; dark: boolean; styles: Styles }) {
+export type WorkspaceStyles = Record<string, WorkspaceStyle>;
+
+type SectionTitleProps = {
+  title: string;
+  dark: boolean;
+  styles: WorkspaceStyles;
+};
+
+type MetricProps = {
+  label: string;
+  value: string;
+  accent: string;
+  dark: boolean;
+  styles: WorkspaceStyles;
+};
+
+type BudgetMetricCardProps = {
+  label: string;
+  value: string;
+  detail: string;
+  accent: string;
+  styles: WorkspaceStyles;
+};
+
+type DayInsightProps = {
+  label: string;
+  value: string;
+  tone: 'good' | 'warn' | 'neutral';
+  styles: WorkspaceStyles;
+};
+
+type OverviewFocusCardProps = {
+  label: string;
+  title: string;
+  detail: string;
+  accent: string;
+  styles: WorkspaceStyles;
+};
+
+export function SectionTitle({ title, dark, styles }: SectionTitleProps) {
   return <Text style={[styles.sectionTitle, dark && styles.textDark]}>{title}</Text>;
 }
 
-export function Metric({ label, value, accent, dark, styles }: { label: string; value: string; accent: string; dark: boolean; styles: Styles }) {
+export function Metric({ label, value, accent, dark, styles }: MetricProps) {
   return (
     <View style={[styles.metric, dark && styles.panelDark, { borderTopColor: accent }]}>
       <Text style={[styles.metricLabel, dark && styles.textMutedDark]}>{label}</Text>
@@ -15,7 +55,7 @@ export function Metric({ label, value, accent, dark, styles }: { label: string; 
   );
 }
 
-export function BudgetMetricCard({ label, value, detail, accent, styles }: { label: string; value: string; detail: string; accent: string; styles: Styles }) {
+export function BudgetMetricCard({ label, value, detail, accent, styles }: BudgetMetricCardProps) {
   return (
     <View style={[styles.budgetCard, { borderTopColor: accent }]}>
       <Text style={styles.budgetLabel}>{label}</Text>
@@ -25,7 +65,7 @@ export function BudgetMetricCard({ label, value, detail, accent, styles }: { lab
   );
 }
 
-export function DayInsight({ label, value, tone, styles }: { label: string; value: string; tone: 'good' | 'warn' | 'neutral'; styles: Styles }) {
+export function DayInsight({ label, value, tone, styles }: DayInsightProps) {
   return (
     <View style={[styles.dayInsightCard, tone === 'good' && styles.dayInsightGood, tone === 'warn' && styles.dayInsightWarn]}>
       <Text style={styles.dayInsightLabel}>{label}</Text>
@@ -34,7 +74,7 @@ export function DayInsight({ label, value, tone, styles }: { label: string; valu
   );
 }
 
-export function OverviewFocusCard({ label, title, detail, accent, styles }: { label: string; title: string; detail: string; accent: string; styles: Styles }) {
+export function OverviewFocusCard({ label, title, detail, accent, styles }: OverviewFocusCardProps) {
   return (
     <View style={[styles.overviewFocusCard, { borderTopColor: accent }]}>
       <Text style={styles.overviewFocusLabel}>{label}</Text>

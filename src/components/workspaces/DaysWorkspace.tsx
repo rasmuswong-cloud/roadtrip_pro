@@ -6,7 +6,7 @@ import DayCard from '@/components/planning/DayCard';
 import type { DayChecklistItem, DayPlan, ItineraryNode, RouteSummary } from '@/models';
 import type { GooglePlace } from '@/services/google/googlePlaces';
 import type { ActiveInlineEdit, InlineFieldKey, InlineFieldValue } from '@/services/planning/inlineEdit';
-import { DayInsight, SectionTitle } from './WorkspaceBits';
+import { DayInsight, SectionTitle, type WorkspaceStyles } from './WorkspaceBits';
 
 type DaysWorkspaceProps = {
   activeInlineEdit: ActiveInlineEdit;
@@ -34,7 +34,7 @@ type DaysWorkspaceProps = {
   renderPlannerInlineEditor: (mode: 'edit' | 'new') => React.ReactNode;
   selectedDayPlan: DayPlan | null;
   selectedPlannerNodeId: string | null;
-  styles: Record<string, any>;
+  styles: WorkspaceStyles;
   visibleDayPlans: DayPlan[];
   onAddPackingItem: (dayPlan: DayPlan) => Promise<void>;
   onCancelCoordinateSearch: () => void;

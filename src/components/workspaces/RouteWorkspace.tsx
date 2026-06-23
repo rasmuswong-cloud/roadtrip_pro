@@ -2,7 +2,7 @@ import { Pressable, Text, View } from 'react-native';
 
 import { NavigationMap } from '@/components/map/NavigationMap';
 import type { ItineraryNode, RouteSummary } from '@/models';
-import { Metric, SectionTitle } from './WorkspaceBits';
+import { Metric, SectionTitle, type WorkspaceStyles } from './WorkspaceBits';
 
 type RouteWorkspaceProps = {
   activeRoute: RouteSummary;
@@ -17,7 +17,7 @@ type RouteWorkspaceProps = {
   isLoading: boolean;
   isMobile: boolean;
   missingCoordinateCount: number;
-  styles: Record<string, any>;
+  styles: WorkspaceStyles;
   tripName: string;
   onUpdateMissingCoordinates: () => void;
 };

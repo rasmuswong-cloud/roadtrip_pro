@@ -1,6 +1,6 @@
 import { Text, View } from 'react-native';
 
-import { SectionTitle } from './WorkspaceBits';
+import { SectionTitle, type WorkspaceStyles } from './WorkspaceBits';
 
 type ToolsWorkspaceProps = {
   activeTripId: string | null;
@@ -9,7 +9,7 @@ type ToolsWorkspaceProps = {
   isMobile: boolean;
   missingCoordinateCount: number;
   onlineSaveLabel: string;
-  styles: Record<string, any>;
+  styles: WorkspaceStyles;
 };
 
 export function ToolsWorkspace({

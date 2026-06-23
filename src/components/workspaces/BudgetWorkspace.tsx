@@ -1,16 +1,17 @@
 import { Pressable, Text, TextInput, View } from 'react-native';
 
 import type { ItineraryNode } from '@/models';
-import { BudgetMetricCard, SectionTitle } from './WorkspaceBits';
+import type { BudgetCategorySummary, BudgetDaySummary, MissingCostItem, TravelBudgetCenter } from '@/services/planning/budgetAnalysis';
+import { BudgetMetricCard, SectionTitle, type WorkspaceStyles } from './WorkspaceBits';
 
 type BudgetWorkspaceProps = {
-  budgetCenter: any;
+  budgetCenter: TravelBudgetCenter;
   displayedNodes: ItineraryNode[];
   formatPercentage: (value: number) => string;
   formatSek: (value: number) => string;
   isDark: boolean;
   isMobile: boolean;
-  styles: Record<string, any>;
+  styles: WorkspaceStyles;
   travelerCountText: string;
   onOpenBudgetCostEditor: (nodeId: string) => void;
   onSetTravelerCountText: (value: string) => void;
@@ -77,7 +78,7 @@ export function BudgetWorkspace({
           <Text style={styles.budgetSectionMeta}>{formatSek(budgetCenter.total)} totalt</Text>
         </View>
         <View style={styles.budgetCategoryList}>
-          {budgetCenter.categories.map((category: any) => (
+          {budgetCenter.categories.map((category: BudgetCategorySummary) => (
             <View key={category.key} style={styles.budgetCategoryRow}>
               <View style={styles.budgetCategoryText}>
                 <Text style={styles.budgetCategoryLabel}>{category.label}</Text>
@@ -101,7 +102,7 @@ export function BudgetWorkspace({
         </View>
         {budgetCenter.days.length > 0 ? (
           <View style={styles.budgetDayList}>
-            {budgetCenter.days.map((day: any) => (
+            {budgetCenter.days.map((day: BudgetDaySummary) => (
               <View key={day.key} style={styles.budgetDayRow}>
                 <View style={styles.budgetDayCopy}>
                   <Text style={styles.budgetDayTitle}>{day.label}</Text>
@@ -126,7 +127,7 @@ export function BudgetWorkspace({
         </View>
         {budgetCenter.missingItems.length > 0 ? (
           <View style={styles.missingCostList}>
-            {budgetCenter.missingItems.map((item: any) => (
+            {budgetCenter.missingItems.map((item: MissingCostItem) => (
               <View key={item.nodeId} style={styles.missingCostItem}>
                 <View style={styles.missingCostCopy}>
                   <Text style={styles.missingCostTitle}>{item.title}</Text>

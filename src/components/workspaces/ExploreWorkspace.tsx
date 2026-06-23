@@ -9,11 +9,16 @@ import {
   type ExplorePlace,
   type TravelPlaceholderType,
 } from '@/services/planning/exploreBoard';
-import { SectionTitle } from './WorkspaceBits';
+import { SectionTitle, type WorkspaceStyles } from './WorkspaceBits';
+
+type ExploreEmptyState = {
+  isEmpty: boolean;
+  message: string;
+};
 
 type ExploreWorkspaceProps = {
   activeTripId: string | null;
-  exploreEmptyState: { isEmpty: boolean; message: string };
+  exploreEmptyState: ExploreEmptyState;
   exploreGroups: Record<ExploreCategory, ExplorePlace[]>;
   exploreNotes: string;
   exploreResults: GooglePlace[];
@@ -21,7 +26,7 @@ type ExploreWorkspaceProps = {
   isDark: boolean;
   isLoading: boolean;
   recommendedPlaces: ExplorePlace[];
-  styles: Record<string, any>;
+  styles: WorkspaceStyles;
   onAddExplorePlaceToSelectedDay: (place: ExplorePlace) => void;
   onRemoveExplorePlace: (placeId: string) => void;
   onSaveExploreGooglePlace: (place: GooglePlace) => void;
@@ -192,7 +197,7 @@ function ExplorePlaceCard({
 }: {
   place: ExplorePlace;
   primaryLabel: string;
-  styles: Record<string, any>;
+  styles: WorkspaceStyles;
   onPrimary: () => void;
   onMap: () => void;
   onRemove: (() => void) | null;
@@ -235,7 +240,13 @@ function ExplorePlaceCard({
   );
 }
 
-function RecommendedPlaceCard({ place, styles, onAdd }: { place: ExplorePlace; styles: Record<string, any>; onAdd: () => void }) {
+type RecommendedPlaceCardProps = {
+  place: ExplorePlace;
+  styles: WorkspaceStyles;
+  onAdd: () => void;
+};
+
+function RecommendedPlaceCard({ place, styles, onAdd }: RecommendedPlaceCardProps) {
   return (
     <View style={styles.recommendedPlaceCard}>
       <TravelPlaceholder type={placeholderTypeForPlace(place)} styles={styles} compact />
@@ -250,7 +261,14 @@ function RecommendedPlaceCard({ place, styles, onAdd }: { place: ExplorePlace; s
   );
 }
 
-function TravelPlaceholder({ type, styles, compact = false, label }: { type: TravelPlaceholderType; styles: Record<string, any>; compact?: boolean; label?: string }) {
+type TravelPlaceholderProps = {
+  type: TravelPlaceholderType;
+  styles: WorkspaceStyles;
+  compact?: boolean;
+  label?: string;
+};
+
+function TravelPlaceholder({ type, styles, compact = false, label }: TravelPlaceholderProps) {
   const visual = placeholderVisual(type);
   return (
     <View style={[styles.travelPlaceholder, compact && styles.travelPlaceholderCompact, { backgroundColor: visual.backgroundColor }]}>

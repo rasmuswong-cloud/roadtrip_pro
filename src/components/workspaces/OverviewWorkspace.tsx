@@ -3,7 +3,8 @@ import { Pressable, Text, View } from 'react-native';
 import { NavigationMap } from '@/components/map/NavigationMap';
 import type { AppView } from '@/components/layout/workspaceTypes';
 import type { ItineraryNode, RouteSummary } from '@/models';
-import { DayInsight, OverviewFocusCard, SectionTitle } from './WorkspaceBits';
+import type { TripReadiness } from '@/services/planning/tripReadiness';
+import { DayInsight, OverviewFocusCard, SectionTitle, type WorkspaceStyles } from './WorkspaceBits';
 
 type OverviewWorkspaceProps = {
   activeRoute: RouteSummary;
@@ -20,9 +21,9 @@ type OverviewWorkspaceProps = {
   isMobile: boolean;
   lastRouteStop: ItineraryNode | null;
   missingCoordinateCount: number;
-  styles: Record<string, any>;
+  styles: WorkspaceStyles;
   totalSpend: number;
-  tripReadiness: any;
+  tripReadiness: TripReadiness;
   onGoToView: (view: AppView) => void;
 };
 
@@ -93,7 +94,7 @@ export function OverviewWorkspace({
           <Text style={styles.readinessNextDetail}>{tripReadiness.nextStep.detail}</Text>
         </View>
         <View style={[styles.readinessGrid, isMobile && styles.singleColumnGrid]}>
-          {tripReadiness.items.map((item: any) => (
+          {tripReadiness.items.map((item) => (
             <View key={item.label} style={[styles.readinessItem, item.status === 'ready' && styles.readinessItemReady]}>
               <Text style={[styles.readinessLabel, item.status === 'ready' && styles.readinessLabelReady]}>{item.label}</Text>
               <Text style={styles.readinessDetail}>{item.detail}</Text>
@@ -102,10 +103,10 @@ export function OverviewWorkspace({
         </View>
         {tripReadiness.groups.length > 0 ? (
           <View style={styles.readinessIssueGroups}>
-            {tripReadiness.groups.map((group: any) => (
+            {tripReadiness.groups.map((group) => (
               <View key={group.key} style={styles.readinessIssueGroup}>
                 <Text style={styles.readinessGroupTitle}>{group.label}</Text>
-                {group.issues.map((issue: any) => (
+                {group.issues.map((issue) => (
                   <View key={issue.id} style={styles.readinessIssueRow}>
                     <View style={styles.readinessIssueCopy}>
                       <Text style={styles.readinessIssueLabel}>{issue.label}</Text>
