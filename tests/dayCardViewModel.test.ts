@@ -2,7 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import type { ItineraryNode } from '../src/models';
-import { buildMissingInfoChips, formatItineraryTime } from '../src/components/planning/dayCardViewModel';
+import {
+  buildMissingInfoChips,
+  cleanImportedNoteLines,
+  compactNote,
+  formatDistance,
+  formatDuration,
+  formatItineraryTime,
+  formatRawNodeCost,
+  formatSek,
+  nodeColor,
+} from '../src/components/planning/dayCardViewModel';
 
 function makeNode(overrides: Partial<ItineraryNode> = {}): ItineraryNode {
   return {
@@ -55,4 +65,34 @@ test('day card missing info chips describe incomplete itinerary items', () => {
 
 test('day card missing info chips stay empty for complete itinerary items', () => {
   assert.deepEqual(buildMissingInfoChips(makeNode()), []);
+});
+
+test('day card route and currency formatters keep existing labels', () => {
+  assert.equal(formatDistance(900), '900 m');
+  assert.equal(formatDistance(1250), '1.3 km');
+  assert.equal(formatDistance(12_500), '13 km');
+  assert.equal(formatDuration(45 * 60), '45 min');
+  assert.equal(formatDuration((2 * 3600) + (15 * 60)), '2 h 15 min');
+  assert.equal(formatSek(12345.4), '12 345 SEK');
+});
+
+test('day card raw cost formatter reads imported cost metadata', () => {
+  assert.equal(formatRawNodeCost(makeNode({ metadata: { costSek: 1500 } })), '1500');
+  assert.equal(formatRawNodeCost(makeNode({ metadata: { cost: '1200 SEK' } })), '1200 SEK');
+  assert.equal(formatRawNodeCost(makeNode({ metadata: { price: '99' } })), '99');
+  assert.equal(formatRawNodeCost(makeNode({ metadata: {} })), '');
+});
+
+test('day card note helpers remove imported bookkeeping lines and compact long notes', () => {
+  assert.equal(cleanImportedNoteLines('Imported from Excel\nKom ihåg passen\nCost from row 4'), 'Kom ihåg passen');
+  assert.equal(cleanImportedNoteLines('Excel\nReseplanrare'), null);
+  assert.equal(compactNote('Kort anteckning'), 'Kort anteckning');
+  assert.equal(compactNote('x'.repeat(130)), `${'x'.repeat(117)}...`);
+});
+
+test('day card node colors remain stable by stop type', () => {
+  assert.equal(nodeColor('camping'), '#059669');
+  assert.equal(nodeColor('activity'), '#d97706');
+  assert.equal(nodeColor('lodging'), '#2563eb');
+  assert.equal(nodeColor('custom'), '#0f766e');
 });

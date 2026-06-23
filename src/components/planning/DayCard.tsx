@@ -1,8 +1,19 @@
 ﻿import React, { useRef, useState } from 'react';
+import type { StyleProp, TextStyle, ViewStyle } from 'react-native';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
+import type { WorkspaceStyles } from '@/components/workspaces/WorkspaceBits';
 import { dayCardStyles } from './DayCard.styles';
-import { buildMissingInfoChips, formatItineraryTime } from './dayCardViewModel';
+import {
+  buildMissingInfoChips,
+  compactNote,
+  formatDistance,
+  formatDuration,
+  formatItineraryTime,
+  formatRawNodeCost,
+  formatSek,
+  nodeColor,
+} from './dayCardViewModel';
 
 import type { DayChecklistItem, DayPlan } from '@/models';
 import type { ItineraryNode } from '@/models';
@@ -38,7 +49,7 @@ type DayCardProps = {
   packingDraft: string;
   draftPlannerDayKey: string | null;
   selectedPlannerNodeId: string | null;
-  styles: any;
+  styles: WorkspaceStyles;
   renderDayPlaceSearch: (dayKey: string) => React.ReactNode;
   renderPlannerInlineEditor: (mode: 'edit' | 'new') => React.ReactNode;
   onStartPlaceSearch: (dayKey: string, suggestedQuery?: string) => void;
@@ -67,89 +78,6 @@ type DayMoveTarget = {
   title: string;
 };
 
-function formatDistance(value: number): string {
-  if (value >= 1000) {
-    return `${(value / 1000).toFixed(value >= 10_000 ? 0 : 1).replace('.0', '')} km`;
-  }
-
-  return `${Math.round(value)} m`;
-}
-
-function formatDuration(value: number): string {
-  const hours = Math.floor(value / 3600);
-  const minutes = Math.floor((value % 3600) / 60);
-
-  if (hours > 0) {
-    return `${hours} h ${minutes} min`;
-  }
-
-  return `${minutes} min`;
-}
-
-function formatSek(value: number): string {
-  return `${Math.round(value).toLocaleString('sv-SE')} SEK`;
-}
-
-function formatRawNodeCost(node: ItineraryNode): string {
-  const cost = node.metadata.costSek ?? node.metadata.cost ?? node.metadata.price;
-  if (typeof cost === 'number') {
-    return String(cost);
-  }
-
-  if (typeof cost === 'string') {
-    return cost;
-  }
-
-  return '';
-}
-
-function cleanImportedNoteLines(value?: string | null): string | null {
-  if (!value) {
-    return null;
-  }
-
-  const cleanedLines = value
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line && !isImportedNoteLine(line));
-
-  return cleanedLines.length > 0 ? cleanedLines.join('\n') : null;
-}
-
-function isImportedNoteLine(value: string): boolean {
-  const normalized = value.toLowerCase();
-  return (
-    normalized.includes('imported from')
-    || normalized.includes('cost from')
-    || normalized.includes('excel')
-    || normalized.includes('reseplanrare')
-    || normalized.includes('laddad fr')
-    || normalized.includes('kostnad fr')
-  );
-}
-
-function compactNote(value?: string | null): string | null {
-  const cleaned = cleanImportedNoteLines(value);
-  if (!cleaned) {
-    return null;
-  }
-
-  return cleaned.length > 120 ? `${cleaned.slice(0, 117)}...` : cleaned;
-}
-
-function nodeColor(type: ItineraryNode['type']): string {
-  switch (type) {
-    case 'camping':
-      return '#059669';
-    case 'activity':
-      return '#d97706';
-    case 'lodging':
-      return '#2563eb';
-    default:
-      return '#0f766e';
-  }
-}
-
 type InlineOption = {
   value: string;
   label: string;
@@ -163,15 +91,15 @@ type InlineEditorProps = {
   isDark: boolean;
   loading: boolean;
   disabled: boolean;
-  styles: any;
+  styles: WorkspaceStyles;
   onStart: (nodeId: string, field: InlineFieldKey) => boolean;
   onCancel: () => void;
   onSave: (node: ItineraryNode, field: InlineFieldKey, value: InlineFieldValue) => Promise<void>;
   onDraftChange: (changed: boolean) => void;
   placeholder?: string;
-  inputStyle?: unknown;
-  inactiveStyle?: unknown;
-  inactiveValueStyle?: unknown;
+  inputStyle?: StyleProp<ViewStyle>;
+  inactiveStyle?: StyleProp<ViewStyle>;
+  inactiveValueStyle?: StyleProp<TextStyle>;
   showInactiveLabel?: boolean;
 };
 
