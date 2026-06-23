@@ -10,14 +10,19 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { NavigationMap } from '@/components/map/NavigationMap';
 import { MapRail } from '@/components/layout/MapRail';
 import { MobileFlowNav } from '@/components/layout/MobileFlowNav';
 import { SidebarNav } from '@/components/layout/SidebarNav';
 import { TripHero } from '@/components/layout/TripHero';
 import { APP_TABS, budgetCostEditorTarget, dayShortcutTarget, resolveSelectedDayKey } from '@/components/layout/workspaceLogic';
 import type { AppView } from '@/components/layout/workspaceTypes';
-import DayCard from '@/components/planning/DayCard';
+import { BudgetWorkspace } from '@/components/workspaces/BudgetWorkspace';
+import { DaysWorkspace } from '@/components/workspaces/DaysWorkspace';
+import { ExploreWorkspace } from '@/components/workspaces/ExploreWorkspace';
+import { OverviewWorkspace } from '@/components/workspaces/OverviewWorkspace';
+import { RouteWorkspace } from '@/components/workspaces/RouteWorkspace';
+import { ToolsWorkspace } from '@/components/workspaces/ToolsWorkspace';
+import { SectionTitle } from '@/components/workspaces/WorkspaceBits';
 import { reseplanrareIdeaPlaces, reseplanrareSeedRows, type ReseplanrareSeedRow } from '@/data/reseplanrareSeed';
 import type { BudgetCategories, BudgetSummary, DayChecklistItem, DayInsightSummary, DayPlan, Expense, ItineraryNode, ItineraryNodeType, Poi, RouteSummary, Trip } from '@/models';
 import { getCurrentUser, getOrCreateAnonymousUser, sendMagicLink, signOut } from '@/services/auth/authService';
@@ -58,12 +63,8 @@ import {
   emptyExploreState,
   explorePlaceFromGooglePlace,
   groupExplorePlaces,
-  imageSourceForPlace,
-  placeholderTypeForPlace,
   recommendedPlacesFromNodes,
-  type ExploreCategory,
   type ExplorePlace,
-  type TravelPlaceholderType,
 } from '@/services/planning/exploreBoard';
 import {
   formatBulkCoordinateSummary,
@@ -1855,10 +1856,10 @@ export default function App() {
 
   function renderPlannerInlineEditor(mode: 'edit' | 'new') {
     return (
-      <View style={[styles.dayInlineEditor, isDark && styles.innerPanelDark]}>
+      <View testID={mode === 'new' ? 'day-new-stop-editor' : 'day-stop-edit-editor'} style={[styles.dayInlineEditor, isDark && styles.innerPanelDark]}>
         <View style={styles.sectionHeaderRow}>
           <View>
-            <Text style={[styles.dayTitle, isDark && styles.textDark]}>{mode === 'new' ? 'Lägg till i dag' : 'Redigera steg'}</Text>
+            <Text style={[styles.dayTitle, isDark && styles.textDark]}>{mode === 'new' ? 'Lägg till stopp i denna dag' : 'Redigera valt stopp'}</Text>
             <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>{onlineSaveState === 'saving' ? 'Sparar...' : onlineSaveLabel}</Text>
           </View>
           <Pressable style={styles.secondarySmallButton} onPress={clearPlannerEditor} disabled={isLoading}>
@@ -2072,7 +2073,7 @@ export default function App() {
               <Text style={[styles.headerStatusTitle, isDark && styles.textDark]}>{activeTripId ? 'Ansluten resa' : 'Lokalt läge'}</Text>
               <Text style={[styles.headerStatusMeta, isDark && styles.textMutedDark]} numberOfLines={1}>{statusMessage || onlineSaveLabel}</Text>
             </View>
-            <Pressable style={[styles.modeButton, isEditMode && styles.modeButtonActive]} onPress={toggleEditMode}>
+            <Pressable testID="edit-mode-toggle" style={[styles.modeButton, isEditMode && styles.modeButtonActive]} onPress={toggleEditMode}>
               <Text style={[styles.modeButtonText, isEditMode && styles.modeButtonTextActive]}>{isEditMode ? 'Redigerar' : 'Redigera'}</Text>
             </Pressable>
             <Pressable style={[styles.syncButton, isLoading && styles.disabledButton]} onPress={connectSupabaseTrip} disabled={isLoading}>
@@ -2110,7 +2111,7 @@ export default function App() {
             {!isDemoMode && activeView === 'tools' ? (
             <View style={styles.sidebarColumn}>
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
-                <SectionTitle title="Arbetsläge" dark={isDark} />
+                <SectionTitle title="Arbetsläge" dark={isDark} styles={styles} />
                 <View style={styles.actionRow}>
                   <Pressable style={[styles.undoButton, (!undoSnapshot || isLoading) && styles.disabledButton]} onPress={() => void undoLastChange()} disabled={!undoSnapshot || isLoading}>
                     <Text style={styles.undoButtonText}>Ångra</Text>
@@ -2122,7 +2123,7 @@ export default function App() {
               </View>
 
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
-                <SectionTitle title="Konto" dark={isDark} />
+                <SectionTitle title="Konto" dark={isDark} styles={styles} />
                 <TextInput
                   value={email}
                   onChangeText={setEmail}
@@ -2143,7 +2144,7 @@ export default function App() {
               </View>
 
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
-                <SectionTitle title="Dela" dark={isDark} />
+                <SectionTitle title="Dela" dark={isDark} styles={styles} />
                 <View style={styles.actionRow}>
                   <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={createShareCode} disabled={isLoading}>
                     <Text style={styles.commandButtonText}>Skapa kod</Text>
@@ -2170,7 +2171,7 @@ export default function App() {
               </View>
 
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
-                <SectionTitle title="Resplan" dark={isDark} />
+                <SectionTitle title="Resplan" dark={isDark} styles={styles} />
                 <Pressable style={[styles.commandButton, (isLoading || !activeTripId) && styles.disabledButton]} onPress={importReseplanrarePlan} disabled={isLoading || !activeTripId}>
                   <Text style={styles.commandButtonText}>Ladda resplan</Text>
                 </Pressable>
@@ -2187,7 +2188,7 @@ export default function App() {
               </View>
 
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
-                <SectionTitle title="AI-reseassistent" dark={isDark} />
+                <SectionTitle title="AI-reseassistent" dark={isDark} styles={styles} />
                 <TextInput
                   value={command}
                   onChangeText={setCommand}
@@ -2222,582 +2223,149 @@ export default function App() {
                 targetTitle={lastRouteStop?.title ?? 'Mål'}
               />
               {activeView === 'tools' ? (
-                <View style={[styles.panelSection, isDark && styles.panelDark]}>
-                  <View style={styles.sectionHeaderRow}>
-                    <SectionTitle title="Tekniska verktyg" dark={isDark} />
-                    <Text style={styles.overviewMeta}>{activeTripId ? 'Synk är tillgänglig' : 'Anslut resan för onlineverktyg'}</Text>
-                  </View>
-                  <View style={[styles.toolSummaryGrid, isMobile && styles.singleColumnGrid]}>
-                    <View style={styles.toolSummaryItem}>
-                      <Text style={styles.toolSummaryLabel}>Import</Text>
-                      <Text style={styles.toolSummaryTitle}>Importera/uppdatera resplan</Text>
-                      <Text style={styles.toolSummaryText}>Ladda den korrigerade rutten och rensa gamla importerade stopp.</Text>
-                    </View>
-                    <View style={styles.toolSummaryItem}>
-                      <Text style={styles.toolSummaryLabel}>Karta</Text>
-                      <Text style={styles.toolSummaryTitle}>{missingCoordinateCount > 0 ? `${missingCoordinateCount} saknar kartposition` : 'Kartpositioner klara'}</Text>
-                      <Text style={styles.toolSummaryText}>Fyll saknade koordinater med Google Places när det behövs.</Text>
-                    </View>
-                    <View style={styles.toolSummaryItem}>
-                      <Text style={styles.toolSummaryLabel}>Synk</Text>
-                      <Text style={styles.toolSummaryTitle}>{onlineSaveLabel}</Text>
-                      <Text style={styles.toolSummaryText}>Konto, delning, ångra och AI-assistent ligger i verktygspanelen.</Text>
-                    </View>
-                  </View>
-                  {isDemoMode ? (
-                    <Text style={styles.emptySearchText}>Slå på redigering och anslut resan för att visa import, delning och synkverktyg.</Text>
-                  ) : null}
-                </View>
+                <ToolsWorkspace
+                  activeTripId={activeTripId ?? null}
+                  isDark={isDark}
+                  isDemoMode={isDemoMode}
+                  isMobile={isMobile}
+                  missingCoordinateCount={missingCoordinateCount}
+                  onlineSaveLabel={onlineSaveLabel}
+                  styles={styles}
+                />
               ) : null}
               {activeView === 'explore' ? (
-              <View style={[styles.panelSection, isDark && styles.panelDark]}>
-                <View style={styles.sectionHeaderRow}>
-                  <View>
-                    <SectionTitle title="Utforska" dark={isDark} />
-                    <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>Samla tips, platser och lösa idéer innan de blir stopp i Dagar.</Text>
-                  </View>
-                  <View style={styles.exploreSaveHint}>
-                    <Text style={styles.exploreSaveHintText}>Lokalt idébord</Text>
-                  </View>
-                </View>
-
-                <View style={styles.exploreNotesCard}>
-                  <View style={styles.exploreSectionHeader}>
-                    <Text style={styles.exploreSectionTitle}>Anteckningar</Text>
-                    <Text style={styles.exploreSectionMeta}>Tips, länkar och kom ihåg</Text>
-                  </View>
-                  <TextInput
-                    value={exploreNotes}
-                    onChangeText={setExploreNotes}
-                    placeholder="Skriv eller klistra in tips, länkar och saker att komma ihåg"
-                    placeholderTextColor={isDark ? '#737373' : '#78716c'}
-                    style={[styles.exploreNotesInput, isDark && styles.inputDark]}
-                    multiline
-                  />
-                  <View style={styles.exploreNoteActions}>
-                    <Text style={styles.exploreLocalHint}>{activeTripId ? 'Sparas i den anslutna resan.' : 'Sparas lokalt tills resan är ansluten.'}</Text>
-                    <Pressable style={[styles.smallButton, isLoading && styles.disabledButton]} onPress={() => void saveExploreNotes()} disabled={isLoading}>
-                      <Text style={styles.smallButtonText}>Spara anteckningar</Text>
-                    </Pressable>
-                  </View>
-                </View>
-
-                <View style={styles.exploreSearchCard}>
-                  <View style={styles.exploreSectionHeader}>
-                    <Text style={styles.exploreSectionTitle}>Lägg till plats</Text>
-                    <Text style={styles.exploreSectionMeta}>Sök plats</Text>
-                  </View>
-                  <View style={styles.exploreSearchRow}>
-                    <TextInput
-                      value={exploreSearchQuery}
-                      onChangeText={setExploreSearchQuery}
-                      placeholder="Sök restaurang, hotell, utsikt, parkering..."
-                      placeholderTextColor={isDark ? '#737373' : '#78716c'}
-                      style={[styles.exploreSearchInput, isDark && styles.inputDark]}
-                      onSubmitEditing={() => void searchExplorePlaces()}
-                    />
-                    <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={() => void searchExplorePlaces()} disabled={isLoading}>
-                      <Text style={styles.commandButtonText}>Sök</Text>
-                    </Pressable>
-                  </View>
-                  {exploreResults.length > 0 ? (
-                    <View style={styles.exploreResultGrid}>
-                      {exploreResults.map((place) => {
-                        const explorePlace = explorePlaceFromGooglePlace(place);
-                        return (
-                          <ExplorePlaceCard
-                            key={place.id}
-                            place={explorePlace}
-                            styles={styles}
-                            primaryLabel="Spara"
-                            onPrimary={() => saveExploreGooglePlace(place)}
-                            onMap={() => showExplorePlaceOnMap(explorePlace)}
-                            onRemove={null}
-                          />
-                        );
-                      })}
-                    </View>
-                  ) : null}
-                </View>
-
-                <View style={styles.exploreBoardSection}>
-                  <View style={styles.exploreSectionHeader}>
-                    <Text style={styles.exploreSectionTitle}>Platser att besöka</Text>
-                    <Text style={styles.exploreSectionMeta}>{exploreEmptyState.message}</Text>
-                  </View>
-                  {exploreEmptyState.isEmpty ? (
-                    <View style={styles.exploreEmptyState}>
-                      <TravelPlaceholder type="notes-explore" styles={styles} />
-                      <View style={styles.exploreEmptyCopy}>
-                        <Text style={styles.emptySearchTitle}>Inga idéplatser sparade än</Text>
-                        <Text style={styles.emptySearchText}>Sök efter en plats eller spara en rekommendation för att bygga din lista.</Text>
-                      </View>
-                    </View>
-                  ) : (
-                    (Object.keys(exploreGroups) as ExploreCategory[]).map((category) => (
-                      exploreGroups[category].length > 0 ? (
-                        <View key={category} style={styles.exploreCategoryBlock}>
-                          <Text style={styles.exploreCategoryTitle}>{category}</Text>
-                          <View style={styles.explorePlaceGrid}>
-                            {exploreGroups[category].map((place) => (
-                              <ExplorePlaceCard
-                                key={place.id}
-                                place={place}
-                                styles={styles}
-                                primaryLabel="Lägg till i dag"
-                                onPrimary={() => addExplorePlaceToSelectedDay(place)}
-                                onMap={() => showExplorePlaceOnMap(place)}
-                                onRemove={() => void removeExplorePlace(place.id)}
-                              />
-                            ))}
-                          </View>
-                        </View>
-                      ) : null
-                    ))
-                  )}
-                </View>
-
-                <View style={styles.exploreBoardSection}>
-                  <View style={styles.exploreSectionHeader}>
-                    <Text style={styles.exploreSectionTitle}>Rekommenderade platser</Text>
-                    <Text style={styles.exploreSectionMeta}>Från din nuvarande resplan</Text>
-                  </View>
-                  <View style={styles.recommendedPlaceRow}>
-                    {recommendedPlaces.map((place) => (
-                      <RecommendedPlaceCard
-                        key={place.id}
-                        place={place}
-                        styles={styles}
-                        onAdd={() => saveRecommendedExplorePlace(place)}
-                      />
-                    ))}
-                  </View>
-                </View>
-              </View>
+              <ExploreWorkspace
+                activeTripId={activeTripId ?? null}
+                exploreEmptyState={exploreEmptyState}
+                exploreGroups={exploreGroups}
+                exploreNotes={exploreNotes}
+                exploreResults={exploreResults}
+                exploreSearchQuery={exploreSearchQuery}
+                isDark={isDark}
+                isLoading={isLoading}
+                recommendedPlaces={recommendedPlaces}
+                styles={styles}
+                onAddExplorePlaceToSelectedDay={addExplorePlaceToSelectedDay}
+                onRemoveExplorePlace={(placeId) => void removeExplorePlace(placeId)}
+                onSaveExploreGooglePlace={saveExploreGooglePlace}
+                onSaveExploreNotes={() => void saveExploreNotes()}
+                onSaveRecommendedExplorePlace={saveRecommendedExplorePlace}
+                onSearchExplorePlaces={() => void searchExplorePlaces()}
+                onSetExploreNotes={setExploreNotes}
+                onSetExploreSearchQuery={setExploreSearchQuery}
+                onShowExplorePlaceOnMap={showExplorePlaceOnMap}
+              />
               ) : null}
               {activeView === 'route' ? (
-              <View style={styles.routeView}>
-                <View style={styles.routeStage}>
-                  <View style={styles.routeStageHeader}>
-                    <View>
-                      <Text style={styles.routeStageKicker}>Interaktiv ruttkarta</Text>
-                      <Text style={styles.routeStageTitle}>Ruttkarta</Text>
-                    </View>
-                    <View style={styles.routeHeaderActions}>
-                      {!isDemoMode && missingCoordinateCount > 0 ? (
-                        <Pressable
-                          style={[styles.routeActionButton, isLoading && styles.disabledButton]}
-                          onPress={() => void updateMissingCoordinatesForAllStops()}
-                          disabled={isLoading}
-                        >
-                          <Text style={styles.routeActionButtonText}>Fyll i kartpositioner</Text>
-                        </Pressable>
-                      ) : null}
-                      <View style={styles.routeBadge}>
-                        <Text style={styles.routeBadgeText}>{displayedNodes.length} stopp</Text>
-                      </View>
-                    </View>
-                  </View>
-                  <View style={[styles.mapShell, isMobile && styles.mapShellMobile]}>
-                    <NavigationMap nodes={displayedNodes} activeRoute={routeSummary.geometry ? routeSummary : demoRoute} followUser={false} />
-                    <View style={[styles.mapOverlayPanel, isMobile && styles.mapOverlayPanelMobile]}>
-                      <Text style={styles.mapOverlayKicker}>Aktuell plan</Text>
-                      <Text style={styles.mapOverlayTitle}>{demoTrip.name}</Text>
-                      <Text style={styles.mapOverlayMeta}>{formatDistance(routeSummary.distanceMeters)} / {formatDuration(routeSummary.durationSeconds)}</Text>
-                    </View>
-                    <View style={[styles.mapLayerControls, isMobile && styles.mapLayerControlsMobile]}>
-                      {['Karta', 'Stopp'].map((label, index) => (
-                        <View key={label} style={[styles.mapLayerChip, index === 0 && styles.mapLayerChipActive]}>
-                          <Text style={[styles.mapLayerText, index === 0 && styles.mapLayerTextActive]}>{label}</Text>
-                        </View>
-                      ))}
-                    </View>
-                    <View style={[styles.mapLegend, isMobile && styles.mapLegendMobile]}>
-                      <View style={[styles.legendDot, { backgroundColor: '#0f766e' }]} />
-                      <Text style={styles.legendText}>planerat stopp</Text>
-                      <View style={[styles.legendDot, { backgroundColor: '#f6b35f' }]} />
-                      <Text style={styles.legendText}>rutt</Text>
-                    </View>
-                  </View>
-                  <View style={styles.routeStageFooter}>
-                    <Text style={styles.routeStageMeta}>{formatDistance(routeSummary.distanceMeters)} rutt</Text>
-                    <Text style={styles.routeStageMeta}>{formatDuration(routeSummary.durationSeconds)} körning</Text>
-                    {missingCoordinateCount > 0 ? <Text style={styles.routeStageMeta}>{missingCoordinateCount} saknar kartposition</Text> : null}
-                  </View>
-                </View>
-
-                <View style={[styles.statsRow, isMobile && styles.singleColumnGrid]}>
-                  <Metric label="Stopp" value={`${displayedNodes.length}`} accent="#0f766e" dark={isDark} />
-                  <Metric label="Rutt" value={formatDistance(routeSummary.distanceMeters)} accent="#2563eb" dark={isDark} />
-                  <Metric label="Körning" value={formatDuration(routeSummary.durationSeconds)} accent="#d97706" dark={isDark} />
-                </View>
-
-                <View style={[styles.panelSection, isDark && styles.panelDark]}>
-                  <View style={styles.sectionHeaderRow}>
-                    <SectionTitle title="Stopp i ordning" dark={isDark} />
-                    <Text style={styles.overviewMeta}>{displayedNodes.length} stopp</Text>
-                  </View>
-                  <View style={styles.routeStopList}>
-                    {displayedNodes.map((node, index) => (
-                      <View key={node.id} style={styles.routeStopItem}>
-                        <View style={styles.routeStopNumber}>
-                          <Text style={styles.routeStopNumberText}>{index + 1}</Text>
-                        </View>
-                        <View style={styles.routeStopCopy}>
-                          <Text style={styles.routeStopTitle}>{node.title}</Text>
-                          <Text style={styles.routeStopMeta}>
-                            {[formatDateLabel(node.startsAt?.slice(0, 10) ?? 'unscheduled'), formatTime(node.startsAt), node.location ? 'kartposition klar' : 'saknar kartposition'].filter(Boolean).join(' / ')}
-                          </Text>
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              </View>
+              <RouteWorkspace
+                activeRoute={routeSummary}
+                demoRoute={demoRoute}
+                displayedNodes={displayedNodes}
+                formatDateLabel={formatDateLabel}
+                formatDistance={formatDistance}
+                formatDuration={formatDuration}
+                formatTime={formatTime}
+                isDark={isDark}
+                isDemoMode={isDemoMode}
+                isLoading={isLoading}
+                isMobile={isMobile}
+                missingCoordinateCount={missingCoordinateCount}
+                styles={styles}
+                tripName={demoTrip.name}
+                onUpdateMissingCoordinates={() => void updateMissingCoordinatesForAllStops()}
+              />
               ) : null}
 
               {activeView === 'overview' ? (
-              <View style={[styles.panelSection, isDark && styles.panelDark]}>
-                <View style={styles.sectionHeaderRow}>
-                  <SectionTitle title="Översikt" dark={isDark} />
-                  <Text style={styles.overviewMeta}>{firstRouteStop?.title ?? 'Start'} → {lastRouteStop?.title ?? 'destination'}</Text>
-                </View>
-                <View style={[styles.overviewFocusGrid, isMobile && styles.singleColumnGrid]}>
-                  <OverviewFocusCard
-                    label="Plan"
-                    title={`${dayPlans.length} dagar`}
-                    detail={`${displayedNodes.length} stopp / ${firstRouteStop?.title ?? 'start'} → ${lastRouteStop?.title ?? 'mål'}`}
-                    accent="#f6b35f"
-                  />
-                  <OverviewFocusCard
-                    label="Rutt"
-                    title={formatDistance(routeSummary.distanceMeters)}
-                    detail={`${formatDuration(routeSummary.durationSeconds)} körning`}
-                    accent="#2563eb"
-                  />
-                  <OverviewFocusCard
-                    label="Budget"
-                    title={formatSek(totalSpend)}
-                    detail={budgetSummary.missingCostCount > 0 ? `${budgetSummary.missingCostCount} stopp saknar kostnad` : `${formatSek(costPerTraveler)} per person`}
-                    accent={budgetSummary.missingCostCount > 0 ? '#d97706' : '#0f766e'}
-                  />
-                </View>
-                <View style={[styles.readinessPanel, tripReadiness.isReady && styles.readinessPanelReady]}>
-                  <View style={styles.readinessHeader}>
-                    <View>
-                      <Text style={styles.overviewMapKicker}>Resestatus</Text>
-                      <Text style={styles.readinessTitle}>{tripReadiness.title}</Text>
-                      <Text style={styles.readinessNextText}>{tripReadiness.subtitle}</Text>
-                    </View>
-                    <Pressable style={styles.smallButton} onPress={() => goToView(tripReadiness.nextStep.target)}>
-                      <Text style={styles.smallButtonText}>{tripReadiness.nextStep.label}</Text>
-                    </Pressable>
-                  </View>
-                  <View style={styles.readinessNextAction}>
-                    <Text style={styles.readinessNextLabel}>Nästa bästa steg</Text>
-                    <Text style={styles.readinessNextDetail}>{tripReadiness.nextStep.detail}</Text>
-                  </View>
-                  <View style={[styles.readinessGrid, isMobile && styles.singleColumnGrid]}>
-                    {tripReadiness.items.map((item) => (
-                      <View key={item.label} style={[styles.readinessItem, item.status === 'ready' && styles.readinessItemReady]}>
-                        <Text style={[styles.readinessLabel, item.status === 'ready' && styles.readinessLabelReady]}>{item.label}</Text>
-                        <Text style={styles.readinessDetail}>{item.detail}</Text>
-                      </View>
-                    ))}
-                  </View>
-                  {tripReadiness.groups.length > 0 ? (
-                    <View style={styles.readinessIssueGroups}>
-                      {tripReadiness.groups.map((group) => (
-                        <View key={group.key} style={styles.readinessIssueGroup}>
-                          <Text style={styles.readinessGroupTitle}>{group.label}</Text>
-                          {group.issues.map((issue) => (
-                            <View key={issue.id} style={styles.readinessIssueRow}>
-                              <View style={styles.readinessIssueCopy}>
-                                <Text style={styles.readinessIssueLabel}>{issue.label}</Text>
-                                <Text style={styles.readinessIssueDetail}>{issue.detail}</Text>
-                              </View>
-                              <Pressable style={styles.secondarySmallButton} onPress={() => goToView(issue.target)}>
-                                <Text style={styles.secondarySmallButtonText}>{issue.actionLabel}</Text>
-                              </Pressable>
-                            </View>
-                          ))}
-                        </View>
-                      ))}
-                    </View>
-                  ) : (
-                    <Text style={styles.readinessReadyText}>{tripReadiness.completedCheckCount} av {tripReadiness.totalCheckCount} kontroller klara. Klar för avresa.</Text>
-                  )}
-                </View>
-                <View style={styles.overviewMapCard}>
-                  <View style={styles.overviewMapHeader}>
-                    <View>
-                      <Text style={styles.overviewMapKicker}>Kartpreview</Text>
-                      <Text style={styles.overviewMapTitle}>Resan på kartan</Text>
-                    </View>
-                    <View style={styles.overviewMapActions}>
-                      <Pressable style={styles.smallButton} onPress={() => goToView('route')}>
-                        <Text style={styles.smallButtonText}>Visa hela kartan</Text>
-                      </Pressable>
-                    </View>
-                  </View>
-                  <View style={styles.overviewMapShell}>
-                    <NavigationMap nodes={displayedNodes} activeRoute={routeSummary.geometry ? routeSummary : demoRoute} followUser={false} compact />
-                  </View>
-                </View>
-              </View>
+              <OverviewWorkspace
+                activeRoute={routeSummary}
+                budgetSummary={budgetSummary}
+                costPerTraveler={costPerTraveler}
+                dayCount={dayPlans.length}
+                demoRoute={demoRoute}
+                displayedNodes={displayedNodes}
+                firstRouteStop={firstRouteStop}
+                formatDistance={formatDistance}
+                formatDuration={formatDuration}
+                formatSek={formatSek}
+                isDark={isDark}
+                isMobile={isMobile}
+                lastRouteStop={lastRouteStop}
+                missingCoordinateCount={missingCoordinateCount}
+                styles={styles}
+                totalSpend={totalSpend}
+                tripReadiness={tripReadiness}
+                onGoToView={goToView}
+              />
               ) : null}
 
               {activeView === 'budget' ? (
-              <View style={[styles.panelSection, isDark && styles.panelDark]}>
-                <View style={styles.sectionHeaderRow}>
-                  <View>
-                    <SectionTitle title="Budget" dark={isDark} />
-                    <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>Kostnadscenter för totaler, kategorier, dagar och saknade belopp.</Text>
-                  </View>
-                  <View style={styles.budgetHeaderTools}>
-                    <Text style={styles.budgetTotal}>{formatSek(budgetCenter.total)}</Text>
-                    <View style={styles.travelerControl}>
-                      <Text style={styles.travelerLabel}>Personer</Text>
-                      <TextInput
-                        value={travelerCountText}
-                        onChangeText={setTravelerCountText}
-                        placeholder="2"
-                        placeholderTextColor={isDark ? '#737373' : '#78716c'}
-                        style={[styles.travelerInput, isDark && styles.inputDark]}
-                        inputMode="numeric"
-                      />
-                    </View>
-                  </View>
-                </View>
-                <View style={[styles.budgetGrid, isMobile && styles.singleColumnGrid]}>
-                  <BudgetMetricCard label="Total kostnad" value={formatSek(budgetCenter.total)} detail={budgetCenter.hasRegisteredCosts ? `${budgetCenter.costItemCount} kostnadsposter` : 'Resan har inga registrerade kostnader än'} accent="#0a2540" />
-                  <BudgetMetricCard label="Per person" value={formatSek(budgetCenter.perPerson)} detail={`${budgetCenter.travelerCount} personer`} accent="#7c3aed" />
-                  <BudgetMetricCard label="Kostnadsposter" value={`${budgetCenter.costItemCount}`} detail={`${displayedNodes.length} planerade stopp`} accent="#2563eb" />
-                  <BudgetMetricCard label="Saknade kostnader" value={`${budgetCenter.missingCostCount}`} detail={budgetCenter.missingCostCount > 0 ? 'Behöver fyllas i' : 'Inga saknade kostnader'} accent={budgetCenter.missingCostCount > 0 ? '#d97706' : '#0f766e'} />
-                  <BudgetMetricCard label="Dyraste dag" value={budgetCenter.mostExpensiveDay ? formatSek(budgetCenter.mostExpensiveDay.total) : 'Saknas'} detail={budgetCenter.mostExpensiveDay ? `${budgetCenter.mostExpensiveDay.label} / ${budgetCenter.mostExpensiveDay.dateLabel}` : 'Ingen dagskostnad än'} accent="#0ea5a3" />
-                  <BudgetMetricCard label="Dyraste kategori" value={budgetCenter.mostExpensiveCategory ? budgetCenter.mostExpensiveCategory.label : 'Saknas'} detail={budgetCenter.mostExpensiveCategory ? formatSek(budgetCenter.mostExpensiveCategory.total) : 'Ingen kategori än'} accent="#f6b35f" />
-                </View>
-
-                {!budgetCenter.hasItineraryItems ? (
-                  <View style={styles.budgetEmptyState}>
-                    <Text style={styles.emptySearchTitle}>Inga stopp i resplanen</Text>
-                    <Text style={styles.emptySearchText}>Lägg till stopp i Dagar för att börja bygga en resebudget.</Text>
-                  </View>
-                ) : !budgetCenter.hasRegisteredCosts ? (
-                  <View style={styles.budgetEmptyState}>
-                    <Text style={styles.emptySearchTitle}>Resan har inga registrerade kostnader än</Text>
-                    <Text style={styles.emptySearchText}>Fyll i boende, aktiviteter, mat, bränsle och transport för att se totalen.</Text>
-                  </View>
-                ) : null}
-
-                <View style={styles.budgetSection}>
-                  <View style={styles.budgetSectionHeader}>
-                    <Text style={styles.budgetSectionTitle}>Kostnad per kategori</Text>
-                    <Text style={styles.budgetSectionMeta}>{formatSek(budgetCenter.total)} totalt</Text>
-                  </View>
-                  <View style={styles.budgetCategoryList}>
-                    {budgetCenter.categories.map((category) => (
-                      <View key={category.key} style={styles.budgetCategoryRow}>
-                        <View style={styles.budgetCategoryText}>
-                          <Text style={styles.budgetCategoryLabel}>{category.label}</Text>
-                          <Text style={styles.budgetCategoryMeta}>{category.itemCount} poster / {formatPercentage(category.percentage)}</Text>
-                        </View>
-                        <View style={styles.budgetCategoryAmountWrap}>
-                          <Text style={styles.budgetCategoryAmount}>{formatSek(category.total)}</Text>
-                          <View style={styles.budgetProgressTrack}>
-                            <View style={[styles.budgetProgressFill, { width: `${Math.round(category.percentage * 100)}%` }]} />
-                          </View>
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-
-                <View style={styles.budgetSection}>
-                  <View style={styles.budgetSectionHeader}>
-                    <Text style={styles.budgetSectionTitle}>Kostnad per dag</Text>
-                    <Text style={styles.budgetSectionMeta}>{budgetCenter.days.length} dagar</Text>
-                  </View>
-                  {budgetCenter.days.length > 0 ? (
-                    <View style={styles.budgetDayList}>
-                      {budgetCenter.days.map((day) => (
-                        <View key={day.key} style={styles.budgetDayRow}>
-                          <View style={styles.budgetDayCopy}>
-                            <Text style={styles.budgetDayTitle}>{day.label}</Text>
-                            <Text style={styles.budgetDayMeta}>{day.dateLabel} / {day.routeLabel}</Text>
-                          </View>
-                          <View style={styles.budgetDayStats}>
-                            <Text style={styles.budgetDayTotal}>{formatSek(day.total)}</Text>
-                            <Text style={styles.budgetDayMeta}>{day.itemCount} poster{day.missingCostCount > 0 ? ` / ${day.missingCostCount} saknas` : ''}</Text>
-                          </View>
-                        </View>
-                      ))}
-                    </View>
-                  ) : (
-                    <Text style={styles.emptySearchText}>Inga dagar att visa.</Text>
-                  )}
-                </View>
-
-                <View style={styles.budgetSection}>
-                  <View style={styles.budgetSectionHeader}>
-                    <Text style={styles.budgetSectionTitle}>Saknar kostnad</Text>
-                    <Text style={styles.budgetSectionMeta}>{budgetCenter.missingCostCount} stopp</Text>
-                  </View>
-                  {budgetCenter.missingItems.length > 0 ? (
-                    <View style={styles.missingCostList}>
-                      {budgetCenter.missingItems.map((item) => (
-                        <View key={item.nodeId} style={styles.missingCostItem}>
-                          <View style={styles.missingCostCopy}>
-                            <Text style={styles.missingCostTitle}>{item.title}</Text>
-                            <Text style={styles.missingCostMeta}>{item.dayLabel} / {item.typeLabel} / {item.place}</Text>
-                          </View>
-                          <Pressable style={styles.secondarySmallButton} onPress={() => openBudgetCostEditor(item.nodeId)}>
-                            <Text style={styles.secondarySmallButtonText}>Lägg till kostnad</Text>
-                          </Pressable>
-                        </View>
-                      ))}
-                    </View>
-                  ) : (
-                    <Text style={styles.budgetReadyText}>Inga saknade kostnader.</Text>
-                  )}
-                </View>
-              </View>
+              <BudgetWorkspace
+                budgetCenter={budgetCenter}
+                displayedNodes={displayedNodes}
+                formatPercentage={formatPercentage}
+                formatSek={formatSek}
+                isDark={isDark}
+                isMobile={isMobile}
+                styles={styles}
+                travelerCountText={travelerCountText}
+                onOpenBudgetCostEditor={openBudgetCostEditor}
+                onSetTravelerCountText={setTravelerCountText}
+              />
               ) : null}
 
               {activeView === 'days' ? (
-              <View style={[styles.panelSection, isDark && styles.panelDark]}>
-                <View style={styles.sectionHeaderRow}>
-                  <View>
-                    <SectionTitle title="Vad händer varje dag?" dark={isDark} />
-                    <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>Välj dag, följ tidslinjen och lägg till eller redigera stopp.</Text>
-                  </View>
-                  <View style={styles.plannerSearchWrap}>
-                    <TextInput
-                      value={plannerSearchText}
-                      onChangeText={setPlannerSearchText}
-                      placeholder="Sök stopp, plats, datum, pris..."
-                      placeholderTextColor={isDark ? '#737373' : '#78716c'}
-                      style={[styles.plannerSearchInput, isDark && styles.inputDark]}
-                    />
-                    {plannerSearchText.trim() ? (
-                      <Pressable style={styles.clearSearchButton} onPress={() => setPlannerSearchText('')}>
-                        <Text style={styles.clearSearchText}>Rensa</Text>
-                      </Pressable>
-                    ) : null}
-                  </View>
-                  {!isDemoMode ? (
-                    <View style={styles.dayHeaderActions}>
-                      <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={() => startNewPlannerStep('unscheduled')} disabled={isLoading}>
-                        <Text style={styles.secondaryButtonText}>Lägg till oschemalagt</Text>
-                      </Pressable>
-                      <Pressable testID="add-to-selected-day" style={[styles.commandButton, (isLoading || !selectedDayPlan) && styles.disabledButton]} onPress={() => selectedDayPlan && startNewPlannerStep(selectedDayPlan.key)} disabled={isLoading || !selectedDayPlan}>
-                        <Text style={styles.commandButtonText}>Lägg till i dag</Text>
-                      </Pressable>
-                    </View>
-                  ) : null}
-                </View>
-                {plannerSearchText.trim() ? (
-                  <Text style={styles.searchResultText}>{filteredStopCount} av {displayedNodes.length} stopp matchar sökningen.</Text>
-                ) : null}
-                {visibleDayPlans.length > 0 ? (
-                  <View style={styles.daySelectorRail}>
-                    {visibleDayPlans.map((dayPlan) => {
-                      const isSelected = selectedDayPlan?.key === dayPlan.key;
-                      const missingInfoCount = dayPlan.smartFlags.filter((flag) => flag !== 'Ser planerad ut').length;
-                      const routeText = dayPlan.summary.startPlace === dayPlan.summary.endPlace
-                        ? dayPlan.summary.startPlace
-                        : `${dayPlan.summary.startPlace} → ${dayPlan.summary.endPlace}`;
-
-                      return (
-                        <Pressable key={dayPlan.key} style={[styles.daySelectorCard, isSelected && styles.daySelectorCardActive]} onPress={() => setSelectedDayKey(dayPlan.key)}>
-                          <View style={styles.daySelectorHeader}>
-                            <Text style={[styles.daySelectorTitle, isSelected && styles.daySelectorTitleActive]}>{dayPlan.shortTitle}</Text>
-                            <Text style={[styles.daySelectorCount, isSelected && styles.daySelectorCountActive]}>{dayPlan.nodes.length} steg</Text>
-                          </View>
-                          <Text style={[styles.daySelectorDate, isSelected && styles.daySelectorDateActive]}>{formatDayKey(dayPlan.key)}</Text>
-                          <Text style={[styles.daySelectorRoute, isSelected && styles.daySelectorRouteActive]} numberOfLines={1}>{routeText}</Text>
-                          <Text style={[styles.daySelectorMissing, missingInfoCount === 0 && styles.daySelectorReady]}>{missingInfoCount > 0 ? `${missingInfoCount} att kolla` : 'Redo'}</Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                ) : null}
-                {selectedDayPlan ? (
-                  <View style={styles.selectedDaySummary}>
-                    <View>
-                      <Text style={[styles.dayTitle, isDark && styles.textDark]}>{selectedDayPlan.title.replace(' / ', ' - ')}</Text>
-                      <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>{selectedDayPlan.summary.startPlace} → {selectedDayPlan.summary.endPlace}</Text>
-                    </View>
-                    <View style={styles.selectedDayMetricRow}>
-                      <DayInsight label="Steg" value={`${selectedDayPlan.nodes.length}`} tone="neutral" />
-                      <DayInsight label="Körning" value={selectedDayPlan.insight.driveLabel} tone={selectedDayPlan.insight.isLongDrive ? 'warn' : 'neutral'} />
-                      <DayInsight label="Kostnad" value={selectedDayPlan.insight.costLabel} tone={selectedDayPlan.budget.missingCostCount > 0 ? 'warn' : 'good'} />
-                    </View>
-                  </View>
-                ) : null}
-                {visibleDayPlans.length === 0 ? (
-                  <View style={styles.emptySearchState}>
-                    <Text style={styles.emptySearchTitle}>Inga stopp hittades</Text>
-                    <Text style={styles.emptySearchText}>Testa ett annat ord, datum, plats eller pris.</Text>
-                  </View>
-                ) : null}
-                {selectedDayPlan ? (
-                  <DayCard
-                    key={selectedDayPlan.key}
-                    availableDayTargets={dayMoveTargets}
-                    dayPlan={selectedDayPlan}
-                    isDark={isDark}
-                    isDemoMode={isDemoMode}
-                    isLoading={isLoading}
-                    activeInlineEdit={activeInlineEdit}
-                    inlineEditMessage={inlineEditMessage}
-                    coordinateSearchNodeId={coordinateSearchNodeId}
-                    coordinateSearchQuery={coordinateSearchQuery}
-                    coordinateSearchResults={coordinateSearchResults}
-                    coordinateSearchMessage={coordinateSearchMessage}
-                    itineraryNodesLength={itineraryNodes.length}
-                    packingDraft={packingDraftByDay[selectedDayPlan.key] ?? ''}
-                    draftPlannerDayKey={draftPlannerDayKey}
-                    styles={styles}
-                    renderDayPlaceSearch={renderDayPlaceSearch}
-                    renderPlannerInlineEditor={renderPlannerInlineEditor}
-                    onStartPlaceSearch={startPlaceSearch}
-                    onStartNewPlannerStep={startNewPlannerStep}
-                    onRunChecklistAction={runChecklistAction}
-                    onTogglePackingItem={togglePackingItem}
-                    onAddPackingItem={addPackingItem}
-                    onSetPackingDraft={(dayKey: string, text: string) => setPackingDraftByDay((current) => ({ ...current, [dayKey]: text }))}
-                    onStartInlineEdit={startInlineEdit}
-                    onClearInlineEdit={clearInlineEdit}
-                    onInlineDraftChange={setActiveInlineDraftChanged}
-                    onSaveInlineField={saveInlineField}
-                    onStartCoordinateSearch={startCoordinateSearch}
-                    onChangeCoordinateSearchQuery={setCoordinateSearchQuery}
-                    onSearchCoordinatePlace={searchCoordinatePlace}
-                    onSelectCoordinatePlace={selectCoordinatePlace}
-                    onCancelCoordinateSearch={cancelCoordinateSearch}
-                    onMoveStop={moveStop}
-                    onMoveStopToDay={moveStopToDay}
-                    onRemoveStop={removeStop}
-                  />
-                ) : null}
-                {isMobile && selectedDayPlan ? (
-                  <View style={styles.mobileMapContext}>
-                    <View style={styles.contextMapHeader}>
-                      <View>
-                        <Text style={styles.overviewMapKicker}>Kartkontext</Text>
-                        <Text style={styles.contextMapTitle}>{selectedDayPlan.shortTitle}</Text>
-                      </View>
-                      <Pressable style={styles.secondarySmallButton} onPress={() => goToView('route')}>
-                        <Text style={styles.secondarySmallButtonText}>Rutt</Text>
-                      </Pressable>
-                    </View>
-                    <View style={styles.contextMapShell}>
-                      <NavigationMap nodes={selectedDayPlan.nodes} activeRoute={routeSummary.geometry ? routeSummary : demoRoute} followUser={false} compact />
-                    </View>
-                  </View>
-                ) : null}
-              </View>
+              <DaysWorkspace
+                activeInlineEdit={activeInlineEdit}
+                activeRoute={routeSummary}
+                availableDayTargets={dayMoveTargets}
+                coordinateSearchMessage={coordinateSearchMessage}
+                coordinateSearchNodeId={coordinateSearchNodeId}
+                coordinateSearchQuery={coordinateSearchQuery}
+                coordinateSearchResults={coordinateSearchResults}
+                dayPlans={dayPlans}
+                demoRoute={demoRoute}
+                displayedNodesLength={displayedNodes.length}
+                draftPlannerDayKey={draftPlannerDayKey}
+                filteredStopCount={filteredStopCount}
+                formatDayKey={formatDayKey}
+                inlineEditMessage={inlineEditMessage}
+                isDark={isDark}
+                isDemoMode={isDemoMode}
+                isLoading={isLoading}
+                isMobile={isMobile}
+                itineraryNodesLength={itineraryNodes.length}
+                packingDraft={selectedDayPlan ? packingDraftByDay[selectedDayPlan.key] ?? '' : ''}
+                plannerSearchText={plannerSearchText}
+                renderDayPlaceSearch={renderDayPlaceSearch}
+                renderPlannerInlineEditor={renderPlannerInlineEditor}
+                selectedDayPlan={selectedDayPlan}
+                selectedPlannerNodeId={selectedPlannerNodeId}
+                styles={styles}
+                visibleDayPlans={visibleDayPlans}
+                onAddPackingItem={addPackingItem}
+                onCancelCoordinateSearch={cancelCoordinateSearch}
+                onChangeCoordinateSearchQuery={setCoordinateSearchQuery}
+                onClearInlineEdit={clearInlineEdit}
+                onGoToRoute={() => goToView('route')}
+                onInlineDraftChange={setActiveInlineDraftChanged}
+                onMoveStop={moveStop}
+                onMoveStopToDay={moveStopToDay}
+                onRemoveStop={removeStop}
+                onRunChecklistAction={runChecklistAction}
+                onSaveInlineField={saveInlineField}
+                onSearchCoordinatePlace={searchCoordinatePlace}
+                onSelectCoordinatePlace={selectCoordinatePlace}
+                onSelectDay={setSelectedDayKey}
+                onSelectPlannerNode={selectPlannerNode}
+                onSetPackingDraft={(dayKey: string, text: string) => setPackingDraftByDay((current) => ({ ...current, [dayKey]: text }))}
+                onSetPlannerSearchText={setPlannerSearchText}
+                onStartCoordinateSearch={startCoordinateSearch}
+                onStartInlineEdit={startInlineEdit}
+                onStartNewPlannerStep={startNewPlannerStep}
+                onStartPlaceSearch={startPlaceSearch}
+                onTogglePackingItem={togglePackingItem}
+              />
               ) : null}
             </View>
             {!isMobile ? (
@@ -2819,150 +2387,6 @@ export default function App() {
       </SafeAreaView>
     </SafeAreaProvider>
   );
-}
-
-function Metric({ label, value, accent, dark }: { label: string; value: string; accent: string; dark: boolean }) {
-  return (
-    <View style={[styles.metric, dark && styles.panelDark, { borderTopColor: accent }]}>
-      <Text style={[styles.metricLabel, dark && styles.textMutedDark]}>{label}</Text>
-      <Text style={[styles.metricValue, dark && styles.textDark]}>{value}</Text>
-    </View>
-  );
-}
-
-function BudgetMetricCard({ label, value, detail, accent }: { label: string; value: string; detail: string; accent: string }) {
-  return (
-    <View style={[styles.budgetCard, { borderTopColor: accent }]}>
-      <Text style={styles.budgetLabel}>{label}</Text>
-      <Text style={styles.budgetValue}>{value}</Text>
-      <Text style={styles.budgetDetail}>{detail}</Text>
-    </View>
-  );
-}
-
-function DayInsight({ label, value, tone }: { label: string; value: string; tone: 'good' | 'warn' | 'neutral' }) {
-  return (
-    <View style={[styles.dayInsightCard, tone === 'good' && styles.dayInsightGood, tone === 'warn' && styles.dayInsightWarn]}>
-      <Text style={styles.dayInsightLabel}>{label}</Text>
-      <Text style={styles.dayInsightValue}>{value}</Text>
-    </View>
-  );
-}
-
-function OverviewFocusCard({ label, title, detail, accent }: { label: string; title: string; detail: string; accent: string }) {
-  return (
-    <View style={[styles.overviewFocusCard, { borderTopColor: accent }]}>
-      <Text style={styles.overviewFocusLabel}>{label}</Text>
-      <Text style={styles.overviewFocusTitle}>{title}</Text>
-      <Text style={styles.overviewFocusDetail}>{detail}</Text>
-    </View>
-  );
-}
-
-function ExplorePlaceCard({
-  place,
-  primaryLabel,
-  styles: cardStyles,
-  onPrimary,
-  onMap,
-  onRemove,
-}: {
-  place: ExplorePlace;
-  primaryLabel: string;
-  styles: typeof styles;
-  onPrimary: () => void;
-  onMap: () => void;
-  onRemove: (() => void) | null;
-}) {
-  const placeholderType = placeholderTypeForPlace(place);
-  const imageSource = imageSourceForPlace(place);
-
-  return (
-    <View style={cardStyles.explorePlaceCard}>
-      <TravelPlaceholder
-        type={placeholderType}
-        styles={cardStyles}
-        {...(imageSource === 'google_place_photo' ? { label: 'Google bild redo' } : {})}
-      />
-      <View style={cardStyles.explorePlaceBody}>
-        <Text style={cardStyles.explorePlaceTitle} numberOfLines={2}>{place.title}</Text>
-        <Text style={cardStyles.explorePlaceSubtitle} numberOfLines={2}>{place.place || place.description || place.category}</Text>
-        {place.description ? <Text style={cardStyles.explorePlaceDescription} numberOfLines={2}>{place.description}</Text> : null}
-        <View style={cardStyles.exploreChipRow}>
-          <Text style={cardStyles.exploreTypeChip}>{place.category}</Text>
-          {place.statusChips.slice(0, 2).map((chip) => (
-            <Text key={chip} style={cardStyles.exploreStatusChip}>{chip}</Text>
-          ))}
-        </View>
-      </View>
-      <View style={cardStyles.exploreActionRow}>
-        <Pressable style={cardStyles.smallButton} onPress={onPrimary}>
-          <Text style={cardStyles.smallButtonText}>{primaryLabel}</Text>
-        </Pressable>
-        <Pressable style={cardStyles.secondarySmallButton} onPress={onMap}>
-          <Text style={cardStyles.secondarySmallButtonText}>Visa på karta</Text>
-        </Pressable>
-        {onRemove ? (
-          <Pressable style={cardStyles.ghostSmallButton} onPress={onRemove}>
-            <Text style={cardStyles.ghostSmallButtonText}>Ta bort</Text>
-          </Pressable>
-        ) : null}
-      </View>
-    </View>
-  );
-}
-
-function RecommendedPlaceCard({ place, styles: cardStyles, onAdd }: { place: ExplorePlace; styles: typeof styles; onAdd: () => void }) {
-  return (
-    <View style={cardStyles.recommendedPlaceCard}>
-      <TravelPlaceholder type={placeholderTypeForPlace(place)} styles={cardStyles} compact />
-      <View style={cardStyles.recommendedPlaceCopy}>
-        <Text style={cardStyles.recommendedPlaceTitle} numberOfLines={2}>{place.title}</Text>
-        <Text style={cardStyles.recommendedPlaceMeta} numberOfLines={1}>{place.category}{place.place ? ` / ${place.place}` : ''}</Text>
-      </View>
-      <Pressable style={cardStyles.plusButton} onPress={onAdd}>
-        <Text style={cardStyles.plusButtonText}>+</Text>
-      </Pressable>
-    </View>
-  );
-}
-
-function TravelPlaceholder({ type, styles: cardStyles, compact = false, label }: { type: TravelPlaceholderType; styles: typeof styles; compact?: boolean; label?: string }) {
-  const visual = placeholderVisual(type);
-  return (
-    <View style={[cardStyles.travelPlaceholder, compact && cardStyles.travelPlaceholderCompact, { backgroundColor: visual.backgroundColor }]}>
-      <View style={[cardStyles.travelPlaceholderShape, { backgroundColor: visual.accentColor }]} />
-      <Text style={[cardStyles.travelPlaceholderIcon, { color: visual.accentColor }]}>{visual.icon}</Text>
-      <Text style={cardStyles.travelPlaceholderLabel}>{label ?? visual.label}</Text>
-    </View>
-  );
-}
-
-function placeholderVisual(type: TravelPlaceholderType): { icon: string; label: string; backgroundColor: string; accentColor: string } {
-  switch (type) {
-    case 'lodging':
-      return { icon: 'H', label: 'Boende', backgroundColor: '#eef7f2', accentColor: '#0f766e' };
-    case 'activity':
-      return { icon: 'A', label: 'Aktivitet', backgroundColor: '#fff7df', accentColor: '#d97706' };
-    case 'food':
-      return { icon: 'F', label: 'Mat', backgroundColor: '#fff1f2', accentColor: '#be123c' };
-    case 'fuel':
-      return { icon: 'B', label: 'Bränsle', backgroundColor: '#eef2ff', accentColor: '#4f46e5' };
-    case 'transport':
-      return { icon: 'T', label: 'Transport', backgroundColor: '#eff6ff', accentColor: '#2563eb' };
-    case 'budget':
-      return { icon: 'SEK', label: 'Budget', backgroundColor: '#f8faf7', accentColor: '#475569' };
-    case 'notes-explore':
-      return { icon: 'i', label: 'Tips', backgroundColor: '#fffefa', accentColor: '#d97706' };
-    case 'route-day':
-      return { icon: 'R', label: 'Rutt', backgroundColor: '#eef7f2', accentColor: '#0f766e' };
-    default:
-      return { icon: 'P', label: 'Plats', backgroundColor: '#f8faf7', accentColor: '#52616f' };
-  }
-}
-
-function SectionTitle({ title, dark }: { title: string; dark: boolean }) {
-  return <Text style={[styles.sectionTitle, dark && styles.textDark]}>{title}</Text>;
 }
 
 function formatNodeType(type: ItineraryNode['type']): string {
@@ -4295,7 +3719,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   mainColumn: {
-    flex: 0.92,
+    flex: 1,
+    flexShrink: 1,
     minWidth: 0,
     gap: 16,
   },
@@ -4309,8 +3734,8 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   workspaceMapContext: {
-    width: '48%',
-    minWidth: 520,
+    width: '38%',
+    minWidth: 360,
     maxWidth: 880,
     flexShrink: 0,
     gap: 14,
@@ -4736,6 +4161,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingBottom: 2,
   },
+  routeMapSummaryCard: {
+    gap: 10,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d8e2eb',
+    backgroundColor: '#f8fbf9',
+    padding: 16,
+  },
   routeStageMeta: {
     color: '#52616f',
     fontSize: 13,
@@ -5151,6 +4584,11 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#d8e2eb',
     backgroundColor: '#fbfdff',
+  },
+  overviewRouteSummaryGrid: {
+    flexDirection: 'row',
+    gap: 10,
+    flexWrap: 'wrap',
   },
   metric: {
     flex: 1,
@@ -5902,6 +5340,10 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#ebe7df',
     padding: 14,
+  },
+  timelineItemEditing: {
+    borderColor: '#0f766e',
+    backgroundColor: '#f3fbf7',
   },
   timeRail: {
     width: 62,

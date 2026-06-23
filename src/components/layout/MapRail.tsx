@@ -36,7 +36,7 @@ export function MapRail({
   const mapNodes = activeView === 'days' && selectedDayPlan ? selectedDayPlan.nodes : displayedNodes;
 
   return (
-    <View style={styles.workspaceMapContext}>
+    <View testID="desktop-map-rail" style={styles.workspaceMapContext}>
       <View style={styles.contextMapCard}>
         <View style={styles.contextMapHeader}>
           <View>
@@ -47,7 +47,7 @@ export function MapRail({
             <Text style={styles.secondarySmallButtonText}>Rutt</Text>
           </Pressable>
         </View>
-        <View style={styles.contextMapShell}>
+        <View testID="primary-map-surface" style={styles.contextMapShell}>
           <NavigationMap nodes={mapNodes} activeRoute={activeRoute} followUser={false} compact />
         </View>
       </View>

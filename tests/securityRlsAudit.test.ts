@@ -68,12 +68,32 @@ test('explore items migration is trip scoped and authenticated only', () => {
   assert.match(exploreItemsSql, /create table if not exists public\.trip_explore_items/i);
   assert.match(exploreItemsSql, /alter table public\.trip_explore_items enable row level security/i);
   assert.match(exploreItemsSql, /public\.is_trip_member\(trip_id\) or public\.is_trip_owner\(trip_id\)/i);
-  assert.match(exploreItemsSql, /public\.is_trip_editor\(trip_id\)/i);
   assert.match(exploreItemsSql, /revoke all on public\.trip_explore_items from public/i);
   assert.match(exploreItemsSql, /revoke all on public\.trip_explore_items from anon/i);
-  assert.match(exploreItemsSql, /grant select, insert, update, delete on public\.trip_explore_items to authenticated/i);
+  assert.match(exploreItemsSql, /grant select, insert, update on public\.trip_explore_items to authenticated/i);
+  assert.doesNotMatch(exploreItemsSql, /grant\s+[^;]*delete[^;]*on public\.trip_explore_items to authenticated/i);
   assert.doesNotMatch(exploreItemsSql, /using\s*\(\s*true\s*\)/i);
   assert.doesNotMatch(exploreItemsSql, /with check\s*\(\s*true\s*\)/i);
+});
+
+test('explore items write policies prevent spoofing and allow soft delete updates', () => {
+  assert.match(exploreItemsSql, /create policy "editors insert explore items" on public\.trip_explore_items/i);
+  assert.match(exploreItemsSql, /for insert with check/i);
+  assert.match(exploreItemsSql, /created_by = auth\.uid\(\)/i);
+  assert.match(exploreItemsSql, /public\.is_trip_editor\(trip_id\) or public\.is_trip_owner\(trip_id\)/i);
+
+  assert.match(exploreItemsSql, /create policy "editors update explore items" on public\.trip_explore_items/i);
+  assert.match(exploreItemsSql, /for update using \(public\.is_trip_editor\(trip_id\) or public\.is_trip_owner\(trip_id\)\)/i);
+  assert.match(exploreItemsSql, /deleted_at timestamptz/i);
+  assert.match(exploreItemsSql, /grant select, insert, update on public\.trip_explore_items to authenticated/i);
+  assert.doesNotMatch(exploreItemsSql, /for delete/i);
+});
+
+test('explore items created_by cannot be changed after insert', () => {
+  assert.match(exploreItemsSql, /create or replace function public\.prevent_trip_explore_created_by_change\(\)/i);
+  assert.match(exploreItemsSql, /if tg_op = 'UPDATE' and new\.created_by <> old\.created_by then/i);
+  assert.match(exploreItemsSql, /raise exception 'created_by cannot be changed'/i);
+  assert.match(exploreItemsSql, /create trigger trip_explore_items_protect_created_by before update/i);
 });
 
 test('PostGIS spatial_ref_sys is not treated as a Roadtrip app table', () => {

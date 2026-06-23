@@ -38,6 +38,25 @@ drop trigger if exists trip_explore_items_touch on public.trip_explore_items;
 create trigger trip_explore_items_touch before update on public.trip_explore_items
 for each row execute function public.touch_updated_at();
 
+create or replace function public.prevent_trip_explore_created_by_change()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  if tg_op = 'UPDATE' and new.created_by <> old.created_by then
+    raise exception 'created_by cannot be changed';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trip_explore_items_protect_created_by on public.trip_explore_items;
+create trigger trip_explore_items_protect_created_by before update on public.trip_explore_items
+for each row execute function public.prevent_trip_explore_created_by_change();
+
 alter table public.trip_explore_items enable row level security;
 
 drop policy if exists "members read explore items" on public.trip_explore_items;
@@ -45,9 +64,18 @@ create policy "members read explore items" on public.trip_explore_items
 for select using (public.is_trip_member(trip_id) or public.is_trip_owner(trip_id));
 
 drop policy if exists "editors manage explore items" on public.trip_explore_items;
-create policy "editors manage explore items" on public.trip_explore_items
-for all using (public.is_trip_editor(trip_id)) with check (public.is_trip_editor(trip_id));
+drop policy if exists "editors insert explore items" on public.trip_explore_items;
+create policy "editors insert explore items" on public.trip_explore_items
+for insert with check (
+  (public.is_trip_editor(trip_id) or public.is_trip_owner(trip_id))
+  and created_by = auth.uid()
+);
+
+drop policy if exists "editors update explore items" on public.trip_explore_items;
+create policy "editors update explore items" on public.trip_explore_items
+for update using (public.is_trip_editor(trip_id) or public.is_trip_owner(trip_id))
+with check (public.is_trip_editor(trip_id) or public.is_trip_owner(trip_id));
 
 revoke all on public.trip_explore_items from public;
 revoke all on public.trip_explore_items from anon;
-grant select, insert, update, delete on public.trip_explore_items to authenticated;
+grant select, insert, update on public.trip_explore_items to authenticated;
