@@ -13,13 +13,12 @@ type RouteWorkspaceProps = {
   formatDuration: (seconds: number) => string;
   formatTime: (value?: string | null) => string;
   isDark: boolean;
-  isDemoMode: boolean;
   isLoading: boolean;
   isMobile: boolean;
   missingCoordinateCount: number;
   styles: WorkspaceStyles;
   tripName: string;
-  onUpdateMissingCoordinates: () => void;
+  onGoToDays: () => void;
 };
 
 export function RouteWorkspace({
@@ -31,13 +30,12 @@ export function RouteWorkspace({
   formatDuration,
   formatTime,
   isDark,
-  isDemoMode,
   isLoading,
   isMobile,
   missingCoordinateCount,
   styles,
   tripName,
-  onUpdateMissingCoordinates,
+  onGoToDays,
 }: RouteWorkspaceProps) {
   const routeForMap = activeRoute.geometry ? activeRoute : demoRoute;
 
@@ -50,13 +48,13 @@ export function RouteWorkspace({
             <Text style={styles.routeStageTitle}>{isMobile ? 'Ruttkarta' : 'Ordna resans stopp'}</Text>
           </View>
           <View style={styles.routeHeaderActions}>
-            {!isDemoMode && missingCoordinateCount > 0 ? (
+            {missingCoordinateCount > 0 ? (
               <Pressable
                 style={[styles.routeActionButton, isLoading && styles.disabledButton]}
-                onPress={onUpdateMissingCoordinates}
+                onPress={onGoToDays}
                 disabled={isLoading}
               >
-                <Text style={styles.routeActionButtonText}>Fyll i kartpositioner</Text>
+                <Text style={styles.routeActionButtonText}>Fixa position i Dagar</Text>
               </Pressable>
             ) : null}
             <View style={styles.routeBadge}>
@@ -89,7 +87,7 @@ export function RouteWorkspace({
         <View style={styles.routeStageFooter}>
           <Text style={styles.routeStageMeta}>{formatDistance(activeRoute.distanceMeters)} rutt</Text>
           <Text style={styles.routeStageMeta}>{formatDuration(activeRoute.durationSeconds)} körning</Text>
-          {missingCoordinateCount > 0 ? <Text style={styles.routeStageMeta}>{missingCoordinateCount} saknar kartposition</Text> : null}
+          {missingCoordinateCount > 0 ? <Text style={styles.routeStageMeta}>{missingCoordinateCount} positioner att fixa</Text> : null}
         </View>
       </View>
 
@@ -113,7 +111,7 @@ export function RouteWorkspace({
               <View style={styles.routeStopCopy}>
                 <Text style={styles.routeStopTitle}>{node.title}</Text>
                 <Text style={styles.routeStopMeta}>
-                  {[formatDateLabel(node.startsAt?.slice(0, 10) ?? 'unscheduled'), formatTime(node.startsAt), node.location ? 'kartposition klar' : 'saknar kartposition'].filter(Boolean).join(' / ')}
+                  {[formatDateLabel(node.startsAt?.slice(0, 10) ?? 'unscheduled'), formatTime(node.startsAt), node.location ? 'kartposition klar' : 'Fixa position i Dagar'].filter(Boolean).join(' / ')}
                 </Text>
               </View>
             </View>

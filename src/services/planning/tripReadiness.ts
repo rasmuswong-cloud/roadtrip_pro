@@ -149,11 +149,11 @@ function buildReadinessIssues(input: Required<TripReadinessInput>): TripReadines
     issues.push({
       id: 'coordinates_missing',
       group: 'route_map',
-      label: `${input.missingCoordinateCount} stopp saknar kartposition`,
+      label: `${input.missingCoordinateCount} positioner att fixa`,
       count: input.missingCoordinateCount,
-      detail: 'Kartpositioner behövs för markörer och kartpreview.',
-      actionLabel: 'Fyll i kartpositioner',
-      target: 'route',
+      detail: 'Fixa positioner i Dagar så rutten och kartan blir användbara.',
+      actionLabel: 'Fixa position i Dagar',
+      target: 'days',
     });
   }
 
@@ -188,7 +188,7 @@ function buildReadinessIssues(input: Required<TripReadinessInput>): TripReadines
       label: `${input.missingCostCount} steg saknar kostnad`,
       count: input.missingCostCount,
       detail: 'Saknade kostnader gör totalen och per-person-beloppet för låga.',
-      actionLabel: 'Lägg till saknade kostnader',
+      actionLabel: 'Fyll i budget',
       target: 'budget',
     });
   }

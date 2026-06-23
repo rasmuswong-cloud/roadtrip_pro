@@ -38,7 +38,7 @@ test('empty trip is not ready and points to route review', () => {
   assert.equal(readiness.issues.some((issue) => issue.id === 'days_missing'), true);
 });
 
-test('missing coordinates are detected and route is the next workspace', () => {
+test('missing coordinates are detected and days is the next workspace', () => {
   const readiness = buildTripReadiness({
     stopCount: 9,
     dayCount: 7,
@@ -49,9 +49,9 @@ test('missing coordinates are detected and route is the next workspace', () => {
   });
 
   const issue = readiness.issues.find((candidate) => candidate.id === 'coordinates_missing');
-  assert.equal(readiness.nextStep.target, 'route');
-  assert.equal(readiness.nextStep.label, 'Fyll i kartpositioner');
-  assert.equal(issue?.label, '4 stopp saknar kartposition');
+  assert.equal(readiness.nextStep.target, 'days');
+  assert.equal(readiness.nextStep.label, 'Fixa position i Dagar');
+  assert.equal(issue?.label, '4 positioner att fixa');
   assert.equal(readiness.groups.find((group) => group.key === 'route_map')?.label, 'Rutt & karta');
 });
 
@@ -66,7 +66,7 @@ test('missing costs are detected and budget is the next workspace', () => {
   });
 
   assert.equal(readiness.nextStep.target, 'budget');
-  assert.equal(readiness.nextStep.label, 'Lägg till saknade kostnader');
+  assert.equal(readiness.nextStep.label, 'Fyll i budget');
   assert.equal(readiness.issues.find((issue) => issue.id === 'costs_missing')?.count, 6);
 });
 

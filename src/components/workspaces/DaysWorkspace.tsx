@@ -119,7 +119,9 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
       <View style={styles.sectionHeaderRow}>
         <View>
           <SectionTitle title="Vad händer varje dag?" dark={isDark} styles={styles} />
-          <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>Välj dag, följ tidslinjen och lägg till eller redigera stopp.</Text>
+          <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
+            {isDemoMode ? 'Tryck Redigera för att ändra tider, platser, kostnader och stopp.' : 'Välj dag, följ tidslinjen och lägg till eller redigera stopp.'}
+          </Text>
         </View>
         <View style={styles.plannerSearchWrap}>
           <TextInput
@@ -141,7 +143,7 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
               <Text style={styles.secondaryButtonText}>Lägg till oschemalagt</Text>
             </Pressable>
             <Pressable testID="add-to-selected-day" style={[styles.commandButton, !selectedDayPlan && styles.disabledButton]} onPress={() => selectedDayPlan && onStartNewPlannerStep(selectedDayPlan.key)} disabled={!selectedDayPlan}>
-              <Text style={styles.commandButtonText}>Lägg till stopp i denna dag</Text>
+              <Text style={styles.commandButtonText}>Lägg till stopp</Text>
             </Pressable>
           </View>
         ) : null}

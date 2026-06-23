@@ -103,7 +103,7 @@ function InlineEditableCore(props: InlineEditorProps & { multiline: boolean }) {
 
     const validation = validateInlineFieldValue(node, field, draft);
     if (!validation.valid) {
-      setError(validation.error ?? 'Kontrollera fÃ¤ltet.');
+      setError(validation.error ?? 'Kontrollera fältet.');
       return;
     }
 
@@ -119,7 +119,7 @@ function InlineEditableCore(props: InlineEditorProps & { multiline: boolean }) {
       await onSave(node, field, draft);
       onCancel();
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Kunde inte spara fÃ¤ltet.');
+      setError(saveError instanceof Error ? saveError.message : 'Kunde inte spara fältet.');
     } finally {
       savingRef.current = false;
       setIsSaving(false);
@@ -169,10 +169,10 @@ function InlineEditableCore(props: InlineEditorProps & { multiline: boolean }) {
       {error ? <Text style={styles.validationText}>{error}</Text> : null}
       <View style={styles.stopActions}>
         <Pressable style={[styles.smallButton, (isSaving || loading) && styles.disabledButton]} onPress={() => void saveEdit()} disabled={isSaving || loading}>
-          <Text style={styles.smallButtonText}>{isSaving ? 'Sparar...' : 'âœ“'}</Text>
+          <Text style={styles.smallButtonText}>{isSaving ? 'Sparar...' : 'Spara'}</Text>
         </Pressable>
         <Pressable style={styles.secondarySmallButton} onPress={cancelEdit} disabled={isSaving}>
-          <Text style={styles.secondarySmallButtonText}>Ã—</Text>
+          <Text style={styles.secondarySmallButtonText}>Avbryt</Text>
         </Pressable>
       </View>
     </View>
@@ -221,7 +221,7 @@ export function InlineEditableSelect(props: InlineEditorProps & { options: Inlin
 
     const validation = validateInlineFieldValue(node, field, value);
     if (!validation.valid) {
-      setError(validation.error ?? 'Kontrollera fÃ¤ltet.');
+      setError(validation.error ?? 'Kontrollera fältet.');
       return;
     }
 
@@ -239,7 +239,7 @@ export function InlineEditableSelect(props: InlineEditorProps & { options: Inlin
       onDraftChange(false);
       onCancel();
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Kunde inte spara fÃ¤ltet.');
+      setError(saveError instanceof Error ? saveError.message : 'Kunde inte spara fältet.');
     } finally {
       savingRef.current = false;
       setIsSaving(false);

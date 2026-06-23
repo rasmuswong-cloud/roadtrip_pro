@@ -50,9 +50,9 @@ export function OverviewWorkspace({
   const routeForMap = activeRoute.geometry ? activeRoute : demoRoute;
   const primaryActions = [
     { label: 'Redigera dagar', target: 'days' as AppView },
-    { label: 'Gå till Rutt', target: 'route' as AppView },
-    { label: 'Fyll i kostnad', target: 'budget' as AppView },
-    { label: 'Utforska idéer', target: 'explore' as AppView },
+    { label: 'Kontrollera rutt', target: 'route' as AppView },
+    { label: 'Fyll i budget', target: 'budget' as AppView },
+    { label: 'Spara idéer', target: 'explore' as AppView },
   ];
   const openIssues = tripReadiness.groups.flatMap((group) => group.issues).slice(0, 3);
 

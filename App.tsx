@@ -2276,13 +2276,12 @@ export default function App() {
                 formatDuration={formatDuration}
                 formatTime={formatTime}
                 isDark={isDark}
-                isDemoMode={isDemoMode}
                 isLoading={isLoading}
                 isMobile={isMobile}
                 missingCoordinateCount={missingCoordinateCount}
                 styles={styles}
                 tripName={demoTrip.name}
-                onUpdateMissingCoordinates={() => void updateMissingCoordinatesForAllStops()}
+                onGoToDays={() => goToView('days')}
               />
               ) : null}
 

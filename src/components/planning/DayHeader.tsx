@@ -63,7 +63,7 @@ export function DayHeader({
             style={styles.commandButton}
             onPress={() => onStartNewPlannerStep(dayPlan.key)}
           >
-            <Text style={styles.commandButtonText}>Lägg till stopp i denna dag</Text>
+            <Text style={styles.commandButtonText}>Lägg till stopp</Text>
           </Pressable>
         </View>
       ) : null}

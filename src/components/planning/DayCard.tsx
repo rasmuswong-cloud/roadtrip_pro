@@ -181,7 +181,7 @@ export default function DayCard(props: DayCardProps) {
       {dayPlan.nodes.length === 0 ? (
         <View style={styles.emptySearchState}>
           <Text style={styles.emptySearchTitle}>Inget planerat än</Text>
-          <Text style={styles.emptySearchText}>Börja med “Lägg till stopp i denna dag”. När stopp finns här kan du klicka på tid, plats, kostnad eller “Redigera stopp” för att fylla i detaljer.</Text>
+          <Text style={styles.emptySearchText}>Börja med “Lägg till stopp”. När stopp finns här kan du klicka på tid, plats, kostnad eller “Redigera” för att fylla i detaljer.</Text>
         </View>
       ) : null}
       {dayPlan.nodes.map((node) => {
@@ -192,6 +192,7 @@ export default function DayCard(props: DayCardProps) {
         const notePreview = compactNote(node.notes);
         const canEdit = itineraryNodesLength > 0 && !isDemoMode;
         const targetDays = availableDayTargets.filter((target) => target.key !== dayPlan.key);
+        const missingMapPosition = canEdit && !node.location;
         const showCoordinatePrompt = canEdit && Boolean(node.location && inlineFieldValue(node, 'place'));
         const coordinateSearchOpen = coordinateSearchNodeId === node.id;
         const missingInfoChips = buildMissingInfoChips(node);
@@ -301,6 +302,15 @@ export default function DayCard(props: DayCardProps) {
                     )}
                   </View>
                   <MissingInfoChips chips={missingInfoChips} />
+                  {missingMapPosition ? (
+                    <Pressable
+                      style={[styles.secondarySmallButton, isLoading && styles.disabledButton]}
+                      onPress={() => onStartCoordinateSearch(node)}
+                      disabled={isLoading}
+                    >
+                      <Text style={styles.secondarySmallButtonText}>Fixa position</Text>
+                    </Pressable>
+                  ) : null}
                   {showCoordinatePrompt ? (
                     <View style={styles.coordinateWarningBox}>
                       <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
@@ -311,7 +321,7 @@ export default function DayCard(props: DayCardProps) {
                         onPress={() => onStartCoordinateSearch(node)}
                         disabled={isLoading}
                       >
-                        <Text style={styles.secondarySmallButtonText}>Sök ny plats</Text>
+                        <Text style={styles.secondarySmallButtonText}>Fixa position</Text>
                       </Pressable>
                     </View>
                   ) : null}
@@ -393,7 +403,7 @@ export default function DayCard(props: DayCardProps) {
                         onPress={() => setOpenMenuNodeId((current) => (current === node.id ? null : node.id))}
                         disabled={isLoading}
                       >
-                        <Text style={dayCardStyles.iconMenuText}>Mer</Text>
+                        <Text style={dayCardStyles.iconMenuText}>Redigera</Text>
                       </Pressable>
                       {menuOpen ? (
                         <View style={dayCardStyles.stopMenuPanel}>
@@ -417,7 +427,7 @@ export default function DayCard(props: DayCardProps) {
                               setMovePickerNodeId(null);
                             }}
                           >
-                            <Text style={styles.secondarySmallButtonText}>Redigera stopp</Text>
+                            <Text style={styles.secondarySmallButtonText}>Redigera</Text>
                           </Pressable>
                           <Pressable
                             style={dayCardStyles.stopMenuItem}
@@ -510,7 +520,7 @@ export default function DayCard(props: DayCardProps) {
                     style={styles.secondarySmallButton}
                     onPress={() => onSelectPlannerNode(node.id)}
                   >
-                    <Text style={styles.secondarySmallButtonText}>Redigera stopp</Text>
+                    <Text style={styles.secondarySmallButtonText}>Redigera</Text>
                   </Pressable>
                   <Pressable style={styles.secondarySmallButton} onPress={() => void onMoveStop(node.id, -1)} disabled={isLoading}>
                     <Text style={styles.secondarySmallButtonText}>Upp</Text>

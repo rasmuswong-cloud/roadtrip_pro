@@ -51,9 +51,9 @@ export function MapRail({
         <Text style={styles.contextPanelText}>{formatDuration(activeRoute.durationSeconds)} / {displayedNodes.length} stopp</Text>
         {missingCoordinateCount > 0 ? (
           <>
-            <Text style={styles.warningText}>Vissa stopp saknar position.</Text>
+            <Text style={styles.warningText}>Positioner behöver fixas i Dagar.</Text>
             <Pressable style={styles.secondarySmallButton} onPress={() => onGoToView('days')}>
-              <Text style={styles.secondarySmallButtonText}>Gå till Dagar</Text>
+              <Text style={styles.secondarySmallButtonText}>Fixa position i Dagar</Text>
             </Pressable>
           </>
         ) : null}

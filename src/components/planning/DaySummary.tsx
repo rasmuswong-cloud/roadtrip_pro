@@ -21,7 +21,7 @@ export function DaySummary({ dayPlan, styles }: DaySummaryProps) {
           <Text style={styles.dayInsightValue}>{dayPlan.insight.activitiesLabel}</Text>
         </View>
         <View style={[styles.dayInsightCard, dayPlan.insight.isLongDrive ? styles.dayInsightWarn : null]}>
-          <Text style={styles.dayInsightLabel}>KÃ¶rning</Text>
+          <Text style={styles.dayInsightLabel}>Körning</Text>
           <Text style={styles.dayInsightValue}>{dayPlan.insight.driveLabel}</Text>
         </View>
         <View style={[styles.dayInsightCard, dayPlan.budget.missingCostCount > 0 ? styles.dayInsightWarn : styles.dayInsightGood]}>

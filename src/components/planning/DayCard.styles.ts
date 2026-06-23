@@ -123,7 +123,7 @@ export const dayCardStyles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   iconMenuButton: {
-    minWidth: 44,
+    minWidth: 74,
     minHeight: 34,
     alignItems: 'center',
     justifyContent: 'center',
