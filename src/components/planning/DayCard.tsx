@@ -7,13 +7,11 @@ import { dayCardStyles } from './DayCard.styles';
 import {
   buildMissingInfoChips,
   compactNote,
-  formatDistance,
-  formatDuration,
   formatItineraryTime,
   formatRawNodeCost,
-  formatSek,
   nodeColor,
 } from './dayCardViewModel';
+import { DayHeader } from './DayHeader';
 import { DaySummary } from './DaySummary';
 import { MissingInfoChips } from './MissingInfoChips';
 
@@ -400,8 +398,6 @@ export default function DayCard(props: DayCardProps) {
   const [openMenuNodeId, setOpenMenuNodeId] = useState<string | null>(null);
   const [movePickerNodeId, setMovePickerNodeId] = useState<string | null>(null);
   const [pendingDeleteNodeId, setPendingDeleteNodeId] = useState<string | null>(null);
-  const visibleFlags = dayPlan.smartFlags.length > 0 ? dayPlan.smartFlags : ['Ser planerad ut'];
-  const displayedFlags = expandedFlags ? visibleFlags : visibleFlags.slice(0, 3);
 
   function toggleNodeDetails(nodeId: string) {
     setExpandedNodeIds((current) => {
@@ -417,42 +413,17 @@ export default function DayCard(props: DayCardProps) {
 
   return (
     <View key={dayPlan.key} style={[styles.dayGroup, isDark && styles.innerPanelDark]}>
-      <View style={styles.dayHeader}>
-        <View>
-          <Text style={[styles.dayTitle, isDark && styles.textDark]}>{dayPlan.title}</Text>
-          <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
-            {dayPlan.nodes.length} stopp / {formatDistance(dayPlan.route.distanceMeters)} / {formatDuration(dayPlan.route.durationSeconds)} / {formatSek(dayPlan.budget.total)}
-          </Text>
-          <View style={styles.smartFlagList}>
-            {displayedFlags.map((flag) => (
-              <Text key={flag} style={[styles.smartFlag, flag === 'Ser planerad ut' && styles.smartFlagGood]}>{flag}</Text>
-            ))}
-            {visibleFlags.length > 3 ? (
-              <Pressable style={dayCardStyles.smartFlagMore} onPress={() => setExpandedFlags((current) => !current)}>
-                <Text style={dayCardStyles.smartFlagMoreText}>{expandedFlags ? 'Visa färre' : `+${visibleFlags.length - 3} fler`}</Text>
-              </Pressable>
-            ) : null}
-          </View>
-        </View>
-        {!isDemoMode ? (
-          <View style={styles.dayHeaderActions}>
-            <Pressable
-              style={[styles.secondaryButton, isLoading && styles.disabledButton]}
-              onPress={() => onStartPlaceSearch(dayPlan.key, dayPlan.insight.hasLodging ? 'restaurang eller aktivitet' : 'camping eller hotell')}
-              disabled={isLoading}
-            >
-              <Text style={styles.secondaryButtonText}>Sök plats</Text>
-            </Pressable>
-            <Pressable
-              testID="day-card-add-stop"
-              style={styles.commandButton}
-              onPress={() => onStartNewPlannerStep(dayPlan.key)}
-            >
-              <Text style={styles.commandButtonText}>Lägg till stopp i denna dag</Text>
-            </Pressable>
-          </View>
-        ) : null}
-      </View>
+      <DayHeader
+        dayPlan={dayPlan}
+        expandedFlags={expandedFlags}
+        isDark={isDark}
+        isDemoMode={isDemoMode}
+        isLoading={isLoading}
+        styles={styles}
+        onToggleExpandedFlags={() => setExpandedFlags((current) => !current)}
+        onStartPlaceSearch={onStartPlaceSearch}
+        onStartNewPlannerStep={onStartNewPlannerStep}
+      />
       {renderDayPlaceSearch(dayPlan.key)}
       {draftPlannerDayKey === dayPlan.key ? renderPlannerInlineEditor('new') : null}
       <DaySummary dayPlan={dayPlan} styles={styles} />
