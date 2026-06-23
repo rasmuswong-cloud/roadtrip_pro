@@ -1,121 +1,75 @@
-# Roadtrip Pro – Roadmap
+# Roadtrip Pro - Roadmap
 
-## Övergripande mål
+## Overgripande mal
 
-Roadtrip Pro ska bli en stabil och användarvänlig app för att planera en roadtrip före avresa.
+Roadtrip Pro ska bli en stabil och anvandarvanlig app for att planera en roadtrip fore avresa.
 
-Utvecklingen prioriteras i följande ordning:
+Utvecklingen prioriteras i foljande ordning:
 
 1. korrekt och stabil datalagring
 2. komplett dagplanering
-3. tydlig och responsiv användarupplevelse
+3. tydlig och responsiv anvandarupplevelse
 4. routing, delning och offlinefunktioner
-5. säkert AI-stöd
+5. sakert AI-stod
 6. produktionskvalitet
 
-Statusvärden:
+Statusvarden:
 
-* **Ej påbörjad**
-* **Pågående**
+* **Ej paborjad**
+* **Pagaende**
 * **Delvis klar**
 * **Klar**
 
 ---
 
-## Fas 1 – Stabilt dataflöde
+## Fas 1 - Stabilt dataflode
 
-**Status: Delvis klar – atomisk flytt inom samma dag implementerad**
-
-### Mål
-
-Säkerställa att data sparas, uppdateras och laddas om utan att försvinna, dupliceras eller hamna i fel ordning.
+**Status: Delvis klar - Supabase-floden och atomisk flytt finns, djupare integrationstester aterstar**
 
 ### Implementerat
 
-* server-first-flöde för att skapa stopp
-* server-first-flöde för att redigera stopp
-* server-first-flöde för att ta bort stopp
-* atomisk flytt uppåt och nedåt inom samma dag via Supabase RPC
-* ett enda serveranrop per stoppflytt
+* server-first-flode for att skapa stopp
+* server-first-flode for att redigera stopp
+* server-first-flode for att ta bort stopp
+* Supabase-repositories och mappers
+* ansluten resa kan laddas och sparas
+* Utforska-poster kan sparas i Supabase for anslutna resor
+* atomisk flytt uppat och nedat inom samma dag via Supabase RPC
 * PostgreSQL-transaktion med automatisk rollback
-* server-side kontroll av `auth.uid()` och redigeringsbehörighet
-* `SECURITY INVOKER`
-* explicit säker `search_path`
-* `EXECUTE` återkallat från `public` och `anon`
-* `EXECUTE` tilldelat `authenticated`
-* lokal state uppdateras först efter lyckad RPC
-* stopp från andra dagar och lokala osynkade stopp bevaras
-* datum och tider ändras inte vid omordning
-* första och sista stoppet hanteras som no-op vid ogiltig flyttriktning
-* testbar sorteringslogik
-* formulärvalidering före sparning
-* repositories för Supabase-data
-* struktur för Zustand-state och optimistic updates
+* server-side kontroll av `auth.uid()` och redigeringsbehorighet
+* `SECURITY INVOKER` for move-RPC
+* explicita `REVOKE`/`GRANT`-rattigheter
+* lokal state uppdateras forst efter lyckad servermutation
+* testbar sorterings-, rollback- och kontraktslogik
 
-### Återstår
+### Aterstar
 
-* verifiering av stabila ID:n genom hela dataflödet
+* verifiering av stabila ID:n genom hela dataflodet
 * skydd mot realtime-dubbletter
 * konsekvent hantering av `null` och `undefined`
 * integrationstestning av:
 
 ```text
-UI → Zustand/App state → repository → Supabase → reload → UI
+UI -> Zustand/App state -> repository -> Supabase -> reload -> UI
 ```
 
-* verifiering av samtidiga ändringar från flera klienter
-* verkliga PostgreSQL-tester för rollback, RLS och samtidighet
-* tydligare strategi för konflikter mellan offline, realtime och server-state
-
-### Kvarstående verifiering
-
-RPC-funktionen är applicerad i Supabase och har testats manuellt via den deployade webbappen. Flytt uppåt och nedåt fungerar och ordningen består efter omladdning.
-
-Automatiserade PostgreSQL-tester för faktisk RLS-exekvering, samtidighet och transaktionsrollback återstår.
-
-### Acceptanskriterier
-
-Fasen kan markeras som klar när:
-
-* alla centrala CRUD-flöden är integrationstestade mot Supabase
-* inga duplicerade stopp skapas
-* sorteringsordningen är identisk efter omladdning
-* obehöriga användare nekas åtkomst
-* realtime inte skapar dubbletter
-* användaren får tydliga felmeddelanden vid misslyckad sparning
-* RLS är verifierat med tester eller dokumenterad manuell testplan
-
-### Beroenden
-
-* Supabase-testmiljö
-* integrationsteststrategi
-* verifierade RLS- och behörighetskontroller
+* verifiering av samtidiga andringar fran flera klienter
+* verkliga PostgreSQL-tester for rollback, RLS och samtidighet
+* tydligare strategi for konflikter mellan offline, realtime och server-state
 
 ---
 
-## Fas 2 – Komplett dagplanering
+## Fas 2 - Komplett dagplanering
 
-**Status: Delvis klar**
-
-### Mål
-
-Användaren ska kunna planera och redigera en hel resa direkt i dagvyn.
+**Status: Delvis klar - dag-for-dag-editorn ar pa plats**
 
 ### Implementerat
 
 * schemalagda och oschemalagda stopp
 * dagkort
 * kompakt stoppkort
-* aktiviteter
-* boenden
-* transportstopp
-* tider
-* platser
-* kostnader
-* valuta
-* bokningsstatus
-* bokningsreferens
-* anteckningar
+* aktiviteter, boenden, transportstopp och matstopp
+* tider, platser, kostnader, valuta och bokningsinformation
 * skapa stopp
 * redigera stopp
 * ta bort stopp
@@ -125,149 +79,85 @@ Användaren ska kunna planera och redigera en hel resa direkt i dagvyn.
 * checklistor och packningsinformation
 * separat `DayCard`-komponent
 * separat `DayCard.styles.ts`
-* inline editing för alla relevanta stoppfält
-* detaljpanel för sekundära fält
-* menyknapp för fler åtgärder
+* inline editing for relevanta stoppfalt
+* add-formular direkt i vald dag
+* edit-formular direkt i eller under valt stopp
+* Dagar E2E smoke coverage for add/edit-editorplacering
 
-### Inline editing
+### Aterstar
 
-Följande fält är inline-redigerbara:
-
-* titel
-* plats
-* datum
-* starttid
-* sluttid
-* typ
-* kostnad
-* valuta
-* bokningsstatus
-* bokningsreferens
-* anteckningar
-
-Inline editing stödjer:
-
-* globalt aktivt fält
-* save/cancel
-* validering
-* bevarad draft vid fel
-* skydd mot dubbla sparningar
-* server-first-sparning
-* uppdaterad dagssammanfattning och budget efter lyckad sparning
-
-### Återstår
-
-* separat funktion för att flytta stopp mellan olika dagar
-* bättre hantering av stora mängder stopp i samma dag
-* förbättrad tangentbordsupplevelse på mobil
+* separat funktion for att flytta stopp mellan olika dagar
+* battre hantering av stora mangder stopp i samma dag
+* forbattrad tangentbordsupplevelse pa mobil
 * mer visuell QA av detaljpaneler
-* tydligare status för sparning och fel i vissa edge cases
-* komponenttester för verklig React Native-rendering
-* bättre hantering av konflikter när två användare redigerar samma stopp
-
-### Acceptanskriterier
-
-Fasen kan markeras som klar när:
-
-* alla stödda fält kan redigeras utan att lämna dagvyn
-* redan inskriven information försvinner inte vid valideringsfel eller serverfel
-* användaren kan skapa, redigera, flytta och ta bort stopp
-* ändringar finns kvar efter omladdning
-* inga dubbla sparningar uppstår
-* mobil och desktop är visuellt verifierade
-* flytt mellan dagar finns som separat tydlig användarhandling
-
-### Beroenden
-
-* Fas 1 för stabil datalagring
-* mobil-QA
-* integrationstester
+* tydligare status for sparning och fel i vissa edge cases
+* komponenttester for verklig React Native-rendering
+* battre hantering av konflikter nar tva anvandare redigerar samma stopp
 
 ---
 
-## Fas 3 – Smart reseöverblick
+## Fas 3 - Smart reseoverblick
 
 **Status: Delvis klar**
 
-### Mål
-
-Appen ska hjälpa användaren att upptäcka problem och luckor i planeringen.
-
 ### Implementerat
 
-Testbar logik finns för bland annat:
-
+* Trip Readiness
+* workspace-atgarder fran readiness-issues
 * dagsammanfattning
 * dagskostnad
 * sorteringsordning
 * saknade kostnader
-* lång kördag
+* lang kordag
 * saknat boende
-* överlappande tider
+* overlappande tider
 * stora tidsluckor
 * aktivitet utan plats
 * boende utan plats
-* ofullständiga koordinater
+* ofullstandiga koordinater
 * budgetvarningar
-* begränsad visning av smarta varningar med möjlighet att visa fler
+* begransad visning av smarta varningar med mojlighet att visa fler
 
-### Återstår
+### Aterstar
 
-* fullständig reseöversikt över alla dagar
-* summering av total körsträcka
-* summering av total körtid
-* total resebudget
-* tydlig prioritering av viktiga varningar
-* möjlighet att filtrera eller dölja varningar
 * verifiering mot verklig ruttdata
-* tester av fler gränsfall
-* bättre UX för många varningar samtidigt
-
-### Princip
-
-Varningar ska hjälpa användaren men inte blockera sparning eller redigering.
-
-### Acceptanskriterier
-
-* varje varning har en tydlig orsak
-* samma indata ger samma varning
-* falska positiva varningar är begränsade
-* användaren kan förstå vilken dag och vilket stopp som berörs
-* varningar fungerar med verklig rutt- och kostnadsdata
+* tester av fler gransfall
+* battre UX for manga varningar samtidigt
+* tydligare prioritering nar flera readiness-issues finns samtidigt
 
 ---
 
-## Fas 4 – Responsiv design och visuell QA
+## Fas 4 - Responsiv design och visuell QA
 
-**Status: Pågående**
-
-### Mål
-
-Appen ska fungera bra på mobil, surfplatta och desktop.
+**Status: Pagaende - map-first-layout och mobil smoke coverage finns**
 
 ### Implementerat
 
 * webbversion via Expo och Vercel
 * responsiv grundlayout
+* map-first desktop-layout
+* en primar persistent kartpanel pa desktop
+* inga duplicerade stora centerkartor nar desktop map rail visas
+* inbaddad karta i relevanta mobilfloden nar hoger rail saknas
 * separat dagkortskomponent
 * kompaktare stoppkort
-* sekundära fält bakom detaljpanel
+* sekundara falt bakom detaljpanel
 * kollapsbara checklistor och packlistor
 * tekniskt fungerande web-export
-* manuell visuell kontroll av dagkort efter refaktoreringar
+* Playwright smoke tests for desktop one-map layout och mobil 375px overflow
 
-### Återstår
+### Aterstar
 
 #### Mobil, cirka 375 px
 
-* systematisk kontroll av horisontell overflow
+* fortsatt systematisk kontroll av horisontell overflow
 * kontroll av tryckytor
 * kontroll av inline editing med mobilt tangentbord
 * kontroll av detaljpaneler
 * kontroll av menyknapp
-* kontroll av långa anteckningar
-* kontroll av dagkort med många stopp
-* test på verklig mobil enhet
+* kontroll av langa anteckningar
+* kontroll av dagkort med manga stopp
+* test pa verklig mobil enhet
 
 #### Surfplatta
 
@@ -278,39 +168,25 @@ Appen ska fungera bra på mobil, surfplatta och desktop.
 
 #### Desktop, cirka 1440 px
 
-* tydlig visuell hierarki
-* effektiv användning av skärmbredd
-* balans mellan dagplanering och karta
-* kontroll av långa listor och stora resor
-
-### Acceptanskriterier
-
-* ingen oavsiktlig horisontell scroll
-* primära funktioner är lätta att nå
-* inline editing går att använda på mobil
-* formulär och detaljpaneler fungerar med tangentbord
-* layouten fungerar vid minst 375, 768 och 1440 px
-* kritiska funktioner är visuellt verifierade
+* fortsatt kontroll av visuell hierarki
+* effektiv anvandning av skarmbredd
+* kontroll av langa listor och stora resor
 
 ---
 
-## Fas 5 – UI-refaktorering
+## Fas 5 - UI-refaktorering
 
-**Status: Pågående**
-
-### Mål
-
-Minska komplexiteten i `App.tsx` utan att ändra beteendet.
+**Status: Pagaende - forsta workspace-extraktionen ar gjord**
 
 ### Implementerat
 
-* dagkortet är utbrutet till:
+* dagkortet ar utbrutet till:
 
 ```text
 src/components/planning/DayCard.tsx
 ```
 
-* DayCard-specifika styles är utbrutna till:
+* DayCard-specifika styles ar utbrutna till:
 
 ```text
 src/components/planning/DayCard.styles.ts
@@ -328,201 +204,150 @@ src/models/dayPlan.ts
 src/services/planning/inlineEdit.ts
 ```
 
-### Återstår
+* workspace-rendering har extraherats fran `App.tsx` till:
 
-* bryt ut platssökningen
-* bryt ut oschemalagda stopp
-* bryt ut större modaler
-* bryt ut planerhuvudet
-* flytta rent visuella hjälpfunktioner när det är säkert
-* minska mängden callbacks som skickas till `DayCard`
-* överväg komponenttester för `DayCard`
-* behåll data- och affärslogik utanför presentationskomponenterna
+```text
+src/components/workspaces/OverviewWorkspace.tsx
+src/components/workspaces/ExploreWorkspace.tsx
+src/components/workspaces/DaysWorkspace.tsx
+src/components/workspaces/RouteWorkspace.tsx
+src/components/workspaces/BudgetWorkspace.tsx
+src/components/workspaces/ToolsWorkspace.tsx
+src/components/workspaces/WorkspaceBits.tsx
+```
+
+### Aterstar
+
+* behall `App.tsx` som orkestrator tills mindre, sakra extraktioner ar planerade
+* typa workspace props striktare
+* bryt ut platssokning
+* bryt ut Dagar editor-state i hook eller fokuserad komponent
+* bryt ut Utforska-kort och visuella helperkomponenter
+* minska mangden callbacks som skickas till `DayCard`
+* minska `any` i layout- och workspace-komponenter
+* overvaga komponenttester for `DayCard`
+* behall data- och affarslogik utanfor presentationskomponenterna
 
 ### Principer
 
 * en refaktorering per commit
-* ingen beteendeförändring i mekaniska extraktioner
+* ingen beteendeforandring i mekaniska extraktioner
 * ingen databaslogik i UI-komponenter
 * inga nya lokala kopior av global state
-* inga `any`
 * inga nya beroenden utan tydligt behov
-
-### Acceptanskriterier
-
-* `App.tsx` har tydligare ansvar
-* komponenterna är begripliga och testbara
-* mutationer och datalagring ligger kvar i services, repositories eller parent-flöden
-* typecheck, lint, tester och web-export passerar efter varje extraktion
+* typecheck, lint, tester och web-export ska passera efter varje storre extraktion
 
 ---
 
-## Fas 6 – Plats och routing
+## Fas 6 - Plats och routing
 
 **Status: Delvis klar**
-
-### Mål
-
-Göra det enkelt att hitta platser och skapa en realistisk körplan.
 
 ### Implementerat
 
-* kartkomponent
-* koordinater för stopp
+* Google Maps-rendering
+* koordinater for stopp
 * platsrelaterad struktur
+* Google Places-sokning
 * lokal waypoint-optimering
 * ruttcache-struktur
-* koordinater bevaras vid textbaserad platsändring
+* koordinater bevaras vid textbaserad platsandring
+* bulkflode for saknade koordinater
 
-### Återstår
+### Aterstar
 
-* stabil platssökning
-* automatisk hämtning av koordinater
-* möjlighet att uppdatera kartposition efter ändrat platsnamn
-* faktisk körsträcka
-* faktisk körtid
-* väggeometri
-* optimering via extern routingtjänst
-* möjlighet att behålla manuell ordning
+* faktisk korstracka
+* faktisk kortid
+* vaggeometri
+* optimering via extern routingtjanst
+* mojlighet att behalla manuell ordning
 * cacheinvalidering
-* felhantering vid misslyckad routingtjänst
+* felhantering vid misslyckad routingtjanst
 * kostnads- och rate-limit-hantering
-
-### Acceptanskriterier
-
-* varje stopp kan visas korrekt på kartan
-* användaren kan se när platsnamn och koordinater kan skilja sig åt
-* faktisk rutt kan beräknas
-* användaren kan välja mellan föreslagen och manuell ordning
-* appen hanterar att routingtjänsten är otillgänglig
 
 ---
 
-## Fas 7 – Delning och samarbete
+## Fas 7 - Delning och samarbete
 
 **Status: Delvis klar**
-
-### Mål
-
-Flera användare ska kunna planera samma resa utan att skapa konflikter eller dubbletter.
 
 ### Implementerat
 
 * Supabase-inloggning
-* grundstruktur för delade resor
+* grundstruktur for delade resor
 * delningskoder
 * realtime-struktur
 * repositories
 * lokal synkroniseringsstruktur
 
-### Återstår
+### Aterstar
 
-* test mellan två riktiga användarsessioner
-* tydlig visning av vilka som har åtkomst
-* hantering av samtidiga ändringar
+* test mellan tva riktiga anvandarsessioner
+* tydlig visning av vilka som har atkomst
+* hantering av samtidiga andringar
 * konflikthantering
 * skydd mot dubbletter
-* möjlighet att lämna en resa
-* felstatus när synkronisering misslyckas
+* mojlighet att lamna en resa
+* felstatus nar synkronisering misslyckas
 * verifiering av RLS-regler
-
-### Acceptanskriterier
-
-* två användare kan redigera samma resa
-* ändringar visas utan duplicering
-* obehöriga användare nekas åtkomst
-* konflikter hanteras eller visas tydligt
-* realtime fungerar utan att skriva över lokal draft
 
 ---
 
-## Fas 8 – Offline och synkronisering
+## Fas 8 - Offline och synkronisering
 
 **Status: Delvis klar**
-
-### Mål
-
-Grundläggande reseplanering ska fungera utan internetanslutning.
 
 ### Implementerat
 
 * SQLite-baserad lokal cache
-* struktur för väntande mutationer
-* synkroniseringskö
-* struktur för återanslutning
+* struktur for vantande mutationer
+* synkroniseringsko
+* struktur for ateranslutning
 
-### Återstår
+### Aterstar
 
-* läsa tidigare resor helt offline
+* lasa tidigare resor helt offline
 * redigera offline
-* köa samtliga mutationstyper
-* synkronisera efter återanslutning
+* koa samtliga mutationstyper
+* synkronisera efter ateranslutning
 * visa synkroniseringsstatus
-* konfliktlösning
-* återförsök med backoff
-* integrationstester för offline → online
+* konfliktlosning
+* aterforsok med backoff
+* integrationstester for offline -> online
 * definiera hur inline editing ska bete sig offline
-
-### Acceptanskriterier
-
-* en tidigare laddad resa kan öppnas utan internet
-* ändringar kan göras offline
-* ändringarna synkroniseras när anslutningen återkommer
-* användaren ser om något väntar på synkronisering
-* konflikter hanteras utan dataförlust
 
 ---
 
-## Fas 9 – Säkert AI-stöd
+## Fas 9 - Sakert AI-stod
 
 **Status: Delvis klar**
 
-### Mål
-
-AI ska göra planeringen snabbare utan att få okontrollerad åtkomst till användardata eller databas.
-
 ### Implementerat
 
-* klientservice för AI-kommandon
+* klientservice for AI-kommandon
 * Supabase Edge Function
 * Zod-validerad mutationsplan
-* Gemini-anrop från servermiljö
+* Gemini-anrop fran servermiljo
 * klienten skickar Supabase-session och anon key
-* `.vercelignore` skyddar lokala miljöfiler vid deploy
-* generiskt 500-fel till klienten för att undvika informationsläckage via stack trace
+* `.vercelignore` skyddar lokala miljofiler vid deploy
+* generiskt 500-fel till klienten for att undvika informationslackage via stack trace
 
-### Återstår
+### Aterstar
 
 * verifiera att alla privata AI-nycklar endast finns som Supabase secrets
-* ta bort all oanvänd AI-konfiguration
-* användarbekräftelse före samtliga AI-mutationer
+* ta bort all oanvand AI-konfiguration
+* anvandarbekraftelse fore samtliga AI-mutationer
 * rate limiting
 * kostnadskontroll
-* bättre felhantering
-* loggning utan känslig data
-* tester för ogiltiga och skadliga AI-svar
-
-### Säkerhetskrav
-
-* privata AI-nycklar får aldrig finnas i klientbundle
-* AI får inte skriva direkt till databasen utan validering
-* användaren ska kunna se föreslagna ändringar innan de genomförs
-* AI-svar ska betraktas som opålitlig indata
-* serverfel får inte exponera stack traces eller interna felmeddelanden
-
-### Acceptanskriterier
-
-* inga privata AI-nycklar exponeras i klienten
-* samtliga mutationer valideras
-* användaren godkänner ändringar
-* rate limits och fel hanteras tydligt
-* känsliga felmeddelanden loggas endast server-side
+* battre felhantering
+* loggning utan kanslig data
+* tester for ogiltiga och skadliga AI-svar
 
 ---
 
-## Fas 10 – Kvalitet och produktion
+## Fas 10 - Kvalitet och produktion
 
-**Status: Pågående**
+**Status: Pagaende - CI och E2E smoke tests finns**
 
 ### Implementerat
 
@@ -530,72 +355,81 @@ AI ska göra planeringen snabbare utan att få okontrollerad åtkomst till anvä
 * ESLint
 * automatiserade helper-/unit-tester
 * Expo web-export
+* GitHub Actions CI for typecheck, lint, unit tests och web-export
+* Playwright E2E smoke tests
 * Vercel production-deploy
 * Dependabot-uppdatering av `esbuild`
 * test av dagsammanfattning
 * test av dagskostnad
 * test av sorteringsordning
 * test av smarta varningar
+* test av Trip Readiness
+* test av Utforska-mappning
+* test av Google Places-helperlogik
+* test av kartdata
 * test av flyttlogik
-* test av formulärvalidering
-* test av lokal rollback-hjälpare
-* test av inline editing-hjälpare
-* kontraktstester för atomisk moveStop-migration
+* test av formularvalidering
+* test av lokal rollback-hjalpare
+* test av inline editing-hjalpare
+* kontraktstester for atomisk moveStop-migration
+* RLS SQL-audit-tester for projektets SQL-filer
 
-### Återstår
+### Aterstar
 
-* GitHub Actions eller annan CI
 * integrationstester mot Supabase
-* verkliga PostgreSQL-tester för RLS, samtidighet och rollback
-* end-to-end-tester
-* säkerhetsgranskning
-* verifiering av RLS
-* tillgänglighetskontroll
-* prestandamätning
-* felövervakning
+* verkliga PostgreSQL-tester for RLS, samtidighet och rollback
+* eventuell Playwright-korning i CI nar kormiljon ar stabil
+* sakerhetsgranskning utover SQL-audit
+* tillganglighetskontroll
+* prestandamatning
+* felovervakning
 * strukturerad loggning
-* backup- och återställningsplan
+* backup- och aterstallningsplan
 * dokumenterad releaseprocess
-* komponenttester för React Native Web
+* komponenttester for React Native Web
 
 ### Acceptanskriterier
 
-* CI kör typecheck, lint, tester och web-export
-* kritiska användarflöden har integrationstester
-* centrala användarflöden har end-to-end-tester
-* RLS är verifierat
+* CI kor typecheck, lint, tester och web-export
+* kritiska anvandarfloden har integrationstester
+* centrala anvandarfloden har end-to-end smoke coverage
+* RLS ar verifierat med verklig databasexekvering eller dokumenterad manuell testplan
 * inga hemligheter finns i klient eller repository
-* produktionen har felövervakning
-* mobil- och desktopflöden är testade
+* produktionen har felovervakning
+* mobil- och desktopfloden ar testade
 
 ---
 
-# Releasekriterier för MVP
+# Releasekriterier for MVP
 
-MVP:n kan betraktas som stabil när:
+MVP:n kan betraktas som stabil nar:
 
-* skapa, öppna och redigera resa fungerar
+* skapa, oppna och redigera resa fungerar
 * stopp kan skapas, flyttas och tas bort
-* stopp kan inline-redigeras utan dataförlust
-* `moveStop` är atomisk inom samma dag
-* flytt mellan dagar finns som separat tydlig funktion eller är tydligt avgränsad
-* ändringar finns kvar efter omladdning
-* inga kända datadubbletter finns
-* sorteringsordningen är stabil
-* budget och dagskostnad beräknas korrekt
+* stopp kan inline-redigeras utan dataforlust
+* Dagar add/edit-editorer ligger nara vald dag eller valt stopp
+* `moveStop` ar atomisk inom samma dag
+* flytt mellan dagar finns som separat tydlig funktion eller ar tydligt avgransad
+* andringar finns kvar efter omladdning
+* Utforska-data finns kvar for anslutna resor
+* inga kanda datadubbletter finns
+* sorteringsordningen ar stabil
+* budget och dagskostnad beraknas korrekt
 * smarta varningar fungerar
-* mobil och desktop är visuellt verifierade
-* delning fungerar mellan två användare
-* typecheck, lint, tester och web-export passerar
-* CI är konfigurerad
+* desktop har en tydlig one-map-layout
+* mobil och desktop ar visuellt verifierade
+* delning fungerar mellan tva anvandare
+* typecheck, lint, tester, web-export och E2E smoke tests passerar lokalt
+* CI ar konfigurerad
 * inga privata API-nycklar exponeras
-* Supabase RLS är verifierat
+* Supabase RLS ar verifierat
 
-# Närmaste prioriteringar
+# Narmaste prioriteringar
 
-1. Genomför strukturerad mobil-, surfplatta- och desktop-QA.
-2. Lägg till GitHub Actions för typecheck, lint, tester och web-export.
-3. Lägg till integrationstester för Supabase, RLS och realtime.
-4. Bygg separat funktion för att flytta stopp mellan olika dagar.
-5. Förbättra plats- och routingflödet.
-6. Bygg ut offline- och konflikthantering.
+1. Genomfor strukturerad mobil-, surfplatta- och desktop-QA.
+2. Lagg till integrationstester for Supabase, RLS och realtime.
+3. Overvag Playwright E2E i CI nar kormiljon ar stabil.
+4. Bygg separat funktion for att flytta stopp mellan olika dagar.
+5. Fortsatt stabilisera `App.tsx` genom sma beteendebevarande extraktioner.
+6. Forbattra plats- och routingflodet.
+7. Bygg ut offline- och konflikthantering.
