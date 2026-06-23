@@ -14,6 +14,7 @@ import {
   formatSek,
   nodeColor,
 } from './dayCardViewModel';
+import { MissingInfoChips } from './MissingInfoChips';
 
 import type { DayChecklistItem, DayPlan } from '@/models';
 import type { ItineraryNode } from '@/models';
@@ -663,13 +664,7 @@ export default function DayCard(props: DayCardProps) {
                       <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>{displayInlineFieldValue(node, 'place')}</Text>
                     )}
                   </View>
-                  {missingInfoChips.length > 0 ? (
-                    <View style={dayCardStyles.missingChipRow}>
-                      {missingInfoChips.map((chip) => (
-                        <Text key={chip} style={dayCardStyles.missingChip}>{chip}</Text>
-                      ))}
-                    </View>
-                  ) : null}
+                  <MissingInfoChips chips={missingInfoChips} />
                   {showCoordinatePrompt ? (
                     <View style={styles.coordinateWarningBox}>
                       <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
