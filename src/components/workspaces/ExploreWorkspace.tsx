@@ -1,24 +1,25 @@
 import { Pressable, Text, TextInput, View } from 'react-native';
 
+import { ExploreEmptyState } from '@/components/explore/ExploreEmptyState';
+import { ExploreNotes } from '@/components/explore/ExploreNotes';
+import { ExplorePlaceCard } from '@/components/explore/ExplorePlaceCard';
+import { RecommendedPlaceCard } from '@/components/explore/RecommendedPlaceCard';
 import type { GooglePlace } from '@/services/google/googlePlaces';
 import {
   explorePlaceFromGooglePlace,
-  imageSourceForPlace,
-  placeholderTypeForPlace,
   type ExploreCategory,
   type ExplorePlace,
-  type TravelPlaceholderType,
 } from '@/services/planning/exploreBoard';
 import { SectionTitle, type WorkspaceStyles } from './WorkspaceBits';
 
-type ExploreEmptyState = {
+type ExploreEmptyStateSummary = {
   isEmpty: boolean;
   message: string;
 };
 
 type ExploreWorkspaceProps = {
   activeTripId: string | null;
-  exploreEmptyState: ExploreEmptyState;
+  exploreEmptyState: ExploreEmptyStateSummary;
   exploreGroups: Record<ExploreCategory, ExplorePlace[]>;
   exploreNotes: string;
   exploreResults: GooglePlace[];
@@ -71,26 +72,15 @@ export function ExploreWorkspace({
         </View>
       </View>
 
-      <View style={styles.exploreNotesCard}>
-        <View style={styles.exploreSectionHeader}>
-          <Text style={styles.exploreSectionTitle}>Anteckningar</Text>
-          <Text style={styles.exploreSectionMeta}>Tips, länkar och kom ihåg</Text>
-        </View>
-        <TextInput
-          value={exploreNotes}
-          onChangeText={onSetExploreNotes}
-          placeholder="Skriv eller klistra in tips, länkar och saker att komma ihåg"
-          placeholderTextColor={isDark ? '#737373' : '#78716c'}
-          style={[styles.exploreNotesInput, isDark && styles.inputDark]}
-          multiline
-        />
-        <View style={styles.exploreNoteActions}>
-          <Text style={styles.exploreLocalHint}>{activeTripId ? 'Sparas i den anslutna resan.' : 'Sparas lokalt tills resan är ansluten.'}</Text>
-          <Pressable style={[styles.smallButton, isLoading && styles.disabledButton]} onPress={onSaveExploreNotes} disabled={isLoading}>
-            <Text style={styles.smallButtonText}>Spara anteckningar</Text>
-          </Pressable>
-        </View>
-      </View>
+      <ExploreNotes
+        activeTripId={activeTripId}
+        exploreNotes={exploreNotes}
+        isDark={isDark}
+        isLoading={isLoading}
+        styles={styles}
+        onSaveExploreNotes={onSaveExploreNotes}
+        onSetExploreNotes={onSetExploreNotes}
+      />
 
       <View style={styles.exploreSearchCard}>
         <View style={styles.exploreSectionHeader}>
@@ -136,13 +126,7 @@ export function ExploreWorkspace({
           <Text style={styles.exploreSectionMeta}>{exploreEmptyState.message}</Text>
         </View>
         {exploreEmptyState.isEmpty ? (
-          <View style={styles.exploreEmptyState}>
-            <TravelPlaceholder type="notes-explore" styles={styles} />
-            <View style={styles.exploreEmptyCopy}>
-              <Text style={styles.emptySearchTitle}>Inga idéplatser sparade än</Text>
-              <Text style={styles.emptySearchText}>Sök efter en plats eller spara en rekommendation för att bygga din lista.</Text>
-            </View>
-          </View>
+          <ExploreEmptyState styles={styles} />
         ) : (
           (Object.keys(exploreGroups) as ExploreCategory[]).map((category) => (
             exploreGroups[category].length > 0 ? (
@@ -185,119 +169,4 @@ export function ExploreWorkspace({
       </View>
     </View>
   );
-}
-
-function ExplorePlaceCard({
-  place,
-  primaryLabel,
-  styles,
-  onPrimary,
-  onMap,
-  onRemove,
-}: {
-  place: ExplorePlace;
-  primaryLabel: string;
-  styles: WorkspaceStyles;
-  onPrimary: () => void;
-  onMap: () => void;
-  onRemove: (() => void) | null;
-}) {
-  const placeholderType = placeholderTypeForPlace(place);
-  const imageSource = imageSourceForPlace(place);
-
-  return (
-    <View style={styles.explorePlaceCard}>
-      <TravelPlaceholder
-        type={placeholderType}
-        styles={styles}
-        {...(imageSource === 'google_place_photo' ? { label: 'Google bild redo' } : {})}
-      />
-      <View style={styles.explorePlaceBody}>
-        <Text style={styles.explorePlaceTitle} numberOfLines={2}>{place.title}</Text>
-        <Text style={styles.explorePlaceSubtitle} numberOfLines={2}>{place.place || place.description || place.category}</Text>
-        {place.description ? <Text style={styles.explorePlaceDescription} numberOfLines={2}>{place.description}</Text> : null}
-        <View style={styles.exploreChipRow}>
-          <Text style={styles.exploreTypeChip}>{place.category}</Text>
-          {place.statusChips.slice(0, 2).map((chip) => (
-            <Text key={chip} style={styles.exploreStatusChip}>{chip}</Text>
-          ))}
-        </View>
-      </View>
-      <View style={styles.exploreActionRow}>
-        <Pressable style={styles.smallButton} onPress={onPrimary}>
-          <Text style={styles.smallButtonText}>{primaryLabel}</Text>
-        </Pressable>
-        <Pressable style={styles.secondarySmallButton} onPress={onMap}>
-          <Text style={styles.secondarySmallButtonText}>Visa på karta</Text>
-        </Pressable>
-        {onRemove ? (
-          <Pressable style={styles.ghostSmallButton} onPress={onRemove}>
-            <Text style={styles.ghostSmallButtonText}>Ta bort</Text>
-          </Pressable>
-        ) : null}
-      </View>
-    </View>
-  );
-}
-
-type RecommendedPlaceCardProps = {
-  place: ExplorePlace;
-  styles: WorkspaceStyles;
-  onAdd: () => void;
-};
-
-function RecommendedPlaceCard({ place, styles, onAdd }: RecommendedPlaceCardProps) {
-  return (
-    <View style={styles.recommendedPlaceCard}>
-      <TravelPlaceholder type={placeholderTypeForPlace(place)} styles={styles} compact />
-      <View style={styles.recommendedPlaceCopy}>
-        <Text style={styles.recommendedPlaceTitle} numberOfLines={2}>{place.title}</Text>
-        <Text style={styles.recommendedPlaceMeta} numberOfLines={1}>{place.category}{place.place ? ` / ${place.place}` : ''}</Text>
-      </View>
-      <Pressable style={styles.plusButton} onPress={onAdd}>
-        <Text style={styles.plusButtonText}>+</Text>
-      </Pressable>
-    </View>
-  );
-}
-
-type TravelPlaceholderProps = {
-  type: TravelPlaceholderType;
-  styles: WorkspaceStyles;
-  compact?: boolean;
-  label?: string;
-};
-
-function TravelPlaceholder({ type, styles, compact = false, label }: TravelPlaceholderProps) {
-  const visual = placeholderVisual(type);
-  return (
-    <View style={[styles.travelPlaceholder, compact && styles.travelPlaceholderCompact, { backgroundColor: visual.backgroundColor }]}>
-      <View style={[styles.travelPlaceholderShape, { backgroundColor: visual.accentColor }]} />
-      <Text style={[styles.travelPlaceholderIcon, { color: visual.accentColor }]}>{visual.icon}</Text>
-      <Text style={styles.travelPlaceholderLabel}>{label ?? visual.label}</Text>
-    </View>
-  );
-}
-
-function placeholderVisual(type: TravelPlaceholderType): { icon: string; label: string; backgroundColor: string; accentColor: string } {
-  switch (type) {
-    case 'lodging':
-      return { icon: 'H', label: 'Boende', backgroundColor: '#eef7f2', accentColor: '#0f766e' };
-    case 'activity':
-      return { icon: 'A', label: 'Aktivitet', backgroundColor: '#fff7df', accentColor: '#d97706' };
-    case 'food':
-      return { icon: 'F', label: 'Mat', backgroundColor: '#fff1f2', accentColor: '#be123c' };
-    case 'fuel':
-      return { icon: 'B', label: 'Bränsle', backgroundColor: '#eef2ff', accentColor: '#4f46e5' };
-    case 'transport':
-      return { icon: 'T', label: 'Transport', backgroundColor: '#eff6ff', accentColor: '#2563eb' };
-    case 'budget':
-      return { icon: 'SEK', label: 'Budget', backgroundColor: '#f8faf7', accentColor: '#475569' };
-    case 'notes-explore':
-      return { icon: 'i', label: 'Tips', backgroundColor: '#fffefa', accentColor: '#d97706' };
-    case 'route-day':
-      return { icon: 'R', label: 'Rutt', backgroundColor: '#eef7f2', accentColor: '#0f766e' };
-    default:
-      return { icon: 'P', label: 'Plats', backgroundColor: '#f8faf7', accentColor: '#52616f' };
-  }
 }
