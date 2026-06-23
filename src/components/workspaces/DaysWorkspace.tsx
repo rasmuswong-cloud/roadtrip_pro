@@ -188,7 +188,7 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
       {visibleDayPlans.length === 0 ? (
         <View style={styles.emptySearchState}>
           <Text style={styles.emptySearchTitle}>Inga stopp hittades</Text>
-          <Text style={styles.emptySearchText}>Testa ett annat ord, datum, plats eller pris.</Text>
+          <Text style={styles.emptySearchText}>Testa ett annat sökord eller rensa sökningen. För att bygga vidare kan du lägga till ett oschemalagt stopp eller välja en dag och lägga till stopp där.</Text>
         </View>
       ) : null}
       {selectedDayPlan ? (

@@ -34,7 +34,7 @@ export function BudgetWorkspace({
       <View style={styles.sectionHeaderRow}>
         <View>
           <SectionTitle title="Budget" dark={isDark} styles={styles} />
-          <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>Kostnadscenter för totaler, kategorier, dagar och saknade belopp.</Text>
+          <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>Fyll i kostnader direkt på stopp för att se total, per person, kategori och dag.</Text>
         </View>
         <View style={styles.budgetHeaderTools}>
           <Text style={styles.budgetTotal}>{formatSek(budgetCenter.total)}</Text>
@@ -63,12 +63,12 @@ export function BudgetWorkspace({
       {!budgetCenter.hasItineraryItems ? (
         <View style={styles.budgetEmptyState}>
           <Text style={styles.emptySearchTitle}>Inga stopp i resplanen</Text>
-          <Text style={styles.emptySearchText}>Lägg till stopp i Dagar för att börja bygga en resebudget.</Text>
+          <Text style={styles.emptySearchText}>Gå till Dagar och lägg till boende, aktiviteter eller transport. Budgeten räknas automatiskt när stoppen får kostnader.</Text>
         </View>
       ) : !budgetCenter.hasRegisteredCosts ? (
         <View style={styles.budgetEmptyState}>
           <Text style={styles.emptySearchTitle}>Resan har inga registrerade kostnader än</Text>
-          <Text style={styles.emptySearchText}>Fyll i boende, aktiviteter, mat, bränsle och transport för att se totalen.</Text>
+          <Text style={styles.emptySearchText}>Använd listan “Saknar kostnad” nedan och välj “Fyll i kostnad” på ett stopp. Boende, aktiviteter, mat, bränsle och transport räknas in i totalen.</Text>
         </View>
       ) : null}
 
@@ -134,7 +134,7 @@ export function BudgetWorkspace({
                   <Text style={styles.missingCostMeta}>{item.dayLabel} / {item.typeLabel} / {item.place}</Text>
                 </View>
                 <Pressable style={styles.secondarySmallButton} onPress={() => onOpenBudgetCostEditor(item.nodeId)}>
-                  <Text style={styles.secondarySmallButtonText}>Lägg till kostnad</Text>
+                  <Text style={styles.secondarySmallButtonText}>Fyll i kostnad</Text>
                 </Pressable>
               </View>
             ))}

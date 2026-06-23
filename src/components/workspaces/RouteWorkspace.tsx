@@ -40,6 +40,11 @@ export function RouteWorkspace({
   onUpdateMissingCoordinates,
 }: RouteWorkspaceProps) {
   const routeForMap = activeRoute.geometry ? activeRoute : demoRoute;
+  const routeGuidance = displayedNodes.length === 0
+    ? 'Lägg till stopp i Dagar för att skapa en rutt. När stoppen har kartpositioner visas markörer och körsträcka här.'
+    : missingCoordinateCount > 0
+      ? `${missingCoordinateCount} stopp saknar kartposition. Fyll i dem för en mer användbar karta och rutt.`
+      : 'Rutt och kartpositioner finns. Granska ordningen och öppna Dagar om du vill flytta eller redigera stopp.';
 
   return (
     <View style={styles.routeView}>
@@ -90,6 +95,10 @@ export function RouteWorkspace({
           <Text style={styles.routeStageMeta}>{formatDistance(activeRoute.distanceMeters)} rutt</Text>
           <Text style={styles.routeStageMeta}>{formatDuration(activeRoute.durationSeconds)} körning</Text>
           {missingCoordinateCount > 0 ? <Text style={styles.routeStageMeta}>{missingCoordinateCount} saknar kartposition</Text> : null}
+        </View>
+        <View style={styles.routeMapSummaryCard}>
+          <Text style={styles.overviewMapKicker}>Så blir kartan användbar</Text>
+          <Text style={styles.routeStageMeta}>{routeGuidance}</Text>
         </View>
       </View>
 

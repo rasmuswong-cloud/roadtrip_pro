@@ -13,7 +13,7 @@ export function ExploreEmptyState({ styles }: ExploreEmptyStateProps) {
       <TravelPlaceholder type="notes-explore" styles={styles} />
       <View style={styles.exploreEmptyCopy}>
         <Text style={styles.emptySearchTitle}>Inga idéplatser sparade än</Text>
-        <Text style={styles.emptySearchText}>Sök efter en plats eller spara en rekommendation för att bygga din lista.</Text>
+        <Text style={styles.emptySearchText}>Sök efter restauranger, boenden, utsikter eller parkeringar. Spara bra idéer här först och lägg till dem i Dagar när du vet var de passar.</Text>
       </View>
     </View>
   );

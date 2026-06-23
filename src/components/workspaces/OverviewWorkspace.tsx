@@ -48,6 +48,36 @@ export function OverviewWorkspace({
   onGoToView,
 }: OverviewWorkspaceProps) {
   const routeForMap = activeRoute.geometry ? activeRoute : demoRoute;
+  const setupSteps = [
+    {
+      label: '1. Planera stopp',
+      detail: displayedNodes.length > 0 ? `${displayedNodes.length} stopp ligger i Dagar.` : 'Lägg till första stoppet i Dagar.',
+      action: displayedNodes.length > 0 ? 'Öppna Dagar' : 'Lägg till stopp',
+      target: 'days' as AppView,
+      ready: displayedNodes.length > 0,
+    },
+    {
+      label: '2. Kontrollera rutt',
+      detail: missingCoordinateCount > 0 ? `${missingCoordinateCount} stopp saknar kartposition.` : 'Kartpositioner och rutt är redo att granskas.',
+      action: missingCoordinateCount > 0 ? 'Fyll i positioner' : 'Öppna Rutt',
+      target: 'route' as AppView,
+      ready: displayedNodes.length > 0 && missingCoordinateCount === 0,
+    },
+    {
+      label: '3. Fyll i budget',
+      detail: budgetSummary.missingCostCount > 0 ? `${budgetSummary.missingCostCount} stopp saknar kostnad.` : 'Budgeten har inga saknade kostnader.',
+      action: budgetSummary.missingCostCount > 0 ? 'Fyll i kostnad' : 'Öppna Budget',
+      target: 'budget' as AppView,
+      ready: displayedNodes.length > 0 && budgetSummary.missingCostCount === 0,
+    },
+    {
+      label: '4. Samla idéer',
+      detail: 'Spara restauranger, sevärdheter och lösa tips i Utforska innan du bestämmer dag.',
+      action: 'Öppna Utforska',
+      target: 'explore' as AppView,
+      ready: false,
+    },
+  ];
 
   return (
     <View style={[styles.panelSection, isDark && styles.panelDark]}>
@@ -77,6 +107,29 @@ export function OverviewWorkspace({
           accent={budgetSummary.missingCostCount > 0 ? '#d97706' : '#0f766e'}
           styles={styles}
         />
+      </View>
+      <View style={styles.readinessPanel}>
+        <View style={styles.readinessHeader}>
+          <View>
+            <Text style={styles.overviewMapKicker}>Kom igång</Text>
+            <Text style={styles.readinessTitle}>Bygg resan i fyra steg</Text>
+            <Text style={styles.readinessNextText}>Börja i Dagar, kontrollera kartan i Rutt och fyll sedan i kostnaderna.</Text>
+          </View>
+          <Pressable style={styles.smallButton} onPress={() => onGoToView(tripReadiness.nextStep.target)}>
+            <Text style={styles.smallButtonText}>{tripReadiness.nextStep.label}</Text>
+          </Pressable>
+        </View>
+        <View style={[styles.readinessGrid, isMobile && styles.singleColumnGrid]}>
+          {setupSteps.map((step) => (
+            <View key={step.label} style={[styles.readinessItem, step.ready && styles.readinessItemReady]}>
+              <Text style={[styles.readinessLabel, step.ready && styles.readinessLabelReady]}>{step.label}</Text>
+              <Text style={styles.readinessDetail}>{step.detail}</Text>
+              <Pressable style={styles.secondarySmallButton} onPress={() => onGoToView(step.target)}>
+                <Text style={styles.secondarySmallButtonText}>{step.action}</Text>
+              </Pressable>
+            </View>
+          ))}
+        </View>
       </View>
       <View style={[styles.readinessPanel, tripReadiness.isReady && styles.readinessPanelReady]}>
         <View style={styles.readinessHeader}>

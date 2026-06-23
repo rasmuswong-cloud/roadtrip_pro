@@ -181,7 +181,7 @@ export default function DayCard(props: DayCardProps) {
       {dayPlan.nodes.length === 0 ? (
         <View style={styles.emptySearchState}>
           <Text style={styles.emptySearchTitle}>Inget planerat än</Text>
-          <Text style={styles.emptySearchText}>Lägg till dagens första stopp, aktivitet, boende eller notis.</Text>
+          <Text style={styles.emptySearchText}>Börja med “Lägg till stopp i denna dag”. När stopp finns här kan du klicka på tid, plats, kostnad eller “Redigera stopp” för att fylla i detaljer.</Text>
         </View>
       ) : null}
       {dayPlan.nodes.map((node) => {

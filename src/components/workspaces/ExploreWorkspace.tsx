@@ -100,6 +100,9 @@ export function ExploreWorkspace({
             <Text style={styles.commandButtonText}>Sök</Text>
           </Pressable>
         </View>
+        {exploreResults.length === 0 ? (
+          <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>Tips: börja brett, till exempel “camping”, “badplats” eller “restaurang nära nästa stopp”.</Text>
+        ) : null}
         {exploreResults.length > 0 ? (
           <View style={styles.exploreResultGrid}>
             {exploreResults.map((place) => {
