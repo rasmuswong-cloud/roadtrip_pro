@@ -62,6 +62,20 @@ export function OverviewWorkspace({
         <SectionTitle title="Översikt" dark={isDark} styles={styles} />
         <Text style={styles.overviewMeta}>{firstRouteStop?.title ?? 'Start'} → {lastRouteStop?.title ?? 'destination'}</Text>
       </View>
+      {displayedNodes.length === 0 ? (
+        <View style={styles.emptyTripState}>
+          <Text style={styles.emptyTripTitle}>Börja planera din roadtrip</Text>
+          <Text style={styles.emptyTripText}>Skapa första stoppet i Dagar. När resan växer fylls översikten med rutt, körning, budget och nästa steg.</Text>
+          <View style={styles.actionRow}>
+            <Pressable style={styles.commandButton} onPress={() => onGoToView('days')}>
+              <Text style={styles.commandButtonText}>Lägg till första stoppet</Text>
+            </Pressable>
+            <Pressable style={styles.secondaryButton} onPress={() => onGoToView('explore')}>
+              <Text style={styles.secondaryButtonText}>Spara idéer först</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
       <View style={[styles.overviewFocusGrid, isMobile && styles.singleColumnGrid]}>
         <OverviewFocusCard
           label="Plan"

@@ -28,8 +28,9 @@ export function DayHeader({
   onStartPlaceSearch,
   onStartNewPlannerStep,
 }: DayHeaderProps) {
-  const visibleFlags = dayPlan.smartFlags.length > 0 ? dayPlan.smartFlags : ['Ser planerad ut'];
-  const displayedFlags = expandedFlags ? visibleFlags : visibleFlags.slice(0, 3);
+  const actionFlags = dayPlan.smartFlags.filter((flag) => flag !== 'Ser planerad ut');
+  const visibleFlags = actionFlags.length > 0 ? actionFlags : ['Ser bra ut'];
+  const displayedFlags = expandedFlags ? visibleFlags : visibleFlags.slice(0, 1);
 
   return (
     <View style={styles.dayHeader}>
@@ -38,15 +39,18 @@ export function DayHeader({
         <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
           {dayPlan.nodes.length} stopp / {formatDistance(dayPlan.route.distanceMeters)} / {formatDuration(dayPlan.route.durationSeconds)} / {formatSek(dayPlan.budget.total)}
         </Text>
-        <View style={styles.smartFlagList}>
+        <View style={styles.dayNextStepPanel}>
+          <Text style={styles.dayNextStepLabel}>{actionFlags.length > 0 ? 'Nästa steg' : 'Status'}</Text>
+          <View style={styles.smartFlagList}>
           {displayedFlags.map((flag) => (
-            <Text key={flag} style={[styles.smartFlag, flag === 'Ser planerad ut' && styles.smartFlagGood]}>{flag}</Text>
+            <Text key={flag} style={[styles.smartFlag, actionFlags.length === 0 && styles.smartFlagGood]}>{flag}</Text>
           ))}
-          {visibleFlags.length > 3 ? (
+          {visibleFlags.length > 1 ? (
             <Pressable style={dayCardStyles.smartFlagMore} onPress={onToggleExpandedFlags}>
-              <Text style={dayCardStyles.smartFlagMoreText}>{expandedFlags ? 'Visa färre' : `+${visibleFlags.length - 3} fler`}</Text>
+              <Text style={dayCardStyles.smartFlagMoreText}>{expandedFlags ? 'Visa färre' : `+${visibleFlags.length - 1} fler`}</Text>
             </Pressable>
           ) : null}
+          </View>
         </View>
       </View>
       {!isDemoMode ? (

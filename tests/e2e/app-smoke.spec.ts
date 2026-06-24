@@ -74,7 +74,7 @@ test('main workspaces open and no obvious white screen appears', async ({ page }
   await expect(page.getByText('Kontrollera rutten')).toBeVisible();
 
   await page.getByTestId('sidebar-nav-days').click();
-  await expect(page.getByText('Vad h\u00e4nder varje dag?')).toBeVisible();
+  await expect(page.getByTestId('selected-day-summary')).toBeVisible();
 
   await page.getByTestId('sidebar-nav-budget').click();
   await expect(page.getByText('Total kostnad').first()).toBeVisible();
@@ -88,7 +88,7 @@ test('day shortcut opens Dagar and planner surface is reachable', async ({ page 
   await expect(page.getByText('Alp-roadtrip')).toBeVisible();
 
   await page.getByTestId('day-shortcut-2026-07-12').click();
-  await expect(page.getByText('Vad h\u00e4nder varje dag?')).toBeVisible();
+  await expect(page.getByTestId('selected-day-summary')).toBeVisible();
   await expect(page.getByText('Dag 1 - Jul 12')).toBeVisible();
   await expect(page.getByPlaceholder('S\u00f6k stopp, plats, datum, pris...')).toBeVisible();
 });

@@ -383,6 +383,13 @@ function formatShortTime(value: string): string {
   return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(date);
 }
 
+function confirmNewBlankTrip(): boolean {
+  const message = 'Vill du starta en ny tom reseplan? Detta påverkar inte tidigare sparade resor om de finns i molnet.';
+  const maybeWindow = globalThis as typeof globalThis & { confirm?: (message: string) => boolean };
+
+  return typeof maybeWindow.confirm === 'function' ? maybeWindow.confirm(message) : true;
+}
+
 export default function App() {
   const isDark = false;
   const { width: viewportWidth } = useWindowDimensions();
@@ -410,6 +417,7 @@ export default function App() {
   const [nearbyMessage, setNearbyMessage] = useState<string | null>(null);
   const [exploreNoteItemId, setExploreNoteItemId] = useState<string | null>(null);
   const [localTripImportOffer, setLocalTripImportOffer] = useState<LocalTripImportOffer | null>(null);
+  const [hasStartedBlankPlan, setHasStartedBlankPlan] = useState(false);
   const [activeView, setActiveView] = useState<AppView>('overview');
   const [itineraryNodes, setItineraryNodes] = useState<ItineraryNode[]>(() => initialPersistedState?.itineraryNodes ?? []);
   const [latestAiPlan, setLatestAiPlan] = useState<ItineraryMutationPlan | null>(null);
@@ -458,8 +466,9 @@ export default function App() {
   const [isRouteCalculating, setIsRouteCalculating] = useState(false);
   const { activeTripId, setActiveTrip, upsertTrip, upsertPoi: upsertPoiInStore } = useTripStore();
 
-  const displayedNodes = activeTripId ? itineraryNodes : itineraryNodes.length > 0 ? itineraryNodes : demoNodes;
-  const isDemoMode = !isEditMode;
+  const isShowingDemoPlan = !activeTripId && itineraryNodes.length === 0 && !hasStartedBlankPlan;
+  const displayedNodes = isShowingDemoPlan ? demoNodes : itineraryNodes;
+  const isDemoMode = isShowingDemoPlan || !isEditMode;
   const estimatedRouteSummary = useMemo(() => estimateRouteSummary(displayedNodes), [displayedNodes]);
   const currentRouteSignature = useMemo(() => routeStopSignature(displayedNodes), [displayedNodes]);
   const activeCalculatedRoute = calculatedRoute?.signature === currentRouteSignature ? calculatedRoute : null;
@@ -598,6 +607,56 @@ export default function App() {
       fuelPriceText,
     });
     setStatusMessage('Appen sparad. Nästa gång öppnas samma plan och läge.');
+  }
+
+  function startNewBlankTrip() {
+    if (isLoading || !confirmNewBlankTrip()) {
+      return;
+    }
+
+    rememberUndo('Starta om resa');
+    setActiveTrip('');
+    setUserId(null);
+    setOnlineSaveState('idle');
+    setLastOnlineSavedAt(null);
+    setItineraryNodes([]);
+    setExploreNotes('');
+    setExplorePlaces([]);
+    setExploreResults([]);
+    setNearbyResults([]);
+    setLocalTripImportOffer(null);
+    setLatestAiPlan(null);
+    setSelectedPlannerNodeId(null);
+    setDraftPlannerDayKey(null);
+    setPlannerSearchText('');
+    setSelectedDayKey(null);
+    setPackingDraftByDay({});
+    setCalculatedRoute(null);
+    setRouteCalculationMessage(null);
+    setCoordinateSearchNodeId(null);
+    setCoordinateSearchQuery('');
+    setCoordinateSearchResults([]);
+    setCoordinateSearchMessage(null);
+    setSmartStopNodeId(null);
+    setSmartStopResults([]);
+    setSmartStopMessage(null);
+    setActiveInlineEdit(null);
+    setInlineEditMessage(null);
+    setActiveInlineDraftChanged(false);
+    setIsEditMode(true);
+    setHasStartedBlankPlan(true);
+    savePersistedAppState({
+      itineraryNodes: [],
+      travelerCountText,
+      isEditMode: true,
+      exploreNotes: '',
+      explorePlaces: [],
+      fuelConsumptionText,
+      fuelPriceText,
+    });
+    clearPlannerEditor();
+    setStatusMessage('Ny tom reseplan skapad lokalt. Tidigare molnresor påverkas inte.');
+    goToView('days');
   }
 
   function markOnlineSaveStart() {
@@ -2686,6 +2745,14 @@ export default function App() {
             <Pressable testID="edit-mode-toggle" style={[styles.modeButton, isEditMode && styles.modeButtonActive]} onPress={toggleEditMode}>
               <Text style={[styles.modeButtonText, isEditMode && styles.modeButtonTextActive]}>{isEditMode ? 'Redigerar' : 'Redigera'}</Text>
             </Pressable>
+            <Pressable
+              testID="new-trip-button"
+              style={[styles.newTripButton, isLoading && styles.disabledButton]}
+              onPress={startNewBlankTrip}
+              disabled={isLoading}
+            >
+              <Text style={styles.newTripButtonText}>Ny reseplan</Text>
+            </Pressable>
             <Pressable style={[styles.syncButton, isLoading && styles.disabledButton]} onPress={connectSupabaseTrip} disabled={isLoading}>
               <Text style={styles.syncButtonText}>{isLoading ? 'Vänta' : activeTripId ? 'Uppdatera' : 'Anslut'}</Text>
             </Pressable>
@@ -3031,6 +3098,7 @@ export default function App() {
                 onChangeCoordinateSearchQuery={setCoordinateSearchQuery}
                 onClearInlineEdit={clearInlineEdit}
                 onGoToRoute={() => goToView('route')}
+                onGoToTools={() => goToView('tools')}
                 onInlineDraftChange={setActiveInlineDraftChanged}
                 onMoveStop={moveStop}
                 onMoveStopToDay={moveStopToDay}
@@ -4094,6 +4162,21 @@ const styles = StyleSheet.create({
   },
   modeButtonTextActive: {
     color: '#0f766e',
+  },
+  newTripButton: {
+    minHeight: 38,
+    justifyContent: 'center',
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#f2c66d',
+    backgroundColor: '#fff7df',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  newTripButtonText: {
+    color: '#8a4b00',
+    fontSize: 13,
+    fontWeight: '900',
   },
   undoButton: {
     minHeight: 40,
@@ -5829,6 +5912,32 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 18,
   },
+  emptyTripState: {
+    gap: 12,
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#f0d9a3',
+    backgroundColor: '#fff8e8',
+    padding: 22,
+  },
+  emptyTripTitle: {
+    color: '#1f2933',
+    fontSize: 22,
+    fontWeight: '900',
+    lineHeight: 28,
+  },
+  emptyTripText: {
+    maxWidth: 720,
+    color: '#5f5142',
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 21,
+  },
+  dayTripSummaryGrid: {
+    flexDirection: 'row',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
   daySelectorRail: {
     flexDirection: 'row',
     gap: 10,
@@ -5838,15 +5947,19 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 170,
     gap: 7,
-    borderRadius: 18,
+    borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#ebe7df',
-    backgroundColor: '#fffefa',
+    backgroundColor: '#ffffff',
     padding: 15,
+    shadowColor: '#5f4b32',
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
   },
   daySelectorCardActive: {
-    borderColor: '#f4c56b',
-    backgroundColor: '#fff7df',
+    borderColor: '#0f766e',
+    backgroundColor: '#eef8f5',
   },
   daySelectorHeader: {
     flexDirection: 'row',
@@ -5860,7 +5973,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   daySelectorTitleActive: {
-    color: '#8a4b00',
+    color: '#0f766e',
   },
   daySelectorCount: {
     color: '#0f766e',
@@ -5869,7 +5982,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   daySelectorCountActive: {
-    color: '#8a4b00',
+    color: '#0f766e',
   },
   daySelectorDate: {
     color: '#425466',
@@ -5877,7 +5990,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   daySelectorDateActive: {
-    color: '#8a4b00',
+    color: '#0f766e',
   },
   daySelectorRoute: {
     color: '#0a2540',
@@ -5889,7 +6002,7 @@ const styles = StyleSheet.create({
   },
   daySelectorMissing: {
     alignSelf: 'flex-start',
-    color: '#7a4b00',
+    color: '#8a4b00',
     fontSize: 11,
     fontWeight: '900',
     textTransform: 'uppercase',
@@ -5906,8 +6019,8 @@ const styles = StyleSheet.create({
     gap: 14,
     borderRadius: 20,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#ebe7df',
-    backgroundColor: '#f8fbf9',
+    borderColor: '#cfe8df',
+    backgroundColor: '#f3fbf8',
     padding: 18,
   },
   selectedDayMetricRow: {
@@ -5917,7 +6030,7 @@ const styles = StyleSheet.create({
   },
   dayGroup: {
     gap: 14,
-    backgroundColor: '#fffefa',
+    backgroundColor: '#ffffff',
     borderRadius: 20,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#ebe7df',
@@ -5971,6 +6084,23 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#d8e2eb',
     paddingHorizontal: 12,
+  },
+  dayNextStepPanel: {
+    alignSelf: 'flex-start',
+    gap: 7,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e8d5a5',
+    backgroundColor: '#fff9eb',
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+    marginTop: 8,
+  },
+  dayNextStepLabel: {
+    color: '#8a4b00',
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase',
   },
   dayInsightGrid: {
     flexDirection: 'row',
@@ -6159,11 +6289,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 14,
-    backgroundColor: '#fffefa',
-    borderRadius: 18,
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#ebe7df',
-    padding: 14,
+    padding: 16,
+    shadowColor: '#5f4b32',
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
   },
   timelineItemEditing: {
     borderColor: '#0f766e',
@@ -6180,9 +6314,11 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   nodeDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: '#ffffff',
   },
   timelineCopy: {
     flex: 1,
@@ -6390,13 +6526,15 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   secondarySmallButton: {
-    backgroundColor: '#eef3f6',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d7e8df',
+    backgroundColor: '#f3fbf8',
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
   secondarySmallButtonText: {
-    color: '#102a43',
+    color: '#0f766e',
     fontSize: 12,
     fontWeight: '900',
   },

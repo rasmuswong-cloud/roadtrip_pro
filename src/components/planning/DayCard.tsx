@@ -459,7 +459,7 @@ export default function DayCard(props: DayCardProps) {
                         onPress={() => setOpenMenuNodeId((current) => (current === node.id ? null : node.id))}
                         disabled={isLoading}
                       >
-                        <Text style={dayCardStyles.iconMenuText}>Redigera</Text>
+                        <Text style={dayCardStyles.iconMenuText}>Mer</Text>
                       </Pressable>
                       {menuOpen ? (
                         <View style={dayCardStyles.stopMenuPanel}>
@@ -577,14 +577,14 @@ export default function DayCard(props: DayCardProps) {
                     style={styles.secondarySmallButton}
                     onPress={() => onSelectPlannerNode(node.id)}
                   >
-                    <Text style={styles.secondarySmallButtonText}>Redigera</Text>
+                    <Text style={styles.secondarySmallButtonText}>Detaljer</Text>
                   </Pressable>
                   <Pressable
                     style={[styles.secondarySmallButton, isLoading && styles.disabledButton]}
                     onPress={() => onAddPlaceholderAfterStop(node)}
                     disabled={isLoading}
                   >
-                    <Text style={styles.secondarySmallButtonText}>Lägg placeholder efter</Text>
+                    <Text style={styles.secondarySmallButtonText}>Mellanstopp efter</Text>
                   </Pressable>
                   <Pressable style={styles.secondarySmallButton} onPress={() => void onMoveStop(node.id, -1)} disabled={isLoading}>
                     <Text style={styles.secondarySmallButtonText}>Upp</Text>

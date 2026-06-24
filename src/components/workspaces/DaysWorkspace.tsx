@@ -6,6 +6,7 @@ import DayCard from '@/components/planning/DayCard';
 import type { DayChecklistItem, DayPlan, ItineraryNode, RouteSummary } from '@/models';
 import type { GooglePlace } from '@/services/google/googlePlaces';
 import type { ActiveInlineEdit, InlineFieldKey, InlineFieldValue } from '@/services/planning/inlineEdit';
+import { formatDistance, formatDuration } from '@/utils/formatters';
 import { DayInsight, SectionTitle, type WorkspaceStyles } from './WorkspaceBits';
 
 type DaysWorkspaceProps = {
@@ -43,6 +44,7 @@ type DaysWorkspaceProps = {
   onChangeCoordinateSearchQuery: (text: string) => void;
   onClearInlineEdit: () => void;
   onGoToRoute: () => void;
+  onGoToTools: () => void;
   onInlineDraftChange: (changed: boolean) => void;
   onMoveStop: (nodeId: string, direction: -1 | 1) => Promise<void>;
   onMoveStopToDay: (nodeId: string, targetDayKey: string) => Promise<void>;
@@ -72,6 +74,7 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
     coordinateSearchNodeId,
     coordinateSearchQuery,
     coordinateSearchResults,
+    dayPlans,
     demoRoute,
     draftPlannerDayKey,
     displayedNodesLength,
@@ -98,6 +101,7 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
     onChangeCoordinateSearchQuery,
     onClearInlineEdit,
     onGoToRoute,
+    onGoToTools,
     onInlineDraftChange,
     onMoveStop,
     onMoveStopToDay,
@@ -124,9 +128,9 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
     <View style={[styles.panelSection, isDark && styles.panelDark]}>
       <View style={styles.sectionHeaderRow}>
         <View>
-          <SectionTitle title="Vad händer varje dag?" dark={isDark} styles={styles} />
+          <SectionTitle title="Dagar" dark={isDark} styles={styles} />
           <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
-            {isDemoMode ? 'Tryck Redigera för att ändra tider, platser, kostnader och stopp.' : 'Välj dag, följ tidslinjen och lägg till eller redigera stopp.'}
+            {isDemoMode ? 'Tryck Redigera för att ändra tider, platser, kostnader och stopp.' : 'Följ resan dag för dag och lägg till nästa stopp där det hör hemma.'}
           </Text>
         </View>
         <View style={styles.plannerSearchWrap}>
@@ -157,6 +161,12 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
       {plannerSearchText.trim() ? (
         <Text style={styles.searchResultText}>{filteredStopCount} av {displayedNodesLength} stopp matchar sökningen.</Text>
       ) : null}
+      <View style={[styles.dayTripSummaryGrid, isMobile && styles.singleColumnGrid]}>
+        <DayInsight label="Dagar" value={`${dayPlans.length}`} tone="neutral" styles={styles} />
+        <DayInsight label="Stopp" value={`${displayedNodesLength}`} tone="neutral" styles={styles} />
+        <DayInsight label="Rutt" value={formatDistance(activeRoute.distanceMeters)} tone="neutral" styles={styles} />
+        <DayInsight label="Körning" value={formatDuration(activeRoute.durationSeconds)} tone="neutral" styles={styles} />
+      </View>
       {visibleDayPlans.length > 0 ? (
         <View style={styles.daySelectorRail}>
           {visibleDayPlans.map((dayPlan) => {
@@ -174,7 +184,7 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
                 </View>
                 <Text style={[styles.daySelectorDate, isSelected && styles.daySelectorDateActive]}>{formatDayKey(dayPlan.key)}</Text>
                 <Text style={[styles.daySelectorRoute, isSelected && styles.daySelectorRouteActive]} numberOfLines={1}>{routeText}</Text>
-                <Text style={[styles.daySelectorMissing, missingInfoCount === 0 && styles.daySelectorReady]}>{missingInfoCount > 0 ? 'Att komplettera' : 'Klar för nu'}</Text>
+                <Text style={[styles.daySelectorMissing, missingInfoCount === 0 && styles.daySelectorReady]}>{missingInfoCount > 0 ? 'Planera vidare' : 'Ser bra ut'}</Text>
               </Pressable>
             );
           })}
@@ -194,9 +204,28 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
         </View>
       ) : null}
       {visibleDayPlans.length === 0 ? (
-        <View style={styles.emptySearchState}>
-          <Text style={styles.emptySearchTitle}>Inga stopp hittades</Text>
-          <Text style={styles.emptySearchText}>Testa ett annat sökord eller rensa sökningen. För att bygga vidare kan du lägga till ett oschemalagt stopp eller välja en dag och lägga till stopp där.</Text>
+        <View style={styles.emptyTripState}>
+          <Text style={styles.emptyTripTitle}>{plannerSearchText.trim() ? 'Inga stopp hittades' : 'Börja planera din roadtrip'}</Text>
+          <Text style={styles.emptyTripText}>
+            {plannerSearchText.trim()
+              ? 'Testa ett annat sökord eller rensa sökningen.'
+              : 'Lägg till första stoppet, skapa en dag eller importera en plan senare. Det behöver inte vara komplett för att vara användbart.'}
+          </Text>
+          {!plannerSearchText.trim() && !isDemoMode ? (
+            <View style={styles.actionRow}>
+              <Pressable testID="empty-add-first-stop" style={styles.commandButton} onPress={() => onStartNewPlannerStep('unscheduled')}>
+                <Text style={styles.commandButtonText}>Lägg till första stoppet</Text>
+              </Pressable>
+              <Pressable style={styles.secondaryButton} onPress={() => onStartNewPlannerStep(new Date().toISOString().slice(0, 10))}>
+                <Text style={styles.secondaryButtonText}>Skapa dag</Text>
+              </Pressable>
+            </View>
+          ) : null}
+          {!plannerSearchText.trim() ? (
+            <Pressable style={styles.secondarySmallButton} onPress={onGoToTools}>
+              <Text style={styles.secondarySmallButtonText}>Importera/klistra in plan senare</Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
       {selectedDayPlan ? (
