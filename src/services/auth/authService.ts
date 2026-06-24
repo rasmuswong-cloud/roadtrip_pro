@@ -1,7 +1,9 @@
 import type { User } from '@supabase/supabase-js';
-import { supabase } from '@/services/supabaseClient';
+import { assertSupabaseConfigured, supabase } from '@/services/supabaseClient';
 
 export async function getCurrentUser(): Promise<User | null> {
+  assertSupabaseConfigured();
+
   const {
     data: { user },
     error,
@@ -19,6 +21,8 @@ export async function getCurrentUser(): Promise<User | null> {
 }
 
 export async function sendMagicLink(email: string): Promise<void> {
+  assertSupabaseConfigured();
+
   const redirectTo =
     typeof window === 'undefined' || !window.location?.origin ? undefined : `${window.location.origin}/`;
   const credentials = redirectTo ? { email, options: { emailRedirectTo: redirectTo } } : { email };
@@ -30,6 +34,8 @@ export async function sendMagicLink(email: string): Promise<void> {
 }
 
 export async function signOut(): Promise<void> {
+  assertSupabaseConfigured();
+
   const { error } = await supabase.auth.signOut();
 
   if (error) {
@@ -38,6 +44,8 @@ export async function signOut(): Promise<void> {
 }
 
 export async function getOrCreateAnonymousUser(): Promise<User> {
+  assertSupabaseConfigured();
+
   const {
     data: { user },
     error: getUserError,

@@ -23,8 +23,12 @@ as $$
 declare
   invite_code text;
 begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated.' using errcode = '28000';
+  end if;
+
   if not public.is_trip_owner(input_trip_id) then
-    raise exception 'Only trip owners can create invite codes.';
+    raise exception 'Only trip owners can create invite codes.' using errcode = '42501';
   end if;
 
   invite_code := upper(substr(replace(md5(random()::text || clock_timestamp()::text), '-', ''), 1, 8));
@@ -46,6 +50,10 @@ declare
   invite public.trip_invites;
   joined_trip public.trips;
 begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated.' using errcode = '28000';
+  end if;
+
   select *
   into invite
   from public.trip_invites
@@ -54,7 +62,7 @@ begin
   limit 1;
 
   if invite.code is null then
-    raise exception 'Invite code is invalid or expired.';
+    raise exception 'Invite code is invalid or expired.' using errcode = 'P0002';
   end if;
 
   insert into public.trip_members (trip_id, user_id, role)
@@ -74,3 +82,11 @@ begin
   return joined_trip;
 end;
 $$;
+
+revoke all on function public.create_trip_invite(uuid) from public;
+revoke all on function public.create_trip_invite(uuid) from anon;
+grant execute on function public.create_trip_invite(uuid) to authenticated;
+
+revoke all on function public.join_trip_by_code(text) from public;
+revoke all on function public.join_trip_by_code(text) from anon;
+grant execute on function public.join_trip_by_code(text) to authenticated;

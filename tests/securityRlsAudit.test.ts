@@ -7,6 +7,7 @@ const shareCodesSql = readFileSync('supabase/share_codes.sql', 'utf8');
 const inviteHardeningSql = readFileSync('supabase/migrations/202606170001_harden_trip_invite_rpcs.sql', 'utf8');
 const moveNodeSql = readFileSync('supabase/migrations/202606120001_atomic_move_itinerary_node.sql', 'utf8');
 const exploreItemsSql = readFileSync('supabase/migrations/202606220001_create_trip_explore_items.sql', 'utf8');
+const touchUpdatedAtHardeningSql = readFileSync('supabase/migrations/202606240001_harden_touch_updated_at_search_path.sql', 'utf8');
 
 const appTables = [
   'user_profiles',
@@ -44,6 +45,9 @@ test('trip-scoped policies reference auth identity or trip membership helpers', 
 
 test('sensitive invite RPCs require authenticated users and do not execute for anon or public', () => {
   for (const fn of ['create_trip_invite\\(uuid\\)', 'join_trip_by_code\\(text\\)']) {
+    assert.match(shareCodesSql, new RegExp(`revoke all on function public\\.${fn} from public`, 'i'));
+    assert.match(shareCodesSql, new RegExp(`revoke all on function public\\.${fn} from anon`, 'i'));
+    assert.match(shareCodesSql, new RegExp(`grant execute on function public\\.${fn} to authenticated`, 'i'));
     assert.match(inviteHardeningSql, new RegExp(`revoke all on function public\\.${fn} from public`, 'i'));
     assert.match(inviteHardeningSql, new RegExp(`revoke all on function public\\.${fn} from anon`, 'i'));
     assert.match(inviteHardeningSql, new RegExp(`grant execute on function public\\.${fn} to authenticated`, 'i'));
@@ -53,6 +57,11 @@ test('sensitive invite RPCs require authenticated users and do not execute for a
   assert.match(inviteHardeningSql, /set search_path = public/i);
   assert.match(inviteHardeningSql, /auth\.uid\(\) is null/i);
   assert.match(inviteHardeningSql, /public\.is_trip_owner\(input_trip_id\)/i);
+});
+
+test('touch_updated_at has an immutable function search path', () => {
+  assert.match(schemaSql, /function public\.touch_updated_at\(\)[\s\S]*?set search_path = public/i);
+  assert.match(touchUpdatedAtHardeningSql, /function public\.touch_updated_at\(\)[\s\S]*?set search_path = public/i);
 });
 
 test('move itinerary RPC remains invoker-scoped and authenticated-only', () => {

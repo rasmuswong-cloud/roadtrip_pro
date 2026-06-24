@@ -172,6 +172,7 @@ create index sync_events_trip_created_idx on public.sync_events (trip_id, create
 create or replace function public.touch_updated_at()
 returns trigger
 language plpgsql
+set search_path = public
 as $$
 begin
   new.updated_at = now();

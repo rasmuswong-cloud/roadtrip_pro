@@ -87,6 +87,7 @@ import { planReseplanrareImport } from '@/services/planning/reseplanrareImport';
 import { buildTripReadiness } from '@/services/planning/tripReadiness';
 import { buildTripQualityCounts } from '@/services/planning/tripQuality';
 import { estimateRouteSummary } from '@/services/routing/routeEstimate';
+import { getSupabaseConfigurationError } from '@/services/supabaseClient';
 import { useTripStore } from '@/store/tripStore';
 import { formatDateLabel as formatSafeDateLabel, formatTimeLabel } from '@/utils/dateTimeLabels';
 import { formatDistance, formatDuration } from '@/utils/formatters';
@@ -281,7 +282,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function formatOnlineSaveLabel(state: OnlineSaveState, lastSavedAt: string | null, hasActiveTrip: boolean): string {
   if (!hasActiveTrip) {
-    return 'Lokalt sparat';
+    return 'Endast lokalt sparat';
   }
 
   if (state === 'saving') {
@@ -614,6 +615,13 @@ export default function App() {
   }
 
   async function connectSupabaseTrip() {
+    const configurationError = getSupabaseConfigurationError();
+    if (configurationError) {
+      setStatusMessage(configurationError);
+      setOnlineSaveState('idle');
+      return;
+    }
+
     setIsLoading(true);
     setStatusMessage('Ansluter resan...');
 
@@ -637,7 +645,9 @@ export default function App() {
       markOnlineSaveSuccess();
       setStatusMessage(`Ansluten: ${trip.name}`);
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : String(error));
+      const message = error instanceof Error ? error.message : String(error);
+      setOnlineSaveState('error');
+      setStatusMessage(`Kunde inte ansluta till Supabase. ${message}`);
     } finally {
       setIsLoading(false);
     }
@@ -2080,7 +2090,7 @@ export default function App() {
           </View>
           <View style={[styles.headerActions, isMobile && styles.headerActionsMobile]}>
             <View style={[styles.headerStatusSummary, isMobile && styles.headerStatusSummaryMobile, isDark && styles.headerStatusSummaryDark]}>
-              <Text style={[styles.headerStatusTitle, isDark && styles.textDark]}>{activeTripId ? 'Ansluten resa' : 'Lokalt läge'}</Text>
+              <Text style={[styles.headerStatusTitle, isDark && styles.textDark]}>{activeTripId ? 'Ansluten resa' : 'Anslut för molnsparning'}</Text>
               <Text style={[styles.headerStatusMeta, isDark && styles.textMutedDark]} numberOfLines={1}>{visibleStatusMessage}</Text>
             </View>
             <Pressable testID="edit-mode-toggle" style={[styles.modeButton, isEditMode && styles.modeButtonActive]} onPress={toggleEditMode}>
@@ -2106,7 +2116,7 @@ export default function App() {
                 appTabs={appTabs}
                 dayPlans={dayPlans}
                 selectedDayKey={selectedDayPlan?.key ?? null}
-                statusLabel={activeTripId ? 'Ansluten resa' : 'Lokalt läge'}
+                statusLabel={activeTripId ? 'Ansluten resa' : 'Endast lokalt sparat'}
                 statusMeta={visibleStatusMessage}
                 styles={styles}
                 tripName={demoTrip.name}
