@@ -32,11 +32,13 @@ type DaysWorkspaceProps = {
   plannerSearchText: string;
   renderDayPlaceSearch: (dayKey: string) => React.ReactNode;
   renderPlannerInlineEditor: (mode: 'edit' | 'new') => React.ReactNode;
+  renderSmartStopPanel: (node: ItineraryNode) => React.ReactNode;
   selectedDayPlan: DayPlan | null;
   selectedPlannerNodeId: string | null;
   styles: WorkspaceStyles;
   visibleDayPlans: DayPlan[];
   onAddPackingItem: (dayPlan: DayPlan) => Promise<void>;
+  onAddPlaceholderAfterStop: (node: ItineraryNode) => void;
   onCancelCoordinateSearch: () => void;
   onChangeCoordinateSearchQuery: (text: string) => void;
   onClearInlineEdit: () => void;
@@ -51,6 +53,7 @@ type DaysWorkspaceProps = {
   onSelectCoordinatePlace: (node: ItineraryNode, place: GooglePlace) => Promise<void>;
   onSelectDay: (dayKey: string) => void;
   onSelectPlannerNode: (nodeId: string) => void;
+  onStartSmartStopSearch: (node: ItineraryNode) => void;
   onSetPackingDraft: (dayKey: string, text: string) => void;
   onSetPlannerSearchText: (text: string) => void;
   onStartCoordinateSearch: (node: ItineraryNode) => void;
@@ -84,11 +87,13 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
     plannerSearchText,
     renderDayPlaceSearch,
     renderPlannerInlineEditor,
+    renderSmartStopPanel,
     selectedDayPlan,
     selectedPlannerNodeId,
     styles,
     visibleDayPlans,
     onAddPackingItem,
+    onAddPlaceholderAfterStop,
     onCancelCoordinateSearch,
     onChangeCoordinateSearchQuery,
     onClearInlineEdit,
@@ -103,6 +108,7 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
     onSelectCoordinatePlace,
     onSelectDay,
     onSelectPlannerNode,
+    onStartSmartStopSearch,
     onSetPackingDraft,
     onSetPlannerSearchText,
     onStartCoordinateSearch,
@@ -214,9 +220,12 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
           styles={styles}
           renderDayPlaceSearch={renderDayPlaceSearch}
           renderPlannerInlineEditor={renderPlannerInlineEditor}
+          renderSmartStopPanel={renderSmartStopPanel}
           onStartPlaceSearch={onStartPlaceSearch}
           onStartNewPlannerStep={onStartNewPlannerStep}
+          onAddPlaceholderAfterStop={onAddPlaceholderAfterStop}
           onSelectPlannerNode={onSelectPlannerNode}
+          onStartSmartStopSearch={onStartSmartStopSearch}
           onRunChecklistAction={onRunChecklistAction}
           onTogglePackingItem={onTogglePackingItem}
           onAddPackingItem={onAddPackingItem}

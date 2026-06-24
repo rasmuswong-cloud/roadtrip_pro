@@ -23,6 +23,7 @@ import { StopDetailsGrid } from './StopDetailsGrid';
 import type { DayChecklistItem, DayPlan } from '@/models';
 import type { ItineraryNode } from '@/models';
 import type { GooglePlace } from '@/services/google/googlePlaces';
+import { isPlaceholderStop, placeholderIntent, placeholderStatusChips } from '@/services/planning/placeholderStops';
 import {
   displayInlineFieldValue,
   formatNodeType,
@@ -52,9 +53,12 @@ type DayCardProps = {
   styles: WorkspaceStyles;
   renderDayPlaceSearch: (dayKey: string) => React.ReactNode;
   renderPlannerInlineEditor: (mode: 'edit' | 'new') => React.ReactNode;
+  renderSmartStopPanel: (node: ItineraryNode) => React.ReactNode;
   onStartPlaceSearch: (dayKey: string, suggestedQuery?: string) => void;
   onStartNewPlannerStep: (dayKey: string) => void;
+  onAddPlaceholderAfterStop: (node: ItineraryNode) => void;
   onSelectPlannerNode: (nodeId: string) => void;
+  onStartSmartStopSearch: (node: ItineraryNode) => void;
   onRunChecklistAction: (dayPlan: DayPlan, item: DayChecklistItem) => void;
   onTogglePackingItem: (dayPlan: DayPlan, item: string) => Promise<void>;
   onAddPackingItem: (dayPlan: DayPlan) => Promise<void>;
@@ -98,9 +102,12 @@ export default function DayCard(props: DayCardProps) {
     styles,
     renderDayPlaceSearch,
     renderPlannerInlineEditor,
+    renderSmartStopPanel,
     onStartPlaceSearch,
     onStartNewPlannerStep,
+    onAddPlaceholderAfterStop,
     onSelectPlannerNode,
+    onStartSmartStopSearch,
     onRunChecklistAction,
     onTogglePackingItem,
     onAddPackingItem,
@@ -194,13 +201,15 @@ export default function DayCard(props: DayCardProps) {
         const notePreview = compactNote(node.notes);
         const canEdit = itineraryNodesLength > 0 && !isDemoMode;
         const targetDays = availableDayTargets.filter((target) => target.key !== dayPlan.key);
-        const missingMapPosition = canEdit && !node.location;
+        const placeholder = isPlaceholderStop(node);
+        const missingMapPosition = canEdit && !node.location && !placeholder;
         const coordinateStatus = coordinateStatusLabel(node);
         const coordinateActionLabel = coordinateStatus ? 'Byt Google-plats' : inlineFieldValue(node, 'place') ? 'Fixa position' : 'Sök plats';
         const showCoordinatePrompt = canEdit && shouldShowStaleCoordinateWarning(node);
         const coordinateSearchOpen = coordinateSearchNodeId === node.id;
         const missingInfoChips = buildMissingInfoChips(node);
         const fullEditorOpen = selectedPlannerNodeId === node.id;
+        const placeholderChips = placeholderStatusChips(node);
 
         return (
           <View
@@ -306,6 +315,33 @@ export default function DayCard(props: DayCardProps) {
                     )}
                   </View>
                   <MissingInfoChips chips={missingInfoChips} />
+                  {placeholder ? (
+                    <View style={styles.coordinateWarningBox}>
+                      <Text style={[styles.itemTitle, isDark && styles.textDark]}>Planerat men inte bestämt</Text>
+                      <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>{placeholderIntent(node)}</Text>
+                      <View style={styles.exploreChipRow}>
+                        {placeholderChips.map((chip) => (
+                          <Text key={chip} style={styles.exploreStatusChip}>{chip}</Text>
+                        ))}
+                      </View>
+                      <View style={styles.stopActions}>
+                        <Pressable
+                          style={[styles.smallButton, isLoading && styles.disabledButton]}
+                          onPress={() => onStartSmartStopSearch(node)}
+                          disabled={isLoading}
+                        >
+                          <Text style={styles.smallButtonText}>Hitta smart mellanstopp</Text>
+                        </Pressable>
+                        <Pressable
+                          style={[styles.secondarySmallButton, isLoading && styles.disabledButton]}
+                          onPress={() => onStartCoordinateSearch(node)}
+                          disabled={isLoading}
+                        >
+                          <Text style={styles.secondarySmallButtonText}>Välj Google-plats</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  ) : null}
                   {missingMapPosition ? (
                     <Pressable
                       style={[styles.secondarySmallButton, isLoading && styles.disabledButton]}
@@ -517,6 +553,7 @@ export default function DayCard(props: DayCardProps) {
               {inlineEditMessage && activeInlineEdit?.nodeId === node.id ? <Text style={styles.validationText}>{inlineEditMessage}</Text> : null}
 
               {fullEditorOpen ? renderPlannerInlineEditor('edit') : null}
+              {placeholder ? renderSmartStopPanel(node) : null}
 
               {detailsExpanded && canEdit ? (
                 <StopDetailsGrid
@@ -541,6 +578,13 @@ export default function DayCard(props: DayCardProps) {
                     onPress={() => onSelectPlannerNode(node.id)}
                   >
                     <Text style={styles.secondarySmallButtonText}>Redigera</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.secondarySmallButton, isLoading && styles.disabledButton]}
+                    onPress={() => onAddPlaceholderAfterStop(node)}
+                    disabled={isLoading}
+                  >
+                    <Text style={styles.secondarySmallButtonText}>Lägg placeholder efter</Text>
                   </Pressable>
                   <Pressable style={styles.secondarySmallButton} onPress={() => void onMoveStop(node.id, -1)} disabled={isLoading}>
                     <Text style={styles.secondarySmallButtonText}>Upp</Text>

@@ -1,4 +1,5 @@
 import type { Coordinates, ItineraryNode } from '@/models';
+import { isPlaceholderStop } from './placeholderStops';
 
 export type BulkCoordinateCandidate = {
   node: ItineraryNode;
@@ -23,7 +24,7 @@ export type BulkCoordinateSummary = {
 export function getBulkCoordinateCandidates(nodes: ItineraryNode[]): BulkCoordinateCandidate[] {
   return nodes.flatMap((node) => {
     const query = coordinateSearchText(node);
-    if (node.deletedAt || hasValidCoordinates(node.location) || !query) {
+    if (node.deletedAt || isPlaceholderStop(node) || hasValidCoordinates(node.location) || !query) {
       return [];
     }
 

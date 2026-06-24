@@ -21,6 +21,7 @@ type RouteWorkspaceProps = {
   isRouteCalculating: boolean;
   isMobile: boolean;
   missingCoordinateCount: number;
+  placeholderSkippedCount: number;
   routeCalculationMessage: string | null;
   routeIncludedStopCount: number;
   routeIsCalculated: boolean;
@@ -49,6 +50,7 @@ export function RouteWorkspace({
   isRouteCalculating,
   isMobile,
   missingCoordinateCount,
+  placeholderSkippedCount,
   routeCalculationMessage,
   routeIncludedStopCount,
   routeIsCalculated,
@@ -105,7 +107,8 @@ export function RouteWorkspace({
           <Text style={styles.routeStageMeta}>
             {tooFewStopsWithPosition ? 'Minst två stopp behöver kartposition.' : `${routeIncludedStopCount} stopp ingår`}
           </Text>
-          {routeSkippedStopCount > 0 ? <Text style={styles.routeStageMeta}>{routeSkippedStopCount} stopp saknar position och hoppas över.</Text> : null}
+          {routeSkippedStopCount > placeholderSkippedCount ? <Text style={styles.routeStageMeta}>{routeSkippedStopCount - placeholderSkippedCount} stopp saknar position och hoppas över.</Text> : null}
+          {placeholderSkippedCount > 0 ? <Text style={styles.routeStageMeta}>{placeholderSkippedCount} placeholder saknar exakt plats och hoppas över i ruttberäkningen.</Text> : null}
           {routeCalculationMessage ? <Text style={styles.routeStageMeta}>{routeCalculationMessage}</Text> : null}
         </View>
         {isMobile ? (
@@ -219,7 +222,7 @@ export function RouteWorkspace({
               <View style={styles.routeStopCopy}>
                 <Text style={styles.routeStopTitle}>{node.title}</Text>
                 <Text style={styles.routeStopMeta}>
-                  {[formatDateLabel(node.startsAt?.slice(0, 10) ?? 'unscheduled'), formatTime(node.startsAt), node.location ? 'kartposition klar' : 'Fixa position i Dagar'].filter(Boolean).join(' / ')}
+                  {[formatDateLabel(node.startsAt?.slice(0, 10) ?? 'unscheduled'), formatTime(node.startsAt), node.location ? 'kartposition klar' : 'Saknar exakt plats'].filter(Boolean).join(' / ')}
                 </Text>
               </View>
             </View>

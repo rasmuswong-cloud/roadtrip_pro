@@ -1,4 +1,5 @@
 import type { ItineraryNode } from '@/models';
+import { isPlaceholderStop } from '@/services/planning/placeholderStops';
 
 export function formatDistance(value: number): string {
   if (value >= 1000) {
@@ -99,7 +100,7 @@ export function buildMissingInfoChips(node: ItineraryNode): string[] {
     chips.push('Bokningsreferens saknas');
   }
 
-  if (!node.location) {
+  if (!node.location && !isPlaceholderStop(node)) {
     chips.push('Kartposition saknas');
   }
 
@@ -107,7 +108,7 @@ export function buildMissingInfoChips(node: ItineraryNode): string[] {
 }
 
 export function coordinateStatusLabel(node: ItineraryNode): string | null {
-  if (!node.location) {
+  if (!node.location || isPlaceholderStop(node)) {
     return null;
   }
 
@@ -115,7 +116,7 @@ export function coordinateStatusLabel(node: ItineraryNode): string | null {
 }
 
 export function shouldShowStaleCoordinateWarning(node: ItineraryNode): boolean {
-  if (!node.location) {
+  if (!node.location || isPlaceholderStop(node)) {
     return false;
   }
 

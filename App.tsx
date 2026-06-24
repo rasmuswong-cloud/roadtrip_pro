@@ -76,6 +76,20 @@ import {
   type NearbyCategoryId,
 } from '@/services/planning/nearbySearch';
 import {
+  buildSmartStopQuery,
+  fillPlaceholderWithGooglePlace,
+  isPlaceholderStop,
+  midpointBetweenStops,
+  placeholderMetadata,
+  PLACEHOLDER_TYPES,
+  SMART_DRIVE_TIME_OPTIONS,
+  SMART_STOP_OPTIONS,
+  unresolvedPlaceholderStops,
+  type PlaceholderDriveTimeRange,
+  type PlaceholderStopType,
+  type SmartStopType,
+} from '@/services/planning/placeholderStops';
+import {
   formatBulkCoordinateSummary,
   formatBulkCoordinateDiagnostics,
   getBulkCoordinateCandidates,
@@ -432,6 +446,13 @@ export default function App() {
   const [coordinateSearchQuery, setCoordinateSearchQuery] = useState('');
   const [coordinateSearchResults, setCoordinateSearchResults] = useState<GooglePlace[]>([]);
   const [coordinateSearchMessage, setCoordinateSearchMessage] = useState<string | null>(null);
+  const [smartStopNodeId, setSmartStopNodeId] = useState<string | null>(null);
+  const [smartStopFromId, setSmartStopFromId] = useState<string>('');
+  const [smartStopToId, setSmartStopToId] = useState<string>('');
+  const [smartStopDriveTimeRange, setSmartStopDriveTimeRange] = useState<PlaceholderDriveTimeRange>('6-8h');
+  const [smartStopType, setSmartStopType] = useState<SmartStopType>('lodging');
+  const [smartStopResults, setSmartStopResults] = useState<GooglePlace[]>([]);
+  const [smartStopMessage, setSmartStopMessage] = useState<string | null>(null);
   const [calculatedRoute, setCalculatedRoute] = useState<CalculatedRouteState | null>(null);
   const [routeCalculationMessage, setRouteCalculationMessage] = useState<string | null>(null);
   const [isRouteCalculating, setIsRouteCalculating] = useState(false);
@@ -477,6 +498,7 @@ export default function App() {
   const budgetCenter = useMemo(() => buildTravelBudgetCenter(displayedNodes, travelerCount), [displayedNodes, travelerCount]);
   const bulkCoordinateCandidates = useMemo(() => getBulkCoordinateCandidates(displayedNodes), [displayedNodes]);
   const missingCoordinateCount = bulkCoordinateCandidates.length;
+  const unresolvedPlaceholderCount = useMemo(() => unresolvedPlaceholderStops(displayedNodes).length, [displayedNodes]);
   const tripQualityCounts = useMemo(() => buildTripQualityCounts(displayedNodes), [displayedNodes]);
   const { missingBookingCount, missingTimeCount, planningGapCount } = tripQualityCounts;
   const tripReadiness = useMemo(() => buildTripReadiness({
@@ -1051,6 +1073,167 @@ export default function App() {
       setStatusMessage(`Sparade ${savedPoi.name} i ${formatDayKey(dayKey)}.`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function addPlaceholderAfterStop(node: ItineraryNode) {
+    if (!activeTripId || !userId) {
+      setStatusMessage('Anslut innan du lägger till en placeholder.');
+      return;
+    }
+
+    const nextStop = itineraryNodes
+      .filter((candidate) => dayKeyForNode(candidate) === dayKeyForNode(node) && candidate.sortOrder > node.sortOrder)
+      .sort((left, right) => left.sortOrder - right.sortOrder)[0];
+    const placeholderType = node.type === 'fuel' ? PLACEHOLDER_TYPES[3]! : PLACEHOLDER_TYPES[0]!;
+    const now = new Date().toISOString();
+    const sortOrder = nextStop ? Math.round((node.sortOrder + nextStop.sortOrder) / 2) : node.sortOrder + 50;
+    const placeholderNode: ItineraryNode = {
+      id: cryptoRandomId(),
+      tripId: activeTripId,
+      createdBy: userId,
+      type: placeholderType.nodeType,
+      title: placeholderType.title,
+      startsAt: node.startsAt ?? null,
+      endsAt: null,
+      timezone: node.startsAt ? 'Europe/Rome' : null,
+      location: null,
+      sortOrder,
+      transportMode: 'driving',
+      reservation: {},
+      equipment: [],
+      facilities: {},
+      notes: placeholderType.id === 'overnight' ? 'Hitta boende mellan stoppen.' : 'Planerat men inte bestämt.',
+      metadata: {
+        source: 'planner',
+        ...placeholderMetadata({
+          type: placeholderType.id,
+          intent: placeholderType.id === 'overnight' ? 'Övernattning mellan stopp' : placeholderType.label,
+          preferredDriveTimeRange: '6-8h',
+          betweenStopIds: nextStop ? [node.id, nextStop.id] : [node.id],
+        }),
+      },
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+      version: 1,
+    };
+
+    rememberUndo('lägg till placeholder');
+    setIsLoading(true);
+    setStatusMessage('Lägger till placeholder...');
+
+    try {
+      const savedNode = await saveItineraryNodeOnline(placeholderNode);
+      setItineraryNodes((current) => sortNodes([...current, savedNode]));
+      setStatusMessage(`${savedNode.title} lades till som placeholder.`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  function startSmartStopSearch(node: ItineraryNode) {
+    const nodeIndex = displayedNodes.findIndex((candidate) => candidate.id === node.id);
+    const previousStop = [...displayedNodes.slice(0, Math.max(0, nodeIndex))].reverse().find((candidate) => candidate.location);
+    const nextStop = displayedNodes.slice(nodeIndex + 1).find((candidate) => candidate.location);
+    const betweenIds = Array.isArray(node.metadata.unresolvedBetweenStopIds)
+      ? node.metadata.unresolvedBetweenStopIds.filter((value): value is string => typeof value === 'string')
+      : [];
+
+    setSmartStopNodeId(node.id);
+    setSmartStopFromId(betweenIds[0] ?? previousStop?.id ?? '');
+    setSmartStopToId(betweenIds[1] ?? nextStop?.id ?? '');
+    setSmartStopDriveTimeRange((node.metadata.preferredDriveTimeRange === '4-6h' || node.metadata.preferredDriveTimeRange === '6-8h' || node.metadata.preferredDriveTimeRange === '8-10h') ? node.metadata.preferredDriveTimeRange : '6-8h');
+    setSmartStopType(node.type === 'camping' ? 'camping_lodging' : node.type === 'gastronomy' ? 'meal_break' : 'lodging');
+    setSmartStopResults([]);
+    setSmartStopMessage('Välj från/till och klicka Hitta mellanstopp.');
+  }
+
+  async function searchSmartStops(node: ItineraryNode) {
+    const fromStop = displayedNodes.find((candidate) => candidate.id === smartStopFromId);
+    const toStop = displayedNodes.find((candidate) => candidate.id === smartStopToId);
+    if (!fromStop?.location || !toStop?.location) {
+      setSmartStopMessage('Välj två stopp med kartposition.');
+      return;
+    }
+
+    if (!hasGooglePlacesApiKey()) {
+      const message = googlePlacesMissingApiKeyMessage();
+      setSmartStopMessage(message);
+      setStatusMessage(message);
+      return;
+    }
+
+    const center = midpointBetweenStops(fromStop, toStop);
+    if (!center) {
+      setSmartStopMessage('Från och till behöver kartposition.');
+      return;
+    }
+
+    setIsLoading(true);
+    setSmartStopMessage(`Söker mellanstopp för ${node.title}...`);
+    setStatusMessage('Söker smart mellanstopp...');
+
+    try {
+      const results = await searchGooglePlaces({
+        query: buildSmartStopQuery({
+          fromStop,
+          toStop,
+          driveTimeRange: smartStopDriveTimeRange,
+          stopType: smartStopType,
+        }),
+        center,
+        radiusMeters: 120_000,
+        languageCode: 'sv',
+        maxResultCount: 6,
+      });
+
+      setSmartStopResults(results);
+      setSmartStopMessage(results.length > 0 ? `Hittade ${results.length} förslag.` : 'Inga mellanstopp hittades. Prova en annan typ eller tidsintervall.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setSmartStopMessage(message);
+      setStatusMessage(message);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function fillPlaceholderFromSmartStop(node: ItineraryNode, place: GooglePlace) {
+    if (!activeTripId || !userId) {
+      setSmartStopMessage('Anslut innan du fyller en placeholder.');
+      return;
+    }
+
+    const poi = googlePlaceToPoi(place, activeTripId, userId);
+    if (!poi) {
+      setSmartStopMessage('Den valda platsen saknar koordinater.');
+      return;
+    }
+
+    rememberUndo('fyll placeholder');
+    setIsLoading(true);
+    setSmartStopMessage(null);
+    setStatusMessage(`Fyller placeholder med ${poi.name}...`);
+
+    try {
+      const savedPoi = await upsertPoi(poi);
+      const filledNode = fillPlaceholderWithGooglePlace(node, place, savedPoi.id);
+      const savedNode = await saveItineraryNodeOnline(filledNode);
+      upsertPoiInStore(savedPoi);
+      setItineraryNodes((current) => sortNodes(current.map((candidate) => (candidate.id === savedNode.id ? savedNode : candidate))));
+      setSmartStopNodeId(null);
+      setSmartStopResults([]);
+      setSmartStopMessage(null);
+      setStatusMessage(`${savedNode.title} ersatte placeholdern och har kartposition.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setSmartStopMessage(message);
+      setStatusMessage(message);
     } finally {
       setIsLoading(false);
     }
@@ -1843,7 +2026,10 @@ export default function App() {
 
     try {
       const savedPoi = await upsertPoi(poi);
-      const savedNode = await saveItineraryNodeOnline(applyGooglePlaceCoordinateUpdate(node, place, savedPoi.id));
+      const nextNode = isPlaceholderStop(node)
+        ? fillPlaceholderWithGooglePlace(node, place, savedPoi.id)
+        : applyGooglePlaceCoordinateUpdate(node, place, savedPoi.id);
+      const savedNode = await saveItineraryNodeOnline(nextNode);
 
       upsertPoiInStore(savedPoi);
       setItineraryNodes((current) => sortNodes(current.map((candidate) => (candidate.id === savedNode.id ? savedNode : candidate))));
@@ -1867,6 +2053,9 @@ export default function App() {
   async function calculateRouteFromSavedStops() {
     const routableStops = getRoutableStops(displayedNodes);
     const skippedStopCount = displayedNodes.length - routableStops.length;
+    const skippedPlaceholderCount = unresolvedPlaceholderStops(displayedNodes).length;
+    const skippedOrdinaryStopCount = Math.max(0, skippedStopCount - skippedPlaceholderCount);
+    const skipMessage = formatRouteSkipMessage(skippedOrdinaryStopCount, skippedPlaceholderCount);
 
     if (routableStops.length < 2) {
       setRouteCalculationMessage('Minst två stopp behöver kartposition.');
@@ -1874,7 +2063,7 @@ export default function App() {
     }
 
     setIsRouteCalculating(true);
-    setRouteCalculationMessage(skippedStopCount > 0 ? `${skippedStopCount} stopp saknar position och hoppas över.` : 'Beräknar rutt med Google Routes...');
+    setRouteCalculationMessage(skipMessage ?? 'Beräknar rutt med Google Routes...');
 
     try {
       const result = await calculateGoogleRoute({ stops: displayedNodes });
@@ -2225,6 +2414,112 @@ export default function App() {
             <Text style={styles.commandButtonText}>{isLoading ? 'Sparar...' : 'Spara steg'}</Text>
           </Pressable>
         </View>
+      </View>
+    );
+  }
+
+  function renderSmartStopPanel(node: ItineraryNode) {
+    if (smartStopNodeId !== node.id) {
+      return null;
+    }
+
+    const locatedStops = displayedNodes.filter((candidate) => candidate.id !== node.id && candidate.location);
+    const fromStop = locatedStops.find((candidate) => candidate.id === smartStopFromId) ?? locatedStops[0] ?? null;
+    const toStop = locatedStops.find((candidate) => candidate.id === smartStopToId) ?? locatedStops.find((candidate) => candidate.id !== fromStop?.id) ?? null;
+    const center = fromStop && toStop ? midpointBetweenStops(fromStop, toStop) : fromStop?.location ?? null;
+
+    return (
+      <View style={[styles.coordinateSearchPanel, isDark && styles.innerPanelDark]}>
+        <View style={styles.sectionHeaderRow}>
+          <View>
+            <Text style={[styles.itemTitle, isDark && styles.textDark]}>Smart Mellanstopp</Text>
+            <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>Sök förslag först när du klickar Hitta mellanstopp.</Text>
+          </View>
+          <Pressable style={styles.secondarySmallButton} onPress={() => setSmartStopNodeId(null)} disabled={isLoading}>
+            <Text style={styles.secondarySmallButtonText}>Stäng</Text>
+          </Pressable>
+        </View>
+        <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>Från stopp</Text>
+        <View style={styles.exploreChipRow}>
+          {locatedStops.slice(0, 8).map((stop) => {
+            const selected = smartStopFromId === stop.id;
+            return (
+              <Pressable key={`from-${stop.id}`} style={selected ? styles.smallButton : styles.secondarySmallButton} onPress={() => setSmartStopFromId(stop.id)} disabled={isLoading}>
+                <Text style={selected ? styles.smallButtonText : styles.secondarySmallButtonText} numberOfLines={1}>{stop.title}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>Till stopp</Text>
+        <View style={styles.exploreChipRow}>
+          {locatedStops.slice(0, 8).map((stop) => {
+            const selected = smartStopToId === stop.id;
+            return (
+              <Pressable key={`to-${stop.id}`} style={selected ? styles.smallButton : styles.secondarySmallButton} onPress={() => setSmartStopToId(stop.id)} disabled={isLoading}>
+                <Text style={selected ? styles.smallButtonText : styles.secondarySmallButtonText} numberOfLines={1}>{stop.title}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>Körning före stopp</Text>
+        <View style={styles.exploreChipRow}>
+          {SMART_DRIVE_TIME_OPTIONS.map((option) => {
+            const selected = smartStopDriveTimeRange === option.id;
+            return (
+              <Pressable key={option.id} style={selected ? styles.smallButton : styles.secondarySmallButton} onPress={() => setSmartStopDriveTimeRange(option.id)} disabled={isLoading}>
+                <Text style={selected ? styles.smallButtonText : styles.secondarySmallButtonText}>{option.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>Typ</Text>
+        <View style={styles.exploreChipRow}>
+          {SMART_STOP_OPTIONS.map((option) => {
+            const selected = smartStopType === option.id;
+            return (
+              <Pressable key={option.id} style={selected ? styles.smallButton : styles.secondarySmallButton} onPress={() => setSmartStopType(option.id)} disabled={isLoading}>
+                <Text style={selected ? styles.smallButtonText : styles.secondarySmallButtonText}>{option.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <View style={styles.editorActionRow}>
+          <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={() => void searchSmartStops(node)} disabled={isLoading || locatedStops.length < 2}>
+            <Text style={styles.commandButtonText}>Hitta mellanstopp</Text>
+          </Pressable>
+        </View>
+        {smartStopMessage ? <Text style={styles.validationText}>{smartStopMessage}</Text> : null}
+        {smartStopResults.length > 0 ? (
+          <View style={styles.placeResultList}>
+            {smartStopResults.map((place) => {
+              const explorePlace = center ? nearbyExplorePlaceFromGooglePlace(place, center) : explorePlaceFromGooglePlace(place);
+              return (
+                <View key={place.id} style={[styles.placeItem, isDark && styles.innerPanelDark]}>
+                  <View style={styles.timelineCopy}>
+                    <Text style={[styles.itemTitle, isDark && styles.textDark]}>{explorePlace.title}</Text>
+                    <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
+                      {[explorePlace.place, explorePlace.rating ? `${explorePlace.rating} i betyg` : null, explorePlace.category].filter(Boolean).join(' / ')}
+                    </Text>
+                    <View style={styles.exploreChipRow}>
+                      {explorePlace.statusChips.slice(0, 2).map((chip) => <Text key={chip} style={styles.exploreStatusChip}>{chip}</Text>)}
+                    </View>
+                  </View>
+                  <View style={styles.stopActions}>
+                    <Pressable style={[styles.smallButton, isLoading && styles.disabledButton]} onPress={() => void fillPlaceholderFromSmartStop(node, place)} disabled={isLoading}>
+                      <Text style={styles.smallButtonText}>Fyll placeholder</Text>
+                    </Pressable>
+                    <Pressable style={[styles.secondarySmallButton, isLoading && styles.disabledButton]} onPress={() => saveExploreGooglePlace(place)} disabled={isLoading}>
+                      <Text style={styles.secondarySmallButtonText}>Spara i Utforska</Text>
+                    </Pressable>
+                    <Pressable style={styles.secondarySmallButton} onPress={() => showExplorePlaceOnMap(explorePlace)}>
+                      <Text style={styles.secondarySmallButtonText}>Visa på karta</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        ) : null}
       </View>
     );
   }
@@ -2647,6 +2942,7 @@ export default function App() {
                 isLoading={isLoading}
                 isRouteCalculating={isRouteCalculating}
                 isMobile={isMobile}
+                placeholderSkippedCount={unresolvedPlaceholderCount}
                 routeCalculationMessage={routeCalculationMessage}
                 routeIncludedStopCount={activeCalculatedRoute?.includedStopCount ?? routableStopCount}
                 routeIsCalculated={Boolean(activeCalculatedRoute)}
@@ -2724,10 +3020,12 @@ export default function App() {
                 plannerSearchText={plannerSearchText}
                 renderDayPlaceSearch={renderDayPlaceSearch}
                 renderPlannerInlineEditor={renderPlannerInlineEditor}
+                renderSmartStopPanel={renderSmartStopPanel}
                 selectedDayPlan={selectedDayPlan}
                 selectedPlannerNodeId={selectedPlannerNodeId}
                 styles={styles}
                 visibleDayPlans={visibleDayPlans}
+                onAddPlaceholderAfterStop={(node) => void addPlaceholderAfterStop(node)}
                 onAddPackingItem={addPackingItem}
                 onCancelCoordinateSearch={cancelCoordinateSearch}
                 onChangeCoordinateSearchQuery={setCoordinateSearchQuery}
@@ -2747,6 +3045,7 @@ export default function App() {
                 onSetPlannerSearchText={setPlannerSearchText}
                 onStartCoordinateSearch={startCoordinateSearch}
                 onStartInlineEdit={startInlineEdit}
+                onStartSmartStopSearch={startSmartStopSearch}
                 onStartNewPlannerStep={startNewPlannerStep}
                 onStartPlaceSearch={startPlaceSearch}
                 onTogglePackingItem={togglePackingItem}
@@ -3031,6 +3330,18 @@ function buildExplorePlaceDuplicateKey(place: ExplorePlace): string {
 
 function normalizeDuplicateText(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function formatRouteSkipMessage(stopCount: number, placeholderCount: number): string | null {
+  const parts: string[] = [];
+  if (stopCount > 0) {
+    parts.push(`${stopCount} stopp saknar position och hoppas över.`);
+  }
+  if (placeholderCount > 0) {
+    parts.push(`${placeholderCount} placeholder saknar exakt plats och hoppas över i ruttberäkningen.`);
+  }
+
+  return parts.length > 0 ? parts.join(' ') : null;
 }
 
 function isUuid(value: string): boolean {
