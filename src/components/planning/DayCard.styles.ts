@@ -103,6 +103,12 @@ export const dayCardStyles = StyleSheet.create({
     gap: 8,
     flexWrap: 'wrap',
   },
+  coordinateReadyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
   stopNotePreview: {
     color: '#425466',
     fontSize: 12,

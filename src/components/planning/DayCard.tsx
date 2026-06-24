@@ -196,6 +196,7 @@ export default function DayCard(props: DayCardProps) {
         const targetDays = availableDayTargets.filter((target) => target.key !== dayPlan.key);
         const missingMapPosition = canEdit && !node.location;
         const coordinateStatus = coordinateStatusLabel(node);
+        const coordinateActionLabel = coordinateStatus ? 'Byt Google-plats' : inlineFieldValue(node, 'place') ? 'Fixa position' : 'Sök plats';
         const showCoordinatePrompt = canEdit && shouldShowStaleCoordinateWarning(node);
         const coordinateSearchOpen = coordinateSearchNodeId === node.id;
         const missingInfoChips = buildMissingInfoChips(node);
@@ -311,11 +312,20 @@ export default function DayCard(props: DayCardProps) {
                       onPress={() => onStartCoordinateSearch(node)}
                       disabled={isLoading}
                     >
-                      <Text style={styles.secondarySmallButtonText}>Fixa position</Text>
+                      <Text style={styles.secondarySmallButtonText}>{coordinateActionLabel}</Text>
                     </Pressable>
                   ) : null}
                   {canEdit && coordinateStatus ? (
-                    <Text style={styles.nodeInfoPill}>{coordinateStatus}</Text>
+                    <View style={dayCardStyles.coordinateReadyRow}>
+                      <Text style={styles.nodeInfoPill}>{coordinateStatus}</Text>
+                      <Pressable
+                        style={[styles.secondarySmallButton, isLoading && styles.disabledButton]}
+                        onPress={() => onStartCoordinateSearch(node)}
+                        disabled={isLoading}
+                      >
+                        <Text style={styles.secondarySmallButtonText}>Byt Google-plats</Text>
+                      </Pressable>
+                    </View>
                   ) : null}
                   {showCoordinatePrompt ? (
                     <View style={styles.coordinateWarningBox}>
@@ -327,12 +337,16 @@ export default function DayCard(props: DayCardProps) {
                         onPress={() => onStartCoordinateSearch(node)}
                         disabled={isLoading}
                       >
-                        <Text style={styles.secondarySmallButtonText}>Fixa position</Text>
+                        <Text style={styles.secondarySmallButtonText}>Byt Google-plats</Text>
                       </Pressable>
                     </View>
                   ) : null}
                   {coordinateSearchOpen ? (
                     <View style={[styles.coordinateSearchPanel, isDark && styles.innerPanelDark]}>
+                      <Text style={[styles.itemTitle, isDark && styles.textDark]}>Sök Google-plats</Text>
+                      <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
+                        Välj ett Google-resultat för att spara platsnamn, adress och kartposition på stoppet.
+                      </Text>
                       <View style={styles.actionRow}>
                         <TextInput
                           value={coordinateSearchQuery}

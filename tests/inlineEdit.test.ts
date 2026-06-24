@@ -62,6 +62,8 @@ test('google place selection updates coordinates while preserving stop details',
     displayName: { text: 'Prague Castle' },
     formattedAddress: 'Hradcany, Prague',
     location: { latitude: 50.0909, longitude: 14.4005 },
+    googleMapsUri: 'https://maps.google.com/?cid=123',
+    rating: 4.8,
     primaryType: 'tourist_attraction',
   }, 'poi-1', '2026-06-12T10:00:00.000Z');
 
@@ -79,6 +81,11 @@ test('google place selection updates coordinates while preserving stop details',
   assert.equal(updated.metadata.place, 'Prague Castle');
   assert.equal(updated.metadata.coordinatePlaceLabel, 'Prague Castle');
   assert.equal(updated.metadata.address, 'Hradcany, Prague');
+  assert.equal(updated.metadata.googlePlaceId, 'places/prague-castle');
+  assert.equal(updated.metadata.googleMapsUrl, 'https://maps.google.com/?cid=123');
+  assert.equal(updated.metadata.googlePrimaryType, 'tourist_attraction');
+  assert.equal(updated.metadata.googleRating, 4.8);
+  assert.equal(updated.metadata.googleFormattedAddress, 'Hradcany, Prague');
   assert.equal(updated.metadata.externalRef, 'places/prague-castle');
   assert.equal(updated.version, original.version + 1);
 });

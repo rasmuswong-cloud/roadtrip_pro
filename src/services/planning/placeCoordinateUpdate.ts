@@ -32,6 +32,13 @@ export function applyGooglePlaceCoordinateUpdate(
   if (placeName) {
     nextMetadata.coordinatePlaceLabel = placeName;
   }
+  nextMetadata.googlePlaceId = place.id;
+  nextMetadata.googleMapsUrl = place.googleMapsUri ?? '';
+  nextMetadata.googlePrimaryType = place.primaryType ?? '';
+  nextMetadata.googleRating = place.rating ?? null;
+  nextMetadata.googleFormattedAddress = place.formattedAddress ?? '';
+  nextMetadata.googleWebsiteUri = place.websiteUri ?? '';
+  nextMetadata.googlePhone = place.nationalPhoneNumber ?? '';
   nextMetadata.externalRef = place.id;
 
   return {
