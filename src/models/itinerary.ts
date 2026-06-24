@@ -60,7 +60,7 @@ export type EquipmentItem = {
 export type RouteSummary = {
   distanceMeters: number;
   durationSeconds: number;
-  provider: 'mapbox' | 'osrm' | 'offline';
+  provider: 'google_routes' | 'mapbox' | 'osrm' | 'offline';
   geometry?: LineString;
   elevation?: ElevationProfile;
   instructions?: NavigationInstruction[];

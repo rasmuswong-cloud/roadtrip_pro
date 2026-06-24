@@ -56,6 +56,7 @@ import {
   searchGooglePlaces,
   type GooglePlace,
 } from '@/services/google/googlePlaces';
+import { calculateGoogleRoute, getRoutableStops, routeStopSignature } from '@/services/google/googleRoutes';
 import { analyzeDayWarnings, moveNodeToDay, summarizeDay, validatePlannerDraft, type DaySummary } from '@/services/planning/dayAnalysis';
 import { buildTravelBudgetCenter } from '@/services/planning/budgetAnalysis';
 import {
@@ -107,6 +108,13 @@ type OnlineSaveState = 'idle' | 'saving' | 'saved' | 'error';
 type UndoSnapshot = {
   label: string;
   itineraryNodes: ItineraryNode[];
+};
+
+type CalculatedRouteState = {
+  route: RouteSummary;
+  signature: string;
+  includedStopCount: number;
+  skippedStopCount: number;
 };
 
 type LocalTripImportOffer = {
@@ -404,11 +412,19 @@ export default function App() {
   const [coordinateSearchQuery, setCoordinateSearchQuery] = useState('');
   const [coordinateSearchResults, setCoordinateSearchResults] = useState<GooglePlace[]>([]);
   const [coordinateSearchMessage, setCoordinateSearchMessage] = useState<string | null>(null);
+  const [calculatedRoute, setCalculatedRoute] = useState<CalculatedRouteState | null>(null);
+  const [routeCalculationMessage, setRouteCalculationMessage] = useState<string | null>(null);
+  const [isRouteCalculating, setIsRouteCalculating] = useState(false);
   const { activeTripId, setActiveTrip, upsertTrip, upsertPoi: upsertPoiInStore } = useTripStore();
 
   const displayedNodes = activeTripId ? itineraryNodes : itineraryNodes.length > 0 ? itineraryNodes : demoNodes;
   const isDemoMode = !isEditMode;
-  const routeSummary = useMemo(() => estimateRouteSummary(displayedNodes), [displayedNodes]);
+  const estimatedRouteSummary = useMemo(() => estimateRouteSummary(displayedNodes), [displayedNodes]);
+  const currentRouteSignature = useMemo(() => routeStopSignature(displayedNodes), [displayedNodes]);
+  const activeCalculatedRoute = calculatedRoute?.signature === currentRouteSignature ? calculatedRoute : null;
+  const routeSummary = activeCalculatedRoute?.route ?? estimatedRouteSummary;
+  const routableStopCount = useMemo(() => getRoutableStops(displayedNodes).length, [displayedNodes]);
+  const routeSkippedStopCount = displayedNodes.length - routableStopCount;
   const dayPlans = useMemo(() => buildDayPlans(displayedNodes), [displayedNodes]);
   const dayMoveTargets = useMemo(() => dayPlans
     .filter((dayPlan) => dayPlan.key !== 'unscheduled')
@@ -1767,6 +1783,36 @@ export default function App() {
     }
   }
 
+  async function calculateRouteFromSavedStops() {
+    const routableStops = getRoutableStops(displayedNodes);
+    const skippedStopCount = displayedNodes.length - routableStops.length;
+
+    if (routableStops.length < 2) {
+      setRouteCalculationMessage('Minst två stopp behöver kartposition.');
+      return;
+    }
+
+    setIsRouteCalculating(true);
+    setRouteCalculationMessage(skippedStopCount > 0 ? `${skippedStopCount} stopp saknar position och hoppas över.` : 'Beräknar rutt med Google Routes...');
+
+    try {
+      const result = await calculateGoogleRoute({ stops: displayedNodes });
+      setCalculatedRoute({
+        route: result.route,
+        signature: routeStopSignature(displayedNodes),
+        includedStopCount: result.includedStopCount,
+        skippedStopCount: result.skippedStopCount,
+      });
+      setRouteCalculationMessage(
+        `Rutt beräknad med Google Routes: ${result.includedStopCount} stopp ingår${result.skippedStopCount > 0 ? `, ${result.skippedStopCount} hoppades över` : ''}.`,
+      );
+    } catch (error) {
+      setRouteCalculationMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsRouteCalculating(false);
+    }
+  }
+
   async function updateMissingCoordinatesForAllStops() {
     if (isDemoMode || isLoading || !activeTripId || !userId) {
       setStatusMessage('Anslut resan innan du uppdaterar kartpositioner.');
@@ -2505,10 +2551,16 @@ export default function App() {
                 formatTime={formatTime}
                 isDark={isDark}
                 isLoading={isLoading}
+                isRouteCalculating={isRouteCalculating}
                 isMobile={isMobile}
+                routeCalculationMessage={routeCalculationMessage}
+                routeIncludedStopCount={activeCalculatedRoute?.includedStopCount ?? routableStopCount}
+                routeIsCalculated={Boolean(activeCalculatedRoute)}
+                routeSkippedStopCount={activeCalculatedRoute?.skippedStopCount ?? routeSkippedStopCount}
                 missingCoordinateCount={missingCoordinateCount}
                 styles={styles}
                 tripName={demoTrip.name}
+                onCalculateRoute={() => void calculateRouteFromSavedStops()}
                 onGoToDays={() => goToView('days')}
               />
               ) : null}

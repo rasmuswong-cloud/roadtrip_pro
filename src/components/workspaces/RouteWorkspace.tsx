@@ -14,10 +14,16 @@ type RouteWorkspaceProps = {
   formatTime: (value?: string | null) => string;
   isDark: boolean;
   isLoading: boolean;
+  isRouteCalculating: boolean;
   isMobile: boolean;
   missingCoordinateCount: number;
+  routeCalculationMessage: string | null;
+  routeIncludedStopCount: number;
+  routeIsCalculated: boolean;
+  routeSkippedStopCount: number;
   styles: WorkspaceStyles;
   tripName: string;
+  onCalculateRoute: () => void;
   onGoToDays: () => void;
 };
 
@@ -31,13 +37,22 @@ export function RouteWorkspace({
   formatTime,
   isDark,
   isLoading,
+  isRouteCalculating,
   isMobile,
   missingCoordinateCount,
+  routeCalculationMessage,
+  routeIncludedStopCount,
+  routeIsCalculated,
+  routeSkippedStopCount,
   styles,
   tripName,
+  onCalculateRoute,
   onGoToDays,
 }: RouteWorkspaceProps) {
   const routeForMap = activeRoute.geometry ? activeRoute : demoRoute;
+  const routeSourceLabel = routeIsCalculated ? 'Google Routes' : 'Offline uppskattning';
+  const routeActionLabel = routeIsCalculated ? 'Uppdatera rutt' : 'Beräkna rutt';
+  const tooFewStopsWithPosition = routeIncludedStopCount < 2;
 
   return (
     <View style={styles.routeView}>
@@ -48,6 +63,13 @@ export function RouteWorkspace({
             <Text style={styles.routeStageTitle}>{isMobile ? 'Ruttkarta' : 'Ordna resans stopp'}</Text>
           </View>
           <View style={styles.routeHeaderActions}>
+            <Pressable
+              style={[styles.routeActionButton, (isLoading || isRouteCalculating) && styles.disabledButton]}
+              onPress={onCalculateRoute}
+              disabled={isLoading || isRouteCalculating}
+            >
+              <Text style={styles.routeActionButtonText}>{isRouteCalculating ? 'Beräknar...' : routeActionLabel}</Text>
+            </Pressable>
             {missingCoordinateCount > 0 ? (
               <Pressable
                 style={[styles.routeActionButton, isLoading && styles.disabledButton]}
@@ -58,9 +80,16 @@ export function RouteWorkspace({
               </Pressable>
             ) : null}
             <View style={styles.routeBadge}>
-              <Text style={styles.routeBadgeText}>{displayedNodes.length} stopp</Text>
+              <Text style={styles.routeBadgeText}>{routeSourceLabel}</Text>
             </View>
           </View>
+        </View>
+        <View style={styles.routeStageFooter}>
+          <Text style={styles.routeStageMeta}>
+            {tooFewStopsWithPosition ? 'Minst två stopp behöver kartposition.' : `${routeIncludedStopCount} stopp ingår`}
+          </Text>
+          {routeSkippedStopCount > 0 ? <Text style={styles.routeStageMeta}>{routeSkippedStopCount} stopp saknar position och hoppas över.</Text> : null}
+          {routeCalculationMessage ? <Text style={styles.routeStageMeta}>{routeCalculationMessage}</Text> : null}
         </View>
         {isMobile ? (
           <View testID="center-mobile-map" style={[styles.mapShell, styles.mapShellMobile]}>
@@ -87,12 +116,12 @@ export function RouteWorkspace({
         <View style={styles.routeStageFooter}>
           <Text style={styles.routeStageMeta}>{formatDistance(activeRoute.distanceMeters)} rutt</Text>
           <Text style={styles.routeStageMeta}>{formatDuration(activeRoute.durationSeconds)} körning</Text>
-          {missingCoordinateCount > 0 ? <Text style={styles.routeStageMeta}>{missingCoordinateCount} positioner att fixa</Text> : null}
+          <Text style={styles.routeStageMeta}>{routeSourceLabel}</Text>
         </View>
       </View>
 
       <View style={[styles.statsRow, isMobile && styles.singleColumnGrid]}>
-        <Metric label="Stopp" value={`${displayedNodes.length}`} accent="#0f766e" dark={isDark} styles={styles} />
+        <Metric label="Stopp i rutt" value={`${routeIncludedStopCount}`} accent="#0f766e" dark={isDark} styles={styles} />
         <Metric label="Rutt" value={formatDistance(activeRoute.distanceMeters)} accent="#2563eb" dark={isDark} styles={styles} />
         <Metric label="Körning" value={formatDuration(activeRoute.durationSeconds)} accent="#d97706" dark={isDark} styles={styles} />
       </View>
