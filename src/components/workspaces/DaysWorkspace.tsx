@@ -6,6 +6,7 @@ import DayCard from '@/components/planning/DayCard';
 import type { DayChecklistItem, DayPlan, ItineraryNode, RouteSummary } from '@/models';
 import type { GooglePlace } from '@/services/google/googlePlaces';
 import type { ActiveInlineEdit, InlineFieldKey, InlineFieldValue } from '@/services/planning/inlineEdit';
+import { buildPlanningStatus, type PlanningStatusItem } from '@/services/planning/planningStatus';
 import { formatDistance, formatDuration } from '@/utils/formatters';
 import { DayInsight, SectionTitle, type WorkspaceStyles } from './WorkspaceBits';
 
@@ -34,12 +35,15 @@ type DaysWorkspaceProps = {
   renderDayPlaceSearch: (dayKey: string) => React.ReactNode;
   renderPlannerInlineEditor: (mode: 'edit' | 'new') => React.ReactNode;
   renderSmartStopPanel: (node: ItineraryNode) => React.ReactNode;
+  routeIsCalculated: boolean;
+  routeSkippedStopCount: number;
   selectedDayPlan: DayPlan | null;
   selectedPlannerNodeId: string | null;
   styles: WorkspaceStyles;
   visibleDayPlans: DayPlan[];
   onAddPackingItem: (dayPlan: DayPlan) => Promise<void>;
   onAddPlaceholderAfterStop: (node: ItineraryNode) => void;
+  onCalculateRoute: () => void;
   onCancelCoordinateSearch: () => void;
   onChangeCoordinateSearchQuery: (text: string) => void;
   onClearInlineEdit: () => void;
@@ -91,12 +95,15 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
     renderDayPlaceSearch,
     renderPlannerInlineEditor,
     renderSmartStopPanel,
+    routeIsCalculated,
+    routeSkippedStopCount,
     selectedDayPlan,
     selectedPlannerNodeId,
     styles,
     visibleDayPlans,
     onAddPackingItem,
     onAddPlaceholderAfterStop,
+    onCalculateRoute,
     onCancelCoordinateSearch,
     onChangeCoordinateSearchQuery,
     onClearInlineEdit,
@@ -123,6 +130,36 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
   } = props;
 
   const routeForMap = activeRoute.geometry ? activeRoute : demoRoute;
+  const planningStatus = buildPlanningStatus({
+    dayPlans,
+    routeIsCalculated,
+    routeSkippedStopCount,
+    maxItems: 4,
+  });
+
+  function runPlanningStatusAction(item: PlanningStatusItem) {
+    if (item.dayKey) {
+      onSelectDay(item.dayKey);
+    }
+
+    const node = item.nodeId
+      ? dayPlans.flatMap((dayPlan) => dayPlan.nodes).find((candidate) => candidate.id === item.nodeId)
+      : null;
+
+    if (item.action === 'smart_stop' && node) {
+      onStartSmartStopSearch(node);
+      return;
+    }
+
+    if (item.action === 'search_location' && node) {
+      onStartCoordinateSearch(node);
+      return;
+    }
+
+    if (item.action === 'calculate_route') {
+      onCalculateRoute();
+    }
+  }
 
   return (
     <View style={[styles.panelSection, isDark && styles.panelDark]}>
@@ -166,6 +203,28 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
         <DayInsight label="Stopp" value={`${displayedNodesLength}`} tone="neutral" styles={styles} />
         <DayInsight label="Rutt" value={formatDistance(activeRoute.distanceMeters)} tone="neutral" styles={styles} />
         <DayInsight label="Körning" value={formatDuration(activeRoute.durationSeconds)} tone="neutral" styles={styles} />
+      </View>
+      <View style={styles.planningStatusCard}>
+        <View style={styles.planningStatusHeader}>
+          <View style={styles.flexOne}>
+            <Text style={styles.planningStatusTitle}>{planningStatus.title}</Text>
+            <Text style={styles.planningStatusSubtitle}>{planningStatus.subtitle}</Text>
+          </View>
+        </View>
+        {planningStatus.items.length > 0 ? (
+          <View style={styles.planningStatusList}>
+            {planningStatus.items.map((item) => (
+              <View key={item.id} style={styles.planningStatusRow}>
+                <Text style={styles.planningStatusItemText} numberOfLines={2}>{item.label}</Text>
+                <Pressable style={[styles.secondarySmallButton, isLoading && styles.disabledButton]} onPress={() => runPlanningStatusAction(item)} disabled={isLoading}>
+                  <Text style={styles.secondarySmallButtonText}>{item.actionLabel}</Text>
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.planningStatusReadyText}>Inga stora luckor hittades. Finjustera detaljer när du vill.</Text>
+        )}
       </View>
       {visibleDayPlans.length > 0 ? (
         <View style={styles.daySelectorRail}>

@@ -3088,12 +3088,15 @@ export default function App() {
                 renderDayPlaceSearch={renderDayPlaceSearch}
                 renderPlannerInlineEditor={renderPlannerInlineEditor}
                 renderSmartStopPanel={renderSmartStopPanel}
+                routeIsCalculated={Boolean(activeCalculatedRoute)}
+                routeSkippedStopCount={activeCalculatedRoute?.skippedStopCount ?? routeSkippedStopCount}
                 selectedDayPlan={selectedDayPlan}
                 selectedPlannerNodeId={selectedPlannerNodeId}
                 styles={styles}
                 visibleDayPlans={visibleDayPlans}
                 onAddPlaceholderAfterStop={(node) => void addPlaceholderAfterStop(node)}
                 onAddPackingItem={addPackingItem}
+                onCalculateRoute={() => void calculateRouteFromSavedStops()}
                 onCancelCoordinateSearch={cancelCoordinateSearch}
                 onChangeCoordinateSearchQuery={setCoordinateSearchQuery}
                 onClearInlineEdit={clearInlineEdit}
@@ -5937,6 +5940,62 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     flexWrap: 'wrap',
+  },
+  planningStatusCard: {
+    gap: 10,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d7e8df',
+    backgroundColor: '#f3fbf8',
+    padding: 14,
+  },
+  planningStatusHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  planningStatusTitle: {
+    color: '#0a2540',
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  planningStatusSubtitle: {
+    color: '#425466',
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 18,
+    marginTop: 3,
+  },
+  planningStatusList: {
+    gap: 8,
+  },
+  planningStatusRow: {
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#dbe9e2',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  planningStatusItemText: {
+    flex: 1,
+    minWidth: 0,
+    color: '#1f2933',
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 18,
+  },
+  planningStatusReadyText: {
+    color: '#0f766e',
+    fontSize: 13,
+    fontWeight: '900',
+    lineHeight: 18,
   },
   daySelectorRail: {
     flexDirection: 'row',
