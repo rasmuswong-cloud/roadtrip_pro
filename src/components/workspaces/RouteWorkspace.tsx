@@ -1,13 +1,17 @@
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { NavigationMap } from '@/components/map/NavigationMap';
 import type { ItineraryNode, RouteSummary } from '@/models';
+import type { FuelEstimate } from '@/services/routing/fuelEstimate';
 import { Metric, SectionTitle, type WorkspaceStyles } from './WorkspaceBits';
 
 type RouteWorkspaceProps = {
   activeRoute: RouteSummary;
   demoRoute: RouteSummary;
   displayedNodes: ItineraryNode[];
+  fuelConsumptionText: string;
+  fuelEstimate: FuelEstimate;
+  fuelPriceText: string;
   formatDateLabel: (dateKey: string) => string;
   formatDistance: (meters: number) => string;
   formatDuration: (seconds: number) => string;
@@ -25,12 +29,17 @@ type RouteWorkspaceProps = {
   tripName: string;
   onCalculateRoute: () => void;
   onGoToDays: () => void;
+  onSetFuelConsumptionText: (value: string) => void;
+  onSetFuelPriceText: (value: string) => void;
 };
 
 export function RouteWorkspace({
   activeRoute,
   demoRoute,
   displayedNodes,
+  fuelConsumptionText,
+  fuelEstimate,
+  fuelPriceText,
   formatDateLabel,
   formatDistance,
   formatDuration,
@@ -48,11 +57,19 @@ export function RouteWorkspace({
   tripName,
   onCalculateRoute,
   onGoToDays,
+  onSetFuelConsumptionText,
+  onSetFuelPriceText,
 }: RouteWorkspaceProps) {
   const routeForMap = activeRoute.geometry ? activeRoute : demoRoute;
   const routeSourceLabel = routeIsCalculated ? 'Google Routes' : 'Offline uppskattning';
   const routeActionLabel = routeIsCalculated ? 'Uppdatera rutt' : 'Beräkna rutt';
   const tooFewStopsWithPosition = routeIncludedStopCount < 2;
+  const routeLegs = routeIsCalculated ? (activeRoute.legs ?? []) : [];
+  const roundedFuelLiters = Math.round(fuelEstimate.liters).toLocaleString('sv-SE');
+  const roundedFuelCost = Math.round(fuelEstimate.totalCost).toLocaleString('sv-SE');
+  const roundedFuelCostPerPerson = fuelEstimate.perPersonCost === null
+    ? null
+    : Math.round(fuelEstimate.perPersonCost).toLocaleString('sv-SE');
 
   return (
     <View style={styles.routeView}>
@@ -124,6 +141,68 @@ export function RouteWorkspace({
         <Metric label="Stopp i rutt" value={`${routeIncludedStopCount}`} accent="#0f766e" dark={isDark} styles={styles} />
         <Metric label="Rutt" value={formatDistance(activeRoute.distanceMeters)} accent="#2563eb" dark={isDark} styles={styles} />
         <Metric label="Körning" value={formatDuration(activeRoute.durationSeconds)} accent="#d97706" dark={isDark} styles={styles} />
+      </View>
+
+      {routeLegs.length > 0 ? (
+        <View style={[styles.panelSection, isDark && styles.panelDark]}>
+          <View style={styles.sectionHeaderRow}>
+            <SectionTitle title="Delsträckor" dark={isDark} styles={styles} />
+            <Text style={styles.overviewMeta}>{routeLegs.length} delsträckor</Text>
+          </View>
+          <View style={styles.routeStopList}>
+            {routeLegs.map((leg, index) => (
+              <View key={`${leg.fromTitle}-${leg.toTitle}-${index}`} style={styles.routeStopItem}>
+                <View style={styles.routeStopNumber}>
+                  <Text style={styles.routeStopNumberText}>{index + 1}</Text>
+                </View>
+                <View style={styles.routeStopCopy}>
+                  <Text style={styles.routeStopTitle}>{leg.fromTitle} → {leg.toTitle}</Text>
+                  <Text style={styles.routeStopMeta}>{formatDistance(leg.distanceMeters)} · {formatDuration(leg.durationSeconds)}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : null}
+
+      <View style={[styles.panelSection, isDark && styles.panelDark]}>
+        <View style={styles.sectionHeaderRow}>
+          <SectionTitle title="Bränsleberäkning" dark={isDark} styles={styles} />
+          <Text style={styles.overviewMeta}>{routeSourceLabel}</Text>
+        </View>
+        <View style={[styles.actionRow, isMobile && styles.singleColumnGrid]}>
+          <View style={styles.coordinateInputGroup}>
+            <Text style={styles.inputLabel}>Förbrukning</Text>
+            <TextInput
+              value={fuelConsumptionText}
+              onChangeText={onSetFuelConsumptionText}
+              placeholder="6.5"
+              placeholderTextColor={isDark ? '#64748b' : '#94a3b8'}
+              keyboardType="decimal-pad"
+              inputMode="decimal"
+              style={[styles.coordinateInput, isDark && styles.inputDark]}
+            />
+            <Text style={styles.routeStopMeta}>liter/100 km</Text>
+          </View>
+          <View style={styles.coordinateInputGroup}>
+            <Text style={styles.inputLabel}>Bränslepris</Text>
+            <TextInput
+              value={fuelPriceText}
+              onChangeText={onSetFuelPriceText}
+              placeholder="20"
+              placeholderTextColor={isDark ? '#64748b' : '#94a3b8'}
+              keyboardType="decimal-pad"
+              inputMode="decimal"
+              style={[styles.coordinateInput, isDark && styles.inputDark]}
+            />
+            <Text style={styles.routeStopMeta}>kr/liter</Text>
+          </View>
+        </View>
+        <View style={[styles.statsRow, isMobile && styles.singleColumnGrid]}>
+          <Metric label="Beräknad bensin" value={`${roundedFuelLiters} liter`} accent="#0f766e" dark={isDark} styles={styles} />
+          <Metric label="Bränslekostnad" value={`ca ${roundedFuelCost} kr`} accent="#d97706" dark={isDark} styles={styles} />
+          <Metric label="Per person" value={roundedFuelCostPerPerson ? `ca ${roundedFuelCostPerPerson} kr` : 'Saknas'} accent="#2563eb" dark={isDark} styles={styles} />
+        </View>
       </View>
 
       <View style={[styles.panelSection, isDark && styles.panelDark]}>

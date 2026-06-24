@@ -66,6 +66,10 @@ test('Google Routes calculation is explicit and uses saved stop coordinates', as
       routes: [{
         distanceMeters: 123456,
         duration: '5432s',
+        legs: [
+          { distanceMeters: 50000, duration: '2000s' },
+          { distanceMeters: 73456, duration: '3432s' },
+        ],
         polyline: { encodedPolyline: '_p~iF~ps|U_ulLnnqC_mqNvxq`@' },
       }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -89,6 +93,10 @@ test('Google Routes calculation is explicit and uses saved stop coordinates', as
     assert.equal(result.skippedStopCount, 1);
     assert.equal((requestedBody.intermediates as unknown[]).length, 1);
     assert.equal(result.route.geometry?.coordinates.length, 3);
+    assert.deepEqual(result.route.legs?.map((leg) => `${leg.fromTitle}->${leg.toTitle}:${leg.distanceMeters}`), [
+      'a->b:50000',
+      'b->c:73456',
+    ]);
   } finally {
     restoreEnvironment();
   }

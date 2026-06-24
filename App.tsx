@@ -59,6 +59,7 @@ import {
 import { calculateGoogleRoute, getRoutableStops, routeStopSignature } from '@/services/google/googleRoutes';
 import { analyzeDayWarnings, moveNodeToDay, summarizeDay, validatePlannerDraft, type DaySummary } from '@/services/planning/dayAnalysis';
 import { buildTravelBudgetCenter } from '@/services/planning/budgetAnalysis';
+import { calculateFuelEstimate, parseFuelNumber } from '@/services/routing/fuelEstimate';
 import {
   addExplorePlaceTarget,
   emptyExploreState,
@@ -101,6 +102,8 @@ type PersistedAppState = {
   isEditMode: boolean;
   exploreNotes?: string;
   explorePlaces?: ExplorePlace[];
+  fuelConsumptionText?: string;
+  fuelPriceText?: string;
 };
 
 type OnlineSaveState = 'idle' | 'saving' | 'saved' | 'error';
@@ -241,6 +244,8 @@ function readPersistedAppState(): PersistedAppState | null {
       isEditMode: parsedState.isEditMode === true,
       exploreNotes: typeof parsedState.exploreNotes === 'string' ? parsedState.exploreNotes : '',
       explorePlaces: Array.isArray(parsedState.explorePlaces) ? parsedState.explorePlaces.filter(isPersistedExplorePlace) : [],
+      fuelConsumptionText: typeof parsedState.fuelConsumptionText === 'string' ? parsedState.fuelConsumptionText : '6.5',
+      fuelPriceText: typeof parsedState.fuelPriceText === 'string' ? parsedState.fuelPriceText : '20',
     };
   } catch {
     return null;
@@ -280,6 +285,8 @@ function isPersistedAppState(value: unknown): value is PersistedAppState {
     || (value.isEditMode !== undefined && typeof value.isEditMode !== 'boolean')
     || (value.exploreNotes !== undefined && typeof value.exploreNotes !== 'string')
     || (value.explorePlaces !== undefined && !Array.isArray(value.explorePlaces))
+    || (value.fuelConsumptionText !== undefined && typeof value.fuelConsumptionText !== 'string')
+    || (value.fuelPriceText !== undefined && typeof value.fuelPriceText !== 'string')
   ) {
     return false;
   }
@@ -397,6 +404,8 @@ export default function App() {
   const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
   const [showPlannerTechnicalDetails, setShowPlannerTechnicalDetails] = useState(false);
   const [travelerCountText, setTravelerCountText] = useState(() => initialPersistedState?.travelerCountText ?? '2');
+  const [fuelConsumptionText, setFuelConsumptionText] = useState(() => initialPersistedState?.fuelConsumptionText ?? '6.5');
+  const [fuelPriceText, setFuelPriceText] = useState(() => initialPersistedState?.fuelPriceText ?? '20');
   const [packingDraftByDay, setPackingDraftByDay] = useState<Record<string, string>>({});
   const [hasLoadedPersistentState, setHasLoadedPersistentState] = useState(false);
   const [onlineSaveState, setOnlineSaveState] = useState<OnlineSaveState>('idle');
@@ -441,6 +450,12 @@ export default function App() {
   }, [selectedDayKey, visibleDayPlans]);
   const budgetSummary = useMemo(() => buildBudgetSummary(displayedNodes), [displayedNodes]);
   const travelerCount = parseTravelerCount(travelerCountText);
+  const fuelEstimate = useMemo(() => calculateFuelEstimate({
+    distanceMeters: routeSummary.distanceMeters,
+    consumptionLitersPer100Km: parseFuelNumber(fuelConsumptionText, 6.5),
+    fuelPricePerLiter: parseFuelNumber(fuelPriceText, 20),
+    travelerCount,
+  }), [fuelConsumptionText, fuelPriceText, routeSummary.distanceMeters, travelerCount]);
   const budgetCenter = useMemo(() => buildTravelBudgetCenter(displayedNodes, travelerCount), [displayedNodes, travelerCount]);
   const bulkCoordinateCandidates = useMemo(() => getBulkCoordinateCandidates(displayedNodes), [displayedNodes]);
   const missingCoordinateCount = bulkCoordinateCandidates.length;
@@ -487,8 +502,10 @@ export default function App() {
       isEditMode,
       exploreNotes,
       explorePlaces,
+      fuelConsumptionText,
+      fuelPriceText,
     });
-  }, [activeTripId, hasLoadedPersistentState, itineraryNodes, travelerCountText, isEditMode, exploreNotes, explorePlaces]);
+  }, [activeTripId, hasLoadedPersistentState, itineraryNodes, travelerCountText, isEditMode, exploreNotes, explorePlaces, fuelConsumptionText, fuelPriceText]);
 
   useEffect(() => {
     void connectSupabaseTrip();
@@ -510,6 +527,8 @@ export default function App() {
         isEditMode: next,
         exploreNotes,
         explorePlaces,
+        fuelConsumptionText,
+        fuelPriceText,
       });
       setStatusMessage(next ? 'Redigeringsläge på. Ändringar sparas när du sparar fälten.' : 'Redigeringsläge av.');
       return next;
@@ -535,6 +554,8 @@ export default function App() {
       isEditMode,
       exploreNotes,
       explorePlaces,
+      fuelConsumptionText,
+      fuelPriceText,
     });
     setStatusMessage('Appen sparad. Nästa gång öppnas samma plan och läge.');
   }
@@ -2549,6 +2570,9 @@ export default function App() {
                 formatDistance={formatDistance}
                 formatDuration={formatDuration}
                 formatTime={formatTime}
+                fuelConsumptionText={fuelConsumptionText}
+                fuelEstimate={fuelEstimate}
+                fuelPriceText={fuelPriceText}
                 isDark={isDark}
                 isLoading={isLoading}
                 isRouteCalculating={isRouteCalculating}
@@ -2561,6 +2585,8 @@ export default function App() {
                 styles={styles}
                 tripName={demoTrip.name}
                 onCalculateRoute={() => void calculateRouteFromSavedStops()}
+                onSetFuelConsumptionText={setFuelConsumptionText}
+                onSetFuelPriceText={setFuelPriceText}
                 onGoToDays={() => goToView('days')}
               />
               ) : null}

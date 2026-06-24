@@ -61,9 +61,18 @@ export type RouteSummary = {
   distanceMeters: number;
   durationSeconds: number;
   provider: 'google_routes' | 'mapbox' | 'osrm' | 'offline';
+  legs?: RouteLegSummary[];
   geometry?: LineString;
   elevation?: ElevationProfile;
   instructions?: NavigationInstruction[];
+};
+
+export type RouteLegSummary = {
+  fromTitle: string;
+  toTitle: string;
+  distanceMeters: number;
+  durationSeconds: number;
+  provider: 'google_routes' | 'mapbox' | 'osrm' | 'offline';
 };
 
 export type ElevationProfile = {

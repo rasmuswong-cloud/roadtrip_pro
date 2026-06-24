@@ -1,7 +1,7 @@
-import type { Coordinates, ItineraryNode, RouteSummary } from '@/models';
+import type { Coordinates, ItineraryNode, RouteLegSummary, RouteSummary } from '@/models';
 
 const COMPUTE_ROUTES_URL = 'https://routes.googleapis.com/directions/v2:computeRoutes';
-const FIELD_MASK = 'routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline';
+const FIELD_MASK = 'routes.distanceMeters,routes.duration,routes.legs.distanceMeters,routes.legs.duration,routes.polyline.encodedPolyline';
 
 export type GoogleRouteInput = {
   stops: ItineraryNode[];
@@ -17,6 +17,10 @@ type GoogleRoutesResponse = {
   routes?: Array<{
     distanceMeters?: number;
     duration?: string;
+    legs?: Array<{
+      distanceMeters?: number;
+      duration?: string;
+    }>;
     polyline?: {
       encodedPolyline?: string;
     };
@@ -81,25 +85,59 @@ export async function calculateGoogleRoute(input: GoogleRouteInput): Promise<Goo
     throw new Error('Google Routes returnerade ingen körbar rutt.');
   }
 
+  const routeLegs = buildRouteLegs(routableStops, route.legs);
+  const routeSummary: RouteSummary = {
+    distanceMeters: route.distanceMeters,
+    durationSeconds: parseDurationSeconds(route.duration),
+    provider: 'google_routes',
+    geometry: route.polyline?.encodedPolyline
+      ? {
+          type: 'LineString',
+          coordinates: decodePolyline(route.polyline.encodedPolyline).map((point) => [point.longitude, point.latitude]),
+        }
+      : {
+          type: 'LineString',
+          coordinates: coordinates.map((point) => [point.longitude, point.latitude]),
+        },
+    instructions: [],
+  };
+
+  if (routeLegs.length > 0) {
+    routeSummary.legs = routeLegs;
+  }
+
   return {
-    route: {
-      distanceMeters: route.distanceMeters,
-      durationSeconds: parseDurationSeconds(route.duration),
-      provider: 'google_routes',
-      geometry: route.polyline?.encodedPolyline
-        ? {
-            type: 'LineString',
-            coordinates: decodePolyline(route.polyline.encodedPolyline).map((point) => [point.longitude, point.latitude]),
-          }
-        : {
-            type: 'LineString',
-            coordinates: coordinates.map((point) => [point.longitude, point.latitude]),
-          },
-      instructions: [],
-    },
+    route: routeSummary,
     includedStopCount: routableStops.length,
     skippedStopCount: input.stops.length - routableStops.length,
   };
+}
+
+function buildRouteLegs(
+  stops: ItineraryNode[],
+  legs: Array<{ distanceMeters?: number; duration?: string }> | undefined,
+): RouteLegSummary[] {
+  if (!legs || legs.length === 0) {
+    return [];
+  }
+
+  return legs.reduce<RouteLegSummary[]>((routeLegs, leg, index) => {
+    const fromStop = stops[index];
+    const toStop = stops[index + 1];
+    if (!fromStop || !toStop || typeof leg.distanceMeters !== 'number') {
+      return routeLegs;
+    }
+
+    routeLegs.push({
+      fromTitle: fromStop.title,
+      toTitle: toStop.title,
+      distanceMeters: leg.distanceMeters,
+      durationSeconds: parseDurationSeconds(leg.duration),
+      provider: 'google_routes',
+    });
+
+    return routeLegs;
+  }, []);
 }
 
 function resolveGoogleRoutesApiKey(): string | undefined {
