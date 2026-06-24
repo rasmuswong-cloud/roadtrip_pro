@@ -77,6 +77,7 @@ test('google place selection updates coordinates while preserving stop details',
   assert.deepEqual(updated.location, { latitude: 50.0909, longitude: 14.4005 });
   assert.equal(updated.poiId, 'poi-1');
   assert.equal(updated.metadata.place, 'Prague Castle');
+  assert.equal(updated.metadata.coordinatePlaceLabel, 'Prague Castle');
   assert.equal(updated.metadata.address, 'Hradcany, Prague');
   assert.equal(updated.metadata.externalRef, 'places/prague-castle');
   assert.equal(updated.version, original.version + 1);

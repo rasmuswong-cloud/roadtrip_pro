@@ -6,12 +6,14 @@ import {
   buildMissingInfoChips,
   cleanImportedNoteLines,
   compactNote,
+  coordinateStatusLabel,
   formatDistance,
   formatDuration,
   formatItineraryTime,
   formatRawNodeCost,
   formatSek,
   nodeColor,
+  shouldShowStaleCoordinateWarning,
 } from '../src/components/planning/dayCardViewModel';
 
 function makeNode(overrides: Partial<ItineraryNode> = {}): ItineraryNode {
@@ -65,6 +67,45 @@ test('day card missing info chips describe incomplete itinerary items', () => {
 
 test('day card missing info chips stay empty for complete itinerary items', () => {
   assert.deepEqual(buildMissingInfoChips(makeNode()), []);
+});
+
+test('coordinate status stays calm after a selected place is saved', () => {
+  const node = makeNode({
+    metadata: {
+      place: 'Prague Castle',
+      coordinatePlaceLabel: '  prague   castle ',
+      coordinateSource: 'google_places',
+    },
+  });
+
+  assert.equal(shouldShowStaleCoordinateWarning(node), false);
+  assert.equal(coordinateStatusLabel(node), 'Position klar');
+});
+
+test('coordinate warning appears only when visible place differs from saved coordinate label', () => {
+  const changed = makeNode({
+    metadata: {
+      place: 'Old Town Square',
+      coordinatePlaceLabel: 'Prague Castle',
+      coordinateSource: 'google_places',
+    },
+  });
+
+  assert.equal(shouldShowStaleCoordinateWarning(changed), true);
+  assert.equal(coordinateStatusLabel(changed), null);
+});
+
+test('coordinate warning stays quiet without a reliable coordinate label', () => {
+  const legacy = makeNode({
+    metadata: {
+      place: 'Old Town Square',
+      coordinateSource: 'google_places',
+      address: 'Prague Castle, Prague',
+    },
+  });
+
+  assert.equal(shouldShowStaleCoordinateWarning(legacy), false);
+  assert.equal(coordinateStatusLabel(legacy), 'Position klar');
 });
 
 test('day card route and currency formatters keep existing labels', () => {

@@ -29,6 +29,9 @@ export function applyGooglePlaceCoordinateUpdate(
     nextMetadata.source = 'google_places';
   }
   nextMetadata.coordinateSource = 'google_places';
+  if (placeName) {
+    nextMetadata.coordinatePlaceLabel = placeName;
+  }
   nextMetadata.externalRef = place.id;
 
   return {

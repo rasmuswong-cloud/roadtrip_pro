@@ -6,9 +6,11 @@ import { dayCardStyles } from './DayCard.styles';
 import {
   buildMissingInfoChips,
   compactNote,
+  coordinateStatusLabel,
   formatItineraryTime,
   formatRawNodeCost,
   nodeColor,
+  shouldShowStaleCoordinateWarning,
 } from './dayCardViewModel';
 import { DayHeader } from './DayHeader';
 import { DayChecklistPanel } from './DayChecklistPanel';
@@ -193,7 +195,8 @@ export default function DayCard(props: DayCardProps) {
         const canEdit = itineraryNodesLength > 0 && !isDemoMode;
         const targetDays = availableDayTargets.filter((target) => target.key !== dayPlan.key);
         const missingMapPosition = canEdit && !node.location;
-        const showCoordinatePrompt = canEdit && Boolean(node.location && inlineFieldValue(node, 'place'));
+        const coordinateStatus = coordinateStatusLabel(node);
+        const showCoordinatePrompt = canEdit && shouldShowStaleCoordinateWarning(node);
         const coordinateSearchOpen = coordinateSearchNodeId === node.id;
         const missingInfoChips = buildMissingInfoChips(node);
         const fullEditorOpen = selectedPlannerNodeId === node.id;
@@ -310,6 +313,9 @@ export default function DayCard(props: DayCardProps) {
                     >
                       <Text style={styles.secondarySmallButtonText}>Fixa position</Text>
                     </Pressable>
+                  ) : null}
+                  {canEdit && coordinateStatus ? (
+                    <Text style={styles.nodeInfoPill}>{coordinateStatus}</Text>
                   ) : null}
                   {showCoordinatePrompt ? (
                     <View style={styles.coordinateWarningBox}>

@@ -106,6 +106,29 @@ export function buildMissingInfoChips(node: ItineraryNode): string[] {
   return chips;
 }
 
+export function coordinateStatusLabel(node: ItineraryNode): string | null {
+  if (!node.location) {
+    return null;
+  }
+
+  return shouldShowStaleCoordinateWarning(node) ? null : 'Position klar';
+}
+
+export function shouldShowStaleCoordinateWarning(node: ItineraryNode): boolean {
+  if (!node.location) {
+    return false;
+  }
+
+  const visiblePlace = readString(node.metadata.place);
+  const coordinatePlaceLabel = readString(node.metadata.coordinatePlaceLabel);
+
+  if (!visiblePlace || !coordinatePlaceLabel) {
+    return false;
+  }
+
+  return normalizePlaceText(visiblePlace) !== normalizePlaceText(coordinatePlaceLabel);
+}
+
 function isImportedNoteLine(value: string): boolean {
   const normalized = value.toLowerCase();
   return (
@@ -116,6 +139,20 @@ function isImportedNoteLine(value: string): boolean {
     || normalized.includes('laddad fr')
     || normalized.includes('kostnad fr')
   );
+}
+
+function readString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizePlaceText(value: string): string {
+  return value
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
 }
 
 function readNodeCost(node: ItineraryNode): string {
