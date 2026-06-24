@@ -98,6 +98,8 @@ type PersistedAppState = {
   itineraryNodes: ItineraryNode[];
   travelerCountText: string;
   isEditMode: boolean;
+  exploreNotes?: string;
+  explorePlaces?: ExplorePlace[];
 };
 
 type OnlineSaveState = 'idle' | 'saving' | 'saved' | 'error';
@@ -105,6 +107,16 @@ type OnlineSaveState = 'idle' | 'saving' | 'saved' | 'error';
 type UndoSnapshot = {
   label: string;
   itineraryNodes: ItineraryNode[];
+};
+
+type LocalTripImportOffer = {
+  tripId: string;
+  userId: string;
+  nodes: ItineraryNode[];
+  exploreNotes: string;
+  explorePlaces: ExplorePlace[];
+  cloudNodeCount: number;
+  cloudExploreCount: number;
 };
 
 const appTabs = APP_TABS;
@@ -219,6 +231,8 @@ function readPersistedAppState(): PersistedAppState | null {
       itineraryNodes: sortNodes(parsedState.itineraryNodes.map(cleanItineraryNodeImportNotes)),
       travelerCountText: parsedState.travelerCountText,
       isEditMode: parsedState.isEditMode === true,
+      exploreNotes: typeof parsedState.exploreNotes === 'string' ? parsedState.exploreNotes : '',
+      explorePlaces: Array.isArray(parsedState.explorePlaces) ? parsedState.explorePlaces.filter(isPersistedExplorePlace) : [],
     };
   } catch {
     return null;
@@ -256,11 +270,14 @@ function isPersistedAppState(value: unknown): value is PersistedAppState {
     || !Array.isArray(value.itineraryNodes)
     || typeof value.travelerCountText !== 'string'
     || (value.isEditMode !== undefined && typeof value.isEditMode !== 'boolean')
+    || (value.exploreNotes !== undefined && typeof value.exploreNotes !== 'string')
+    || (value.explorePlaces !== undefined && !Array.isArray(value.explorePlaces))
   ) {
     return false;
   }
 
-  return value.itineraryNodes.every(isPersistedItineraryNode);
+  return value.itineraryNodes.every(isPersistedItineraryNode)
+    && (!Array.isArray(value.explorePlaces) || value.explorePlaces.every(isPersistedExplorePlace));
 }
 
 function isPersistedItineraryNode(value: unknown): value is ItineraryNode {
@@ -278,6 +295,18 @@ function isPersistedItineraryNode(value: unknown): value is ItineraryNode {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function isPersistedExplorePlace(value: unknown): value is ExplorePlace {
+  return (
+    isRecord(value)
+    && typeof value.id === 'string'
+    && typeof value.title === 'string'
+    && typeof value.category === 'string'
+    && typeof value.type === 'string'
+    && typeof value.imageSource === 'string'
+    && Array.isArray(value.statusChips)
+  );
 }
 
 function formatOnlineSaveLabel(state: OnlineSaveState, lastSavedAt: string | null, hasActiveTrip: boolean): string {
@@ -335,10 +364,12 @@ export default function App() {
   const [activePlaceDayKey, setActivePlaceDayKey] = useState<string | null>(null);
   const [placeResults, setPlaceResults] = useState<GooglePlace[]>([]);
   const [exploreNotes, setExploreNotes] = useState('');
+  const initialExplorePlaces = initialPersistedState?.explorePlaces ?? [];
   const [exploreSearchQuery, setExploreSearchQuery] = useState('');
   const [exploreResults, setExploreResults] = useState<GooglePlace[]>([]);
-  const [explorePlaces, setExplorePlaces] = useState<ExplorePlace[]>([]);
+  const [explorePlaces, setExplorePlaces] = useState<ExplorePlace[]>(() => initialExplorePlaces);
   const [exploreNoteItemId, setExploreNoteItemId] = useState<string | null>(null);
+  const [localTripImportOffer, setLocalTripImportOffer] = useState<LocalTripImportOffer | null>(null);
   const [activeView, setActiveView] = useState<AppView>('overview');
   const [itineraryNodes, setItineraryNodes] = useState<ItineraryNode[]>(() => initialPersistedState?.itineraryNodes ?? []);
   const [latestAiPlan, setLatestAiPlan] = useState<ItineraryMutationPlan | null>(null);
@@ -375,7 +406,7 @@ export default function App() {
   const [coordinateSearchMessage, setCoordinateSearchMessage] = useState<string | null>(null);
   const { activeTripId, setActiveTrip, upsertTrip, upsertPoi: upsertPoiInStore } = useTripStore();
 
-  const displayedNodes = itineraryNodes.length > 0 ? itineraryNodes : demoNodes;
+  const displayedNodes = activeTripId ? itineraryNodes : itineraryNodes.length > 0 ? itineraryNodes : demoNodes;
   const isDemoMode = !isEditMode;
   const routeSummary = useMemo(() => estimateRouteSummary(displayedNodes), [displayedNodes]);
   const dayPlans = useMemo(() => buildDayPlans(displayedNodes), [displayedNodes]);
@@ -424,10 +455,13 @@ export default function App() {
     if (initialPersistedState?.itineraryNodes.length) {
       setStatusMessage(`Återställde ${initialPersistedState.itineraryNodes.length} sparade stopp från denna enhet.`);
     }
+    if (initialPersistedState?.exploreNotes) {
+      setExploreNotes(initialPersistedState.exploreNotes);
+    }
   }, [initialPersistedState]);
 
   useEffect(() => {
-    if (!hasLoadedPersistentState) {
+    if (!hasLoadedPersistentState || activeTripId) {
       return;
     }
 
@@ -435,8 +469,10 @@ export default function App() {
       itineraryNodes,
       travelerCountText,
       isEditMode,
+      exploreNotes,
+      explorePlaces,
     });
-  }, [hasLoadedPersistentState, itineraryNodes, travelerCountText, isEditMode]);
+  }, [activeTripId, hasLoadedPersistentState, itineraryNodes, travelerCountText, isEditMode, exploreNotes, explorePlaces]);
 
   useEffect(() => {
     void connectSupabaseTrip();
@@ -456,6 +492,8 @@ export default function App() {
         itineraryNodes,
         travelerCountText,
         isEditMode: next,
+        exploreNotes,
+        explorePlaces,
       });
       setStatusMessage(next ? 'Redigeringsläge på. Ändringar sparas när du sparar fälten.' : 'Redigeringsläge av.');
       return next;
@@ -479,6 +517,8 @@ export default function App() {
       itineraryNodes,
       travelerCountText,
       isEditMode,
+      exploreNotes,
+      explorePlaces,
     });
     setStatusMessage('Appen sparad. Nästa gång öppnas samma plan och läge.');
   }
@@ -626,6 +666,7 @@ export default function App() {
     setStatusMessage('Ansluter resan...');
 
     try {
+      const localSnapshot = buildLocalTripSnapshot(itineraryNodes, exploreNotes, explorePlaces);
       const existingUser = await getCurrentUser();
       const user = existingUser ?? (await getOrCreateAnonymousUser());
 
@@ -637,13 +678,31 @@ export default function App() {
         listTripExploreItems(trip.id),
       ]);
       const cleanedNodes = await cleanLoadedNodesOnline(nodes);
+      const importOffer = buildLocalTripImportOffer({
+        tripId: trip.id,
+        userId: user.id,
+        localNodes: localSnapshot.nodes,
+        localExploreNotes: localSnapshot.exploreNotes,
+        localExplorePlaces: localSnapshot.explorePlaces,
+        cloudNodes: cleanedNodes,
+        cloudExploreItems: exploreItems,
+      });
 
       upsertTrip(trip);
       setActiveTrip(trip.id);
       setItineraryNodes(cleanedNodes);
       applyLoadedExploreItems(exploreItems);
+      setLocalTripImportOffer(importOffer);
       markOnlineSaveSuccess();
-      setStatusMessage(`Ansluten: ${trip.name}`);
+      if (importOffer) {
+        setStatusMessage(
+          cleanedNodes.length === 0
+            ? 'Molnresan är tom än så länge. Det finns en lokal resa i den här webbläsaren.'
+            : 'Det finns en lokal resa i den här webbläsaren som kan kopieras till molnet.',
+        );
+      } else {
+        setStatusMessage(cleanedNodes.length === 0 ? 'Molnresan är tom än så länge.' : `Ansluten: ${trip.name}`);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setOnlineSaveState('error');
@@ -651,6 +710,115 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
+  }
+
+  async function importLocalTripToSupabase() {
+    if (!localTripImportOffer || !activeTripId || !userId) {
+      setStatusMessage('Anslut resan innan du kopierar lokal data.');
+      return;
+    }
+
+    setIsLoading(true);
+    setStatusMessage('Kopierar lokal resa till Supabase...');
+    markOnlineSaveStart();
+
+    try {
+      const existingNodeKeys = new Set(itineraryNodes.map(buildItineraryNodeDuplicateKey));
+      const nodesToImport = localTripImportOffer.nodes
+        .map((node, index) => prepareLocalNodeForCloud(node, activeTripId, userId, index))
+        .filter((node) => !existingNodeKeys.has(buildItineraryNodeDuplicateKey(node)));
+      const importedNodes: ItineraryNode[] = [];
+      const failedLabels: string[] = [];
+
+      for (const node of nodesToImport) {
+        try {
+          const savedNode = await upsertItineraryNode(node);
+          importedNodes.push(savedNode);
+          existingNodeKeys.add(buildItineraryNodeDuplicateKey(savedNode));
+        } catch {
+          failedLabels.push(node.title);
+        }
+      }
+
+      const existingExploreKeys = new Set(explorePlaces.map(buildExplorePlaceDuplicateKey));
+      const placesToImport = localTripImportOffer.explorePlaces
+        .filter((place) => !existingExploreKeys.has(buildExplorePlaceDuplicateKey(place)));
+      const importedPlaces: ExplorePlace[] = [];
+
+      for (const [index, place] of placesToImport.entries()) {
+        try {
+          const savedItem = await upsertTripExploreItem(explorePlaceToItem({
+            place,
+            tripId: activeTripId,
+            userId,
+            sortOrder: explorePlaces.length + importedPlaces.length + index + 1,
+          }));
+          const savedPlace = explorePlaceFromItem(savedItem);
+          if (savedPlace) {
+            importedPlaces.push(savedPlace);
+            existingExploreKeys.add(buildExplorePlaceDuplicateKey(savedPlace));
+          }
+        } catch {
+          failedLabels.push(place.title);
+        }
+      }
+
+      let importedNoteCount = 0;
+      let savedNoteId: string | null = exploreNoteItemId;
+      if (localTripImportOffer.exploreNotes.trim() && !exploreNotes.trim()) {
+        try {
+          const savedItem = await upsertTripExploreItem(noteToExploreItem({
+            tripId: activeTripId,
+            userId,
+            description: localTripImportOffer.exploreNotes,
+          }));
+          savedNoteId = savedItem.id;
+          importedNoteCount = 1;
+        } catch {
+          failedLabels.push('Utforska-anteckningar');
+        }
+      }
+
+      setItineraryNodes(sortNodes([...itineraryNodes, ...importedNodes]));
+      if (localTripImportOffer.exploreNotes.trim() && !exploreNotes.trim()) {
+        setExploreNotes(localTripImportOffer.exploreNotes);
+        setExploreNoteItemId(savedNoteId);
+      }
+      setExplorePlaces([...importedPlaces, ...explorePlaces]);
+      setLocalTripImportOffer(null);
+      markOnlineSaveSuccess();
+
+      const skippedNodes = localTripImportOffer.nodes.length - nodesToImport.length;
+      const importedCount = importedNodes.length + importedPlaces.length + importedNoteCount;
+      const skippedText = skippedNodes > 0 ? ` ${skippedNodes} stopp fanns redan och hoppades över.` : '';
+      const failedText = failedLabels.length > 0 ? ` Kunde inte kopiera: ${failedLabels.slice(0, 3).join(', ')}.` : '';
+      setStatusMessage(`Kopierade ${importedCount} lokala poster till Supabase.${skippedText}${failedText}`);
+    } catch (error) {
+      markOnlineSaveError();
+      setStatusMessage(`Kunde inte kopiera lokal resa. Lokal data finns kvar i den här webbläsaren. ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  function continueWithEmptyCloudTrip() {
+    setLocalTripImportOffer(null);
+    setStatusMessage('Fortsätter med molnresan. Lokal resa finns kvar i den här webbläsaren.');
+  }
+
+  function showLocalTripPreview() {
+    if (!localTripImportOffer) {
+      return;
+    }
+
+    setActiveTrip('');
+    setUserId(null);
+    setOnlineSaveState('idle');
+    setItineraryNodes(localTripImportOffer.nodes.map(cloneItineraryNode));
+    setExploreNotes(localTripImportOffer.exploreNotes);
+    setExplorePlaces(localTripImportOffer.explorePlaces);
+    setLocalTripImportOffer(null);
+    setStatusMessage('Visar lokal resa. Den är inte kopierad till Supabase ännu.');
   }
 
   async function sendLoginLink() {
@@ -2242,6 +2410,56 @@ export default function App() {
                 styles={styles}
                 targetTitle={lastRouteStop?.title ?? 'Mål'}
               />
+              {localTripImportOffer ? (
+                <View testID="local-cloud-import-card" style={[styles.localImportCard, isDark && styles.panelDark]}>
+                  <View style={styles.sectionHeaderRow}>
+                    <View style={styles.flexOne}>
+                      <Text style={[styles.localImportTitle, isDark && styles.textDark]}>
+                        Du har en lokal resa sparad i den hÃ¤r webblÃ¤saren.
+                      </Text>
+                      <Text style={[styles.localImportText, isDark && styles.textMutedDark]}>
+                        {localTripImportOffer.cloudNodeCount === 0
+                          ? 'Molnresan Ã¤r tom Ã¤n sÃ¥ lÃ¤nge.'
+                          : `Molnresan har ${localTripImportOffer.cloudNodeCount} stopp.`}
+                      </Text>
+                      <Text style={[styles.localImportText, isDark && styles.textMutedDark]}>
+                        Vill du kopiera den lokala resan till molnet?
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
+                    Lokal data: {localTripImportOffer.nodes.length} stopp
+                    {localTripImportOffer.explorePlaces.length > 0 ? `, ${localTripImportOffer.explorePlaces.length} idÃ©platser` : ''}
+                    {localTripImportOffer.exploreNotes.trim() ? ', anteckningar' : ''}. Lokal data tas inte bort automatiskt.
+                  </Text>
+                  <View style={styles.actionRow}>
+                    <Pressable
+                      testID="copy-local-trip-to-supabase"
+                      style={[styles.commandButton, isLoading && styles.disabledButton]}
+                      onPress={() => void importLocalTripToSupabase()}
+                      disabled={isLoading}
+                    >
+                      <Text style={styles.commandButtonText}>Kopiera lokal resa till Supabase</Text>
+                    </Pressable>
+                    <Pressable
+                      testID="continue-empty-cloud-trip"
+                      style={[styles.secondaryButton, isLoading && styles.disabledButton]}
+                      onPress={continueWithEmptyCloudTrip}
+                      disabled={isLoading}
+                    >
+                      <Text style={styles.secondaryButtonText}>FortsÃ¤tt med tom molnresa</Text>
+                    </Pressable>
+                    <Pressable
+                      testID="show-local-trip"
+                      style={[styles.secondaryButton, isLoading && styles.disabledButton]}
+                      onPress={showLocalTripPreview}
+                      disabled={isLoading}
+                    >
+                      <Text style={styles.secondaryButtonText}>Visa lokal resa</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : null}
               {activeView === 'tools' ? (
                 <ToolsWorkspace
                   activeTripId={activeTripId ?? null}
@@ -2566,6 +2784,111 @@ function normalizeShareCode(value: string): string {
   return value.replace(/\s+/g, '').toUpperCase();
 }
 
+function buildLocalTripSnapshot(nodes: ItineraryNode[], exploreNotes: string, explorePlaces: ExplorePlace[]) {
+  return {
+    nodes: sortNodes(nodes.filter((node) => !node.deletedAt).map(cloneItineraryNode)),
+    exploreNotes,
+    explorePlaces: explorePlaces.map((place) => ({ ...place, statusChips: [...place.statusChips] })),
+  };
+}
+
+function buildLocalTripImportOffer(input: {
+  tripId: string;
+  userId: string;
+  localNodes: ItineraryNode[];
+  localExploreNotes: string;
+  localExplorePlaces: ExplorePlace[];
+  cloudNodes: ItineraryNode[];
+  cloudExploreItems: TripExploreItem[];
+}): LocalTripImportOffer | null {
+  const hasLocalData = input.localNodes.length > 0
+    || input.localExplorePlaces.length > 0
+    || input.localExploreNotes.trim().length > 0;
+  if (!hasLocalData) {
+    return null;
+  }
+
+  const cloudExplorePlaces = input.cloudExploreItems
+    .map(explorePlaceFromItem)
+    .filter((place): place is ExplorePlace => Boolean(place));
+  const cloudNodeKeys = new Set(input.cloudNodes.map(buildItineraryNodeDuplicateKey));
+  const cloudExploreKeys = new Set(cloudExplorePlaces.map(buildExplorePlaceDuplicateKey));
+  const hasImportableNode = input.localNodes.some((node) => !cloudNodeKeys.has(buildItineraryNodeDuplicateKey(node)));
+  const hasImportableExplorePlace = input.localExplorePlaces.some((place) => !cloudExploreKeys.has(buildExplorePlaceDuplicateKey(place)));
+  const cloudNote = input.cloudExploreItems.find((item) => item.itemType === 'note')?.description?.trim() ?? '';
+  const hasImportableNote = input.localExploreNotes.trim().length > 0 && cloudNote.length === 0;
+  const cloudLooksSparse = input.cloudNodes.length === 0
+    || (input.cloudNodes.length <= 1 && input.localNodes.length > input.cloudNodes.length);
+
+  if (!cloudLooksSparse && !hasImportableExplorePlace && !hasImportableNote) {
+    return null;
+  }
+
+  if (!hasImportableNode && !hasImportableExplorePlace && !hasImportableNote) {
+    return null;
+  }
+
+  return {
+    tripId: input.tripId,
+    userId: input.userId,
+    nodes: input.localNodes,
+    exploreNotes: input.localExploreNotes,
+    explorePlaces: input.localExplorePlaces,
+    cloudNodeCount: input.cloudNodes.length,
+    cloudExploreCount: input.cloudExploreItems.length,
+  };
+}
+
+function prepareLocalNodeForCloud(node: ItineraryNode, tripId: string, userId: string, index: number): ItineraryNode {
+  const now = new Date().toISOString();
+  return {
+    ...cloneItineraryNode(node),
+    id: isUuid(node.id) ? node.id : cryptoRandomId(),
+    tripId,
+    createdBy: userId,
+    updatedBy: userId,
+    createdAt: now,
+    updatedAt: now,
+    deletedAt: null,
+    version: 1,
+    sortOrder: Number.isFinite(node.sortOrder) ? node.sortOrder : (index + 1) * 100,
+  };
+}
+
+function buildItineraryNodeDuplicateKey(node: ItineraryNode): string {
+  const place = typeof node.metadata.place === 'string' ? node.metadata.place : '';
+  const latitude = Number.isFinite(node.location?.latitude) ? node.location!.latitude.toFixed(5) : '';
+  const longitude = Number.isFinite(node.location?.longitude) ? node.location!.longitude.toFixed(5) : '';
+  return [
+    normalizeDuplicateText(node.title),
+    node.type,
+    node.startsAt ?? '',
+    normalizeDuplicateText(place),
+    latitude,
+    longitude,
+  ].join('|');
+}
+
+function buildExplorePlaceDuplicateKey(place: ExplorePlace): string {
+  const latitude = Number.isFinite(place.coordinates?.latitude) ? place.coordinates!.latitude.toFixed(5) : '';
+  const longitude = Number.isFinite(place.coordinates?.longitude) ? place.coordinates!.longitude.toFixed(5) : '';
+  return [
+    normalizeDuplicateText(place.title),
+    normalizeDuplicateText(place.place ?? ''),
+    place.googlePlaceId ?? '',
+    latitude,
+    longitude,
+  ].join('|');
+}
+
+function normalizeDuplicateText(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 function buildDayInsight(nodes: ItineraryNode[], route: RouteSummary, budget: BudgetSummary): DayInsightSummary {
   const lodgingNode = nodes.find((node) => node.type === 'lodging' || node.type === 'camping');
   const activityNodes = nodes.filter((node) => node.type === 'activity' || node.type === 'gastronomy' || node.type === 'custom');
@@ -2690,6 +3013,7 @@ function buildDaySmartFlags(nodes: ItineraryNode[], route: RouteSummary, budget:
   if (nodes.length === 0) {
     return ['Tom dag'];
   }
+
 
   if (warningCount === 0 && budget.total > 0) {
     return ['Ser planerad ut'];
@@ -3744,6 +4068,31 @@ const styles = StyleSheet.create({
     minWidth: 0,
     width: '100%',
     flex: 0,
+  },
+  flexOne: {
+    flex: 1,
+    minWidth: 0,
+  },
+  localImportCard: {
+    gap: 12,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#b9d9d5',
+    backgroundColor: '#f3fbf9',
+    padding: 18,
+  },
+  localImportTitle: {
+    color: '#0a2540',
+    fontSize: 18,
+    fontWeight: '900',
+    lineHeight: 24,
+  },
+  localImportText: {
+    color: '#425466',
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+    marginTop: 4,
   },
   routeView: {
     gap: 14,
