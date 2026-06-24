@@ -20,7 +20,7 @@ create table public.user_profiles (
 );
 
 create table public.trips (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references public.user_profiles(id) on delete cascade,
   name text not null,
   description text,
@@ -44,7 +44,7 @@ create table public.trip_members (
 );
 
 create table public.pois (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   trip_id uuid references public.trips(id) on delete cascade,
   created_by uuid not null references public.user_profiles(id),
   name text not null,
@@ -67,7 +67,7 @@ create table public.pois (
 );
 
 create table public.itinerary_nodes (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   trip_id uuid not null references public.trips(id) on delete cascade,
   poi_id uuid references public.pois(id) on delete set null,
   created_by uuid not null references public.user_profiles(id),
@@ -93,7 +93,7 @@ create table public.itinerary_nodes (
 );
 
 create table public.expenses (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   trip_id uuid not null references public.trips(id) on delete cascade,
   itinerary_node_id uuid references public.itinerary_nodes(id) on delete set null,
   paid_by uuid not null references public.user_profiles(id),
@@ -114,7 +114,7 @@ create table public.expenses (
 );
 
 create table public.budgets (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   trip_id uuid not null references public.trips(id) on delete cascade,
   category text,
   amount numeric(12,2) not null check (amount >= 0),
@@ -136,7 +136,7 @@ create table public.fx_rates (
 );
 
 create table public.route_cache (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   trip_id uuid not null references public.trips(id) on delete cascade,
   profile transport_mode not null,
   waypoint_hash text not null,
@@ -152,7 +152,7 @@ create table public.route_cache (
 );
 
 create table public.sync_events (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   trip_id uuid not null references public.trips(id) on delete cascade,
   table_name text not null,
   row_id uuid not null,
