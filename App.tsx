@@ -69,6 +69,13 @@ import {
   type ExplorePlace,
 } from '@/services/planning/exploreBoard';
 import {
+  buildNearbySearchContexts,
+  buildNearbySearchInput,
+  NEARBY_CATEGORIES,
+  nearbyExplorePlaceFromGooglePlace,
+  type NearbyCategoryId,
+} from '@/services/planning/nearbySearch';
+import {
   formatBulkCoordinateSummary,
   formatBulkCoordinateDiagnostics,
   getBulkCoordinateCandidates,
@@ -383,6 +390,10 @@ export default function App() {
   const [exploreSearchQuery, setExploreSearchQuery] = useState('');
   const [exploreResults, setExploreResults] = useState<GooglePlace[]>([]);
   const [explorePlaces, setExplorePlaces] = useState<ExplorePlace[]>(() => initialExplorePlaces);
+  const [nearbyCategoryId, setNearbyCategoryId] = useState<NearbyCategoryId>('restaurants');
+  const [nearbyContextId, setNearbyContextId] = useState<string>('');
+  const [nearbyResults, setNearbyResults] = useState<ExplorePlace[]>([]);
+  const [nearbyMessage, setNearbyMessage] = useState<string | null>(null);
   const [exploreNoteItemId, setExploreNoteItemId] = useState<string | null>(null);
   const [localTripImportOffer, setLocalTripImportOffer] = useState<LocalTripImportOffer | null>(null);
   const [activeView, setActiveView] = useState<AppView>('overview');
@@ -449,6 +460,13 @@ export default function App() {
     return visibleDayPlans.find((dayPlan) => dayPlan.key === selectedDayKey) ?? visibleDayPlans[0] ?? null;
   }, [selectedDayKey, visibleDayPlans]);
   const budgetSummary = useMemo(() => buildBudgetSummary(displayedNodes), [displayedNodes]);
+  const nearbyContexts = useMemo(() => buildNearbySearchContexts({
+    dayContexts: dayPlans.map((dayPlan) => ({ key: dayPlan.key, title: dayPlan.title, nodes: dayPlan.nodes })),
+    selectedDayKey: selectedDayPlan?.key ?? null,
+    stops: displayedNodes,
+  }), [dayPlans, displayedNodes, selectedDayPlan?.key]);
+  const selectedNearbyContext = nearbyContexts.find((context) => context.id === nearbyContextId) ?? nearbyContexts[0] ?? null;
+  const selectedNearbyCategory = NEARBY_CATEGORIES.find((category) => category.id === nearbyCategoryId) ?? NEARBY_CATEGORIES[0]!;
   const travelerCount = parseTravelerCount(travelerCountText);
   const fuelEstimate = useMemo(() => calculateFuelEstimate({
     distanceMeters: routeSummary.distanceMeters,
@@ -1066,6 +1084,42 @@ export default function App() {
     }
   }
 
+  async function searchNearbyPlaces() {
+    if (!selectedNearbyContext) {
+      setNearbyMessage('Välj ett stopp med kartposition först.');
+      setStatusMessage('Minst ett stopp behöver kartposition innan du kan söka nära.');
+      return;
+    }
+
+    if (!hasGooglePlacesApiKey()) {
+      const message = googlePlacesMissingApiKeyMessage();
+      setNearbyMessage(message);
+      setStatusMessage(message);
+      return;
+    }
+
+    setIsLoading(true);
+    setNearbyMessage(`Söker ${selectedNearbyCategory.label.toLowerCase()} nära ${selectedNearbyContext.label}...`);
+    setStatusMessage(`Söker nära ${selectedNearbyContext.label}...`);
+
+    try {
+      const results = await searchGooglePlaces(buildNearbySearchInput({
+        category: selectedNearbyCategory,
+        context: selectedNearbyContext,
+      }));
+      const places = results.map((place) => nearbyExplorePlaceFromGooglePlace(place, selectedNearbyContext.center));
+      setNearbyResults(places);
+      setNearbyMessage(places.length > 0 ? `Hittade ${places.length} platser nära ${selectedNearbyContext.label}.` : 'Inga platser hittades här just nu.');
+      setStatusMessage(`Hittade ${places.length} platser nära ${selectedNearbyContext.label}.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setNearbyMessage(message);
+      setStatusMessage(message);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   function applyLoadedExploreItems(items: TripExploreItem[]) {
     const noteItem = items.find((item) => item.itemType === 'note') ?? null;
     const places = items
@@ -1110,6 +1164,12 @@ export default function App() {
   }
 
   async function saveExplorePlace(explorePlace: ExplorePlace, successMessage: string) {
+    const duplicate = explorePlaces.find((candidate) => buildExplorePlaceDuplicateKey(candidate) === buildExplorePlaceDuplicateKey(explorePlace));
+    if (duplicate) {
+      setStatusMessage(`${explorePlace.title} finns redan i Utforska.`);
+      return;
+    }
+
     if (!activeTripId || !userId) {
       setExplorePlaces((current) => [
         explorePlace,
@@ -2548,14 +2608,24 @@ export default function App() {
                 exploreSearchQuery={exploreSearchQuery}
                 isDark={isDark}
                 isLoading={isLoading}
+                nearbyCategories={NEARBY_CATEGORIES}
+                nearbyCategoryId={nearbyCategoryId}
+                nearbyContexts={nearbyContexts}
+                nearbyContextId={selectedNearbyContext?.id ?? ''}
+                nearbyMessage={nearbyMessage}
+                nearbyResults={nearbyResults}
                 recommendedPlaces={recommendedPlaces}
                 styles={styles}
                 onAddExplorePlaceToSelectedDay={addExplorePlaceToSelectedDay}
                 onRemoveExplorePlace={(placeId) => void removeExplorePlace(placeId)}
+                onSaveNearbyPlace={(place) => void saveExplorePlace(place, `${place.title} sparades i Utforska.`)}
                 onSaveExploreGooglePlace={saveExploreGooglePlace}
                 onSaveExploreNotes={() => void saveExploreNotes()}
                 onSaveRecommendedExplorePlace={saveRecommendedExplorePlace}
                 onSearchExplorePlaces={() => void searchExplorePlaces()}
+                onSearchNearbyPlaces={() => void searchNearbyPlaces()}
+                onSetNearbyCategoryId={setNearbyCategoryId}
+                onSetNearbyContextId={setNearbyContextId}
                 onSetExploreNotes={setExploreNotes}
                 onSetExploreSearchQuery={setExploreSearchQuery}
                 onShowExplorePlaceOnMap={showExplorePlaceOnMap}

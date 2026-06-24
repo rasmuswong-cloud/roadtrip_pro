@@ -10,6 +10,7 @@ import {
   type ExploreCategory,
   type ExplorePlace,
 } from '@/services/planning/exploreBoard';
+import type { NearbyCategory, NearbyCategoryId, NearbySearchContext } from '@/services/planning/nearbySearch';
 import { SectionTitle, type WorkspaceStyles } from './WorkspaceBits';
 
 type ExploreEmptyStateSummary = {
@@ -26,14 +27,24 @@ type ExploreWorkspaceProps = {
   exploreSearchQuery: string;
   isDark: boolean;
   isLoading: boolean;
+  nearbyCategories: NearbyCategory[];
+  nearbyCategoryId: NearbyCategoryId;
+  nearbyContexts: NearbySearchContext[];
+  nearbyContextId: string;
+  nearbyMessage: string | null;
+  nearbyResults: ExplorePlace[];
   recommendedPlaces: ExplorePlace[];
   styles: WorkspaceStyles;
   onAddExplorePlaceToSelectedDay: (place: ExplorePlace) => void;
   onRemoveExplorePlace: (placeId: string) => void;
+  onSaveNearbyPlace: (place: ExplorePlace) => void;
   onSaveExploreGooglePlace: (place: GooglePlace) => void;
   onSaveExploreNotes: () => void;
   onSaveRecommendedExplorePlace: (place: ExplorePlace) => void;
   onSearchExplorePlaces: () => void;
+  onSearchNearbyPlaces: () => void;
+  onSetNearbyCategoryId: (categoryId: NearbyCategoryId) => void;
+  onSetNearbyContextId: (contextId: string) => void;
   onSetExploreNotes: (text: string) => void;
   onSetExploreSearchQuery: (text: string) => void;
   onShowExplorePlaceOnMap: (place: ExplorePlace) => void;
@@ -48,14 +59,24 @@ export function ExploreWorkspace({
   exploreSearchQuery,
   isDark,
   isLoading,
+  nearbyCategories,
+  nearbyCategoryId,
+  nearbyContexts,
+  nearbyContextId,
+  nearbyMessage,
+  nearbyResults,
   recommendedPlaces,
   styles,
   onAddExplorePlaceToSelectedDay,
   onRemoveExplorePlace,
+  onSaveNearbyPlace,
   onSaveExploreGooglePlace,
   onSaveExploreNotes,
   onSaveRecommendedExplorePlace,
   onSearchExplorePlaces,
+  onSearchNearbyPlaces,
+  onSetNearbyCategoryId,
+  onSetNearbyContextId,
   onSetExploreNotes,
   onSetExploreSearchQuery,
   onShowExplorePlaceOnMap,
@@ -81,6 +102,73 @@ export function ExploreWorkspace({
         onSaveExploreNotes={onSaveExploreNotes}
         onSetExploreNotes={onSetExploreNotes}
       />
+
+      <View style={styles.exploreSearchCard}>
+        <View style={styles.exploreSectionHeader}>
+          <Text style={styles.exploreSectionTitle}>Hitta nära</Text>
+          <Text style={styles.exploreSectionMeta}>{nearbyContexts.length > 0 ? 'Sök runt stopp och dagar' : 'Inget stopp har kartposition'}</Text>
+        </View>
+        {nearbyContexts.length > 0 ? (
+          <>
+            <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>Välj plats att söka runt</Text>
+            <View style={styles.exploreChipRow}>
+              {nearbyContexts.slice(0, 8).map((context) => {
+                const isSelected = context.id === nearbyContextId;
+                return (
+                  <Pressable
+                    key={context.id}
+                    style={isSelected ? styles.smallButton : styles.secondarySmallButton}
+                    onPress={() => onSetNearbyContextId(context.id)}
+                  >
+                    <Text style={isSelected ? styles.smallButtonText : styles.secondarySmallButtonText} numberOfLines={1}>{context.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>Välj kategori</Text>
+            <View style={styles.exploreChipRow}>
+              {nearbyCategories.map((category) => {
+                const isSelected = category.id === nearbyCategoryId;
+                return (
+                  <Pressable
+                    key={category.id}
+                    style={isSelected ? styles.smallButton : styles.secondarySmallButton}
+                    onPress={() => onSetNearbyCategoryId(category.id)}
+                  >
+                    <Text style={isSelected ? styles.smallButtonText : styles.secondarySmallButtonText}>{category.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <View style={styles.exploreNoteActions}>
+              <Text style={styles.exploreLocalHint}>{nearbyContexts.find((context) => context.id === nearbyContextId)?.detail ?? 'Söker från första stoppet med position.'}</Text>
+              <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={onSearchNearbyPlaces} disabled={isLoading}>
+                <Text style={styles.commandButtonText}>Sök nära</Text>
+              </Pressable>
+            </View>
+          </>
+        ) : (
+          <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>Fixa position på ett stopp i Dagar först, så kan Utforska söka restauranger, parkering och annat i närheten.</Text>
+        )}
+        {nearbyMessage ? <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>{nearbyMessage}</Text> : null}
+        {nearbyResults.length > 0 ? (
+          <View style={styles.exploreResultGrid}>
+            {nearbyResults.map((place) => (
+              <ExplorePlaceCard
+                key={place.id}
+                place={place}
+                styles={styles}
+                primaryLabel="Spara i Utforska"
+                extraLabel="Lägg till i Dagar"
+                onPrimary={() => onSaveNearbyPlace(place)}
+                onExtra={() => onAddExplorePlaceToSelectedDay(place)}
+                onMap={() => onShowExplorePlaceOnMap(place)}
+                onRemove={null}
+              />
+            ))}
+          </View>
+        ) : null}
+      </View>
 
       <View style={styles.exploreSearchCard}>
         <View style={styles.exploreSectionHeader}>

@@ -8,7 +8,9 @@ type ExplorePlaceCardProps = {
   place: ExplorePlace;
   primaryLabel: string;
   styles: WorkspaceStyles;
+  extraLabel?: string;
   onPrimary: () => void;
+  onExtra?: () => void;
   onMap: () => void;
   onRemove: (() => void) | null;
 };
@@ -17,7 +19,9 @@ export function ExplorePlaceCard({
   place,
   primaryLabel,
   styles,
+  extraLabel,
   onPrimary,
+  onExtra,
   onMap,
   onRemove,
 }: ExplorePlaceCardProps) {
@@ -46,6 +50,11 @@ export function ExplorePlaceCard({
         <Pressable style={styles.smallButton} onPress={onPrimary}>
           <Text style={styles.smallButtonText}>{primaryLabel}</Text>
         </Pressable>
+        {extraLabel && onExtra ? (
+          <Pressable style={styles.secondarySmallButton} onPress={onExtra}>
+            <Text style={styles.secondarySmallButtonText}>{extraLabel}</Text>
+          </Pressable>
+        ) : null}
         <Pressable style={styles.secondarySmallButton} onPress={onMap}>
           <Text style={styles.secondarySmallButtonText}>Visa på karta</Text>
         </Pressable>
