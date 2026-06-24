@@ -145,6 +145,13 @@ export default function DayCard(props: DayCardProps) {
     });
   }
 
+  function toggleStopMenu(nodeId: string) {
+    const closingCurrentMenu = openMenuNodeId === nodeId;
+    setMovePickerNodeId(null);
+    setPendingDeleteNodeId(null);
+    setOpenMenuNodeId(closingCurrentMenu ? null : nodeId);
+  }
+
   return (
     <View key={dayPlan.key} style={[styles.dayGroup, isDark && styles.innerPanelDark]}>
       <DayHeader
@@ -215,7 +222,12 @@ export default function DayCard(props: DayCardProps) {
           <View
             key={node.id}
             testID="day-stop-card"
-            style={[styles.timelineItem, fullEditorOpen && styles.timelineItemEditing, isDark && styles.innerPanelDark]}
+            style={[
+              styles.timelineItem,
+              (menuOpen || movePickerOpen || deleteConfirmOpen) && styles.timelineItemMenuOpen,
+              fullEditorOpen && styles.timelineItemEditing,
+              isDark && styles.innerPanelDark,
+            ]}
           >
             <View style={dayCardStyles.timeRailCompact}>
               {canEdit ? (
@@ -452,11 +464,11 @@ export default function DayCard(props: DayCardProps) {
                     <Text style={dayCardStyles.inlineCostText}>{formatRawNodeCost(node) || 'Fyll i kostnad'}</Text>
                   )}
                   {canEdit ? (
-                    <View style={dayCardStyles.stopMenuWrap}>
+                    <View style={[dayCardStyles.stopMenuWrap, menuOpen && dayCardStyles.stopMenuWrapOpen]}>
                       <Pressable
                         testID="stop-menu-button"
                         style={[dayCardStyles.iconMenuButton, isLoading && styles.disabledButton]}
-                        onPress={() => setOpenMenuNodeId((current) => (current === node.id ? null : node.id))}
+                        onPress={() => toggleStopMenu(node.id)}
                         disabled={isLoading}
                       >
                         <Text style={dayCardStyles.iconMenuText}>Mer</Text>

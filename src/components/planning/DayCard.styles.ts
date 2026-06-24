@@ -57,6 +57,7 @@ export const dayCardStyles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
     flexWrap: 'wrap',
+    overflow: 'visible',
   },
   stopTitleBlock: {
     flex: 1,
@@ -95,6 +96,7 @@ export const dayCardStyles = StyleSheet.create({
     justifyContent: 'flex-end',
     gap: 8,
     flexWrap: 'wrap',
+    overflow: 'visible',
   },
   stopCompactActions: {
     flexDirection: 'row',
@@ -127,6 +129,11 @@ export const dayCardStyles = StyleSheet.create({
   stopMenuWrap: {
     position: 'relative',
     alignItems: 'flex-end',
+    overflow: 'visible',
+  },
+  stopMenuWrapOpen: {
+    zIndex: 1100,
+    elevation: 21,
   },
   iconMenuButton: {
     minWidth: 54,
@@ -147,7 +154,8 @@ export const dayCardStyles = StyleSheet.create({
     position: 'absolute',
     top: 40,
     right: 0,
-    zIndex: 10,
+    zIndex: 1200,
+    elevation: 22,
     width: 220,
     gap: 6,
     borderRadius: 8,
