@@ -86,21 +86,22 @@ export async function calculateGoogleRoute(input: GoogleRouteInput): Promise<Goo
   }
 
   const routeLegs = buildRouteLegs(routableStops, route.legs);
+  const routeGeometry = route.polyline?.encodedPolyline
+    ? {
+        type: 'LineString' as const,
+        coordinates: decodePolyline(route.polyline.encodedPolyline).map((point) => [point.longitude, point.latitude]),
+      }
+    : undefined;
   const routeSummary: RouteSummary = {
     distanceMeters: route.distanceMeters,
     durationSeconds: parseDurationSeconds(route.duration),
     provider: 'google_routes',
-    geometry: route.polyline?.encodedPolyline
-      ? {
-          type: 'LineString',
-          coordinates: decodePolyline(route.polyline.encodedPolyline).map((point) => [point.longitude, point.latitude]),
-        }
-      : {
-          type: 'LineString',
-          coordinates: coordinates.map((point) => [point.longitude, point.latitude]),
-        },
     instructions: [],
   };
+
+  if (routeGeometry) {
+    routeSummary.geometry = routeGeometry;
+  }
 
   if (routeLegs.length > 0) {
     routeSummary.legs = routeLegs;

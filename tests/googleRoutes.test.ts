@@ -59,8 +59,11 @@ test('Google Routes calculation is explicit and uses saved stop coordinates', as
 
   let requestedBody: Record<string, unknown> = {};
   let usedKey = '';
+  let usedFieldMask = '';
   globalThis.fetch = (async (_url, init) => {
-    usedKey = (init?.headers as Record<string, string>)['X-Goog-Api-Key'];
+    const headers = init?.headers as Record<string, string>;
+    usedKey = headers['X-Goog-Api-Key'];
+    usedFieldMask = headers['X-Goog-FieldMask'];
     requestedBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
     return new Response(JSON.stringify({
       routes: [{
@@ -86,6 +89,7 @@ test('Google Routes calculation is explicit and uses saved stop coordinates', as
     });
 
     assert.equal(usedKey, 'routes-key-for-test');
+    assert.match(usedFieldMask, /routes\.polyline\.encodedPolyline/);
     assert.equal(result.route.provider, 'google_routes');
     assert.equal(result.route.distanceMeters, 123456);
     assert.equal(result.route.durationSeconds, 5432);
@@ -97,6 +101,35 @@ test('Google Routes calculation is explicit and uses saved stop coordinates', as
       'a->b:50000',
       'b->c:73456',
     ]);
+  } finally {
+    restoreEnvironment();
+  }
+});
+
+test('Google Routes does not fake route geometry when no polyline is returned', async () => {
+  process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY = 'routes-key-for-test';
+  delete process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+
+  globalThis.fetch = (async () => new Response(JSON.stringify({
+    routes: [{
+      distanceMeters: 1000,
+      duration: '600s',
+      legs: [{ distanceMeters: 1000, duration: '600s' }],
+    }],
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as typeof fetch;
+
+  try {
+    const result = await calculateGoogleRoute({
+      stops: [
+        node('a', 55.605, 13.0038),
+        node('b', 56.0, 14.0),
+      ],
+    });
+
+    assert.equal(result.route.geometry, undefined);
+    assert.equal(result.route.legs?.length, 1);
+    assert.equal(result.includedStopCount, 2);
+    assert.equal(result.skippedStopCount, 0);
   } finally {
     restoreEnvironment();
   }

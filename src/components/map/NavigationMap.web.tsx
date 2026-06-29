@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import type { Coordinates, ItineraryNode, RouteSummary } from '@/models';
-import { calculateMapViewport, extractValidMapMarkers, mapInitialCenter, type MapMarkerData } from './mapData';
+import {
+  buildRouteDrivingLabels,
+  calculateMapViewport,
+  extractRoutePathCoordinates,
+  extractValidMapMarkers,
+  mapInitialCenter,
+  type MapMarkerData,
+} from './mapData';
 
 type NavigationMapProps = {
   nodes: ItineraryNode[];
@@ -14,6 +21,7 @@ type NavigationMapProps = {
 type GoogleMapsNamespace = {
   Map: new (element: HTMLElement, options: Record<string, unknown>) => GoogleMapInstance;
   Marker: new (options: Record<string, unknown>) => GoogleMarkerInstance;
+  Polyline: new (options: Record<string, unknown>) => GooglePolylineInstance;
   LatLngBounds: new () => GoogleLatLngBounds;
 };
 
@@ -24,6 +32,10 @@ type GoogleMapInstance = {
 };
 
 type GoogleMarkerInstance = {
+  setMap: (map: GoogleMapInstance | null) => void;
+};
+
+type GooglePolylineInstance = {
   setMap: (map: GoogleMapInstance | null) => void;
 };
 
@@ -40,14 +52,18 @@ declare global {
 
 const googleMapsApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
 
-export function NavigationMap({ nodes, compact = false }: NavigationMapProps) {
+export function NavigationMap({ nodes, activeRoute, compact = false }: NavigationMapProps) {
   const mapElementRef = useRef<HTMLElement | null>(null);
   const mapRef = useRef<GoogleMapInstance | null>(null);
   const markerRefs = useRef<GoogleMarkerInstance[]>([]);
+  const routePolylineRef = useRef<GooglePolylineInstance | null>(null);
+  const routeLabelRefs = useRef<GoogleMarkerInstance[]>([]);
   const [loadState, setLoadState] = useState<'idle' | 'loading' | 'ready' | 'missing-key' | 'error'>(
     googleMapsApiKey ? 'idle' : 'missing-key',
   );
   const markers = useMemo(() => extractValidMapMarkers(nodes), [nodes]);
+  const routePath = useMemo(() => extractRoutePathCoordinates(activeRoute), [activeRoute]);
+  const routeLabels = useMemo(() => buildRouteDrivingLabels(activeRoute, nodes), [activeRoute, nodes]);
   const viewport = useMemo(() => calculateMapViewport(markers), [markers]);
 
   useEffect(() => {
@@ -74,13 +90,39 @@ export function NavigationMap({ nodes, compact = false }: NavigationMapProps) {
           });
         }
 
-        applyViewport(mapRef.current, maps, markers);
+        ensureMapLabelStyles();
+        applyViewport(mapRef.current, maps, markers, routePath);
+        routePolylineRef.current?.setMap(null);
+        routePolylineRef.current = routePath.length > 1
+          ? new maps.Polyline({
+              path: routePath.map(toLatLng),
+              map: mapRef.current,
+              strokeColor: '#0f766e',
+              strokeOpacity: 0.88,
+              strokeWeight: compact ? 4 : 5,
+            })
+          : null;
         markerRefs.current.forEach((marker) => marker.setMap(null));
         markerRefs.current = markers.map((marker) => new maps.Marker({
           position: toLatLng(marker.coordinates),
           map: mapRef.current,
           label: marker.label,
           title: marker.title,
+        }));
+        routeLabelRefs.current.forEach((marker) => marker.setMap(null));
+        routeLabelRefs.current = routeLabels.map((label) => new maps.Marker({
+          position: toLatLng(label.coordinates),
+          map: mapRef.current,
+          title: label.label,
+          label: {
+            text: label.label,
+            color: '#0a2540',
+            fontSize: '11px',
+            fontWeight: '800',
+            className: 'roadtrip-route-label',
+          },
+          icon: transparentMarkerIcon,
+          zIndex: 20,
         }));
         setLoadState('ready');
       })
@@ -93,11 +135,15 @@ export function NavigationMap({ nodes, compact = false }: NavigationMapProps) {
     return () => {
       cancelled = true;
     };
-  }, [markers, viewport]);
+  }, [compact, markers, routeLabels, routePath, viewport]);
 
   useEffect(() => () => {
     markerRefs.current.forEach((marker) => marker.setMap(null));
     markerRefs.current = [];
+    routeLabelRefs.current.forEach((marker) => marker.setMap(null));
+    routeLabelRefs.current = [];
+    routePolylineRef.current?.setMap(null);
+    routePolylineRef.current = null;
   }, []);
 
   if (loadState === 'missing-key') {
@@ -177,7 +223,34 @@ function loadGoogleMaps(apiKey: string): Promise<GoogleMapsNamespace> {
   return window.__roadtripGoogleMapsPromise;
 }
 
-function applyViewport(map: GoogleMapInstance, maps: GoogleMapsNamespace, markers: MapMarkerData[]) {
+function ensureMapLabelStyles() {
+  const styleId = 'roadtrip-route-label-styles';
+  if (document.getElementById(styleId)) {
+    return;
+  }
+
+  const style = document.createElement('style');
+  style.id = styleId;
+  style.textContent = `
+    .roadtrip-route-label {
+      background: rgba(255,255,255,0.94);
+      border: 1px solid rgba(15,118,110,0.22);
+      border-radius: 999px;
+      box-shadow: 0 6px 16px rgba(10,37,64,0.16);
+      padding: 5px 9px;
+      white-space: nowrap;
+      transform: translateY(-8px);
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+const transparentMarkerIcon = {
+  url: 'data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%221%22%20height%3D%221%22%3E%3C/svg%3E',
+  scaledSize: { width: 1, height: 1 },
+};
+
+function applyViewport(map: GoogleMapInstance, maps: GoogleMapsNamespace, markers: MapMarkerData[], routePath: Coordinates[]) {
   const viewport = calculateMapViewport(markers);
 
   if (viewport.state === 'empty') {
@@ -195,6 +268,7 @@ function applyViewport(map: GoogleMapInstance, maps: GoogleMapsNamespace, marker
   if (viewport.state === 'bounds') {
     const bounds = new maps.LatLngBounds();
     markers.forEach((marker) => bounds.extend(toLatLng(marker.coordinates)));
+    routePath.forEach((coordinates) => bounds.extend(toLatLng(coordinates)));
     map.fitBounds(bounds, 48);
   }
 }

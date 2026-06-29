@@ -1,7 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import type { ItineraryNode } from '../src/models';
-import { DEFAULT_MAP_CENTER, calculateMapViewport, extractValidMapMarkers, mapInitialCenter } from '../src/components/map/mapData';
+import type { ItineraryNode, RouteSummary } from '../src/models';
+import {
+  DEFAULT_MAP_CENTER,
+  buildRouteDrivingLabels,
+  calculateMapViewport,
+  extractRoutePathCoordinates,
+  extractValidMapMarkers,
+  mapInitialCenter,
+} from '../src/components/map/mapData';
 
 function node(overrides: Partial<ItineraryNode> = {}): ItineraryNode {
   const now = '2026-06-11T09:00:00.000Z';
@@ -26,6 +33,25 @@ function node(overrides: Partial<ItineraryNode> = {}): ItineraryNode {
     updatedAt: now,
     deletedAt: null,
     version: 1,
+    ...overrides,
+  };
+}
+
+function route(overrides: Partial<RouteSummary> = {}): RouteSummary {
+  return {
+    distanceMeters: 3000,
+    durationSeconds: 1200,
+    provider: 'google_routes',
+    legs: [
+      {
+        fromTitle: 'A',
+        toTitle: 'B',
+        distanceMeters: 3000,
+        durationSeconds: 1200,
+        provider: 'google_routes',
+      },
+    ],
+    instructions: [],
     ...overrides,
   };
 }
@@ -78,4 +104,70 @@ test('calculateMapViewport reports empty, single center, and bounds states', () 
     center: { latitude: 47, longitude: 12 },
     bounds: { north: 48, south: 46, east: 13, west: 11 },
   });
+});
+
+test('extractRoutePathCoordinates converts route geometry to map coordinates only when geometry exists', () => {
+  assert.deepEqual(extractRoutePathCoordinates(route()), []);
+
+  assert.deepEqual(extractRoutePathCoordinates(route({
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [13.0038, 55.605],
+        [14.0, 56.0],
+      ],
+    },
+  })), [
+    { latitude: 55.605, longitude: 13.0038 },
+    { latitude: 56.0, longitude: 14.0 },
+  ]);
+});
+
+test('buildRouteDrivingLabels positions known route labels on route geometry', () => {
+  const labels = buildRouteDrivingLabels(route({
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [13, 55],
+        [13, 55.03],
+      ],
+    },
+  }), [
+    node({ id: 'a', location: { latitude: 55, longitude: 13 } }),
+    node({ id: 'b', location: { latitude: 55.03, longitude: 13 } }),
+  ]);
+
+  assert.equal(labels.length, 1);
+  assert.equal(labels[0]?.approximate, false);
+  assert.match(labels[0]?.label ?? '', /^Körning · 20 min · 3\.0 km$/);
+  assert.ok((labels[0]?.coordinates.latitude ?? 0) > 55);
+  assert.ok((labels[0]?.coordinates.latitude ?? 0) < 55.03);
+  assert.equal(labels[0]?.coordinates.longitude, 13);
+});
+
+test('buildRouteDrivingLabels uses clearly approximate labels when geometry is missing', () => {
+  const labels = buildRouteDrivingLabels(route(), [
+    node({ id: 'a', location: { latitude: 55, longitude: 13 } }),
+    node({ id: 'b', location: { latitude: 57, longitude: 15 } }),
+  ]);
+
+  assert.equal(labels.length, 1);
+  assert.equal(labels[0]?.approximate, true);
+  assert.equal(labels[0]?.label, 'Ungefärlig körning · 20 min · 3.0 km');
+  assert.deepEqual(labels[0]?.coordinates, { latitude: 56, longitude: 14 });
+});
+
+test('buildRouteDrivingLabels skips labels when route legs do not safely match visible stops', () => {
+  const labels = buildRouteDrivingLabels(route({
+    legs: [
+      { fromTitle: 'A', toTitle: 'B', distanceMeters: 1000, durationSeconds: 600, provider: 'google_routes' },
+      { fromTitle: 'B', toTitle: 'C', distanceMeters: 1000, durationSeconds: 600, provider: 'google_routes' },
+    ],
+  }), [
+    node({ id: 'a', location: { latitude: 55, longitude: 13 } }),
+    node({ id: 'missing', location: null }),
+    node({ id: 'c', location: { latitude: 57, longitude: 15 } }),
+  ]);
+
+  assert.deepEqual(labels, []);
 });
