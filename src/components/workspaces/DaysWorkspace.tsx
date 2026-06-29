@@ -285,6 +285,7 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
               <Text style={styles.secondarySmallButtonText}>Importera/klistra in plan senare</Text>
             </Pressable>
           ) : null}
+          {draftPlannerDayKey ? renderPlannerInlineEditor('new') : null}
         </View>
       ) : null}
       {selectedDayPlan ? (

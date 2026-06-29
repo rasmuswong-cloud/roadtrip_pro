@@ -2,6 +2,17 @@ import { expect, test } from '@playwright/test';
 
 const persistedAppStateKey = 'roadtrip:persisted-app-state:v1';
 
+type MockStopInput = {
+  title: string;
+  place: string;
+  date?: string;
+  time?: string;
+  cost?: string;
+  notes?: string;
+  latitude?: string;
+  longitude?: string;
+};
+
 test.beforeEach(async ({ context }) => {
   await context.addInitScript(() => {
     window.localStorage.clear();
@@ -55,6 +66,348 @@ async function seedEditableDay(page: Parameters<Parameters<typeof test>[1]>[0]['
       ],
     }));
   }, persistedAppStateKey);
+}
+
+async function installQaBackend(page: Parameters<Parameters<typeof test>[1]>[0]['page']) {
+  await page.addInitScript(() => {
+    const now = '2026-06-29T10:00:00.000Z';
+    const userId = 'user-qa-e2e';
+    const tripId = 'trip-qa-e2e';
+    const originalFetch = window.fetch.bind(window);
+    const savedState = window.sessionStorage.getItem('__roadtripQaBackendState');
+    const state = savedState ? JSON.parse(savedState) as {
+      calls: { places: number; nearby: number; routes: number };
+      trip: Record<string, unknown>;
+      nodes: Array<Record<string, unknown>>;
+      pois: Array<Record<string, unknown>>;
+      exploreItems: Array<Record<string, unknown>>;
+    } : {
+      calls: { places: 0, nearby: 0, routes: 0 },
+      trip: {
+        id: tripId,
+        owner_id: userId,
+        name: 'QA TEST Trip',
+        description: 'QA mocked e2e trip',
+        base_currency: 'SEK',
+        starts_at: now,
+        ends_at: null,
+        home_location: null,
+        settings: { avoidTolls: false, avoidHighways: false, preferScenicRoutes: true },
+        version: 1,
+        created_at: now,
+        updated_at: now,
+        deleted_at: null,
+      },
+      nodes: [] as Array<Record<string, unknown>>,
+      pois: [] as Array<Record<string, unknown>>,
+      exploreItems: [] as Array<Record<string, unknown>>,
+    };
+
+    Object.defineProperty(window, '__roadtripQaBackend', { configurable: true, value: state });
+
+    function persistState() {
+      window.sessionStorage.setItem('__roadtripQaBackendState', JSON.stringify(state));
+    }
+
+    function refreshStateFromStorage() {
+      const currentState = window.sessionStorage.getItem('__roadtripQaBackendState');
+      if (currentState) {
+        Object.assign(state, JSON.parse(currentState));
+      }
+    }
+
+    function json(data: unknown, status = 200) {
+      return Promise.resolve(new Response(JSON.stringify(data), {
+        status,
+        headers: { 'content-type': 'application/json' },
+      }));
+    }
+
+    function pointFromWkt(wkt: unknown) {
+      if (typeof wkt !== 'string') {
+        return { latitude: null, longitude: null };
+      }
+
+      const match = wkt.match(/POINT\((-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?)\)/);
+      return {
+        longitude: match ? Number(match[1]) : null,
+        latitude: match ? Number(match[2]) : null,
+      };
+    }
+
+    function toNodeRow(body: Record<string, unknown>) {
+      const point = pointFromWkt(body.location);
+      return {
+        id: body.id,
+        trip_id: body.trip_id,
+        poi_id: body.poi_id ?? null,
+        created_by: body.created_by ?? userId,
+        updated_by: body.updated_by ?? null,
+        type: body.type ?? 'custom',
+        title: body.title,
+        notes: body.notes ?? null,
+        starts_at: body.starts_at ?? null,
+        ends_at: body.ends_at ?? null,
+        timezone: body.timezone ?? null,
+        location: point.latitude !== null && point.longitude !== null
+          ? { type: 'Point', coordinates: [point.longitude, point.latitude] }
+          : null,
+        sort_order: body.sort_order ?? state.nodes.length + 1,
+        transport_mode: body.transport_mode ?? 'driving',
+        route_to_next: body.route_to_next ?? null,
+        reservation: body.reservation ?? {},
+        equipment: body.equipment ?? [],
+        facilities: body.facilities ?? {},
+        metadata: body.metadata ?? {},
+        version: body.version ?? 1,
+        created_at: now,
+        updated_at: now,
+        deleted_at: body.deleted_at ?? null,
+      };
+    }
+
+    function upsertById(rows: Array<Record<string, unknown>>, row: Record<string, unknown>) {
+      const index = rows.findIndex((candidate) => candidate.id === row.id);
+      if (index >= 0) {
+        rows[index] = { ...rows[index], ...row, updated_at: now };
+      } else {
+        rows.push(row);
+      }
+
+      persistState();
+      return rows.find((candidate) => candidate.id === row.id) ?? row;
+    }
+
+    function routeSupabase(url: string, init?: RequestInit) {
+      const parsed = new URL(url);
+      const path = parsed.pathname;
+      const method = (init?.method ?? 'GET').toUpperCase();
+      const rawBody = typeof init?.body === 'string' ? init.body : '';
+      const body = rawBody ? JSON.parse(rawBody) : {};
+
+      if (path.includes('/auth/v1/signup') || path.includes('/auth/v1/token')) {
+        return json({
+          access_token: 'qa-token',
+          token_type: 'bearer',
+          expires_in: 3600,
+          refresh_token: 'qa-refresh',
+          user: { id: userId, email: null, app_metadata: {}, user_metadata: {}, aud: 'authenticated', created_at: now },
+        });
+      }
+
+      if (path.includes('/auth/v1/user')) {
+        return json({ id: userId, email: null, app_metadata: {}, user_metadata: {}, aud: 'authenticated', created_at: now });
+      }
+
+      if (path.includes('/rest/v1/user_profiles')) {
+        return json({ id: userId, display_name: 'QA Tester', home_currency: 'SEK', created_at: now, updated_at: now });
+      }
+
+      if (path.includes('/rest/v1/trips')) {
+        return method === 'GET' ? json([state.trip]) : json({ ...state.trip, ...body, updated_at: now });
+      }
+
+      if (path.includes('/rest/v1/trip_members')) {
+        return json({ trip_id: tripId, user_id: userId, role: 'owner' });
+      }
+
+      if (path.includes('/rest/v1/itinerary_nodes')) {
+        if (method === 'GET') {
+          return json(state.nodes.filter((node) => node.deleted_at === null));
+        }
+
+        if (method === 'PATCH') {
+          const id = parsed.searchParams.get('id')?.replace('eq.', '');
+          const node = state.nodes.find((candidate) => candidate.id === id);
+          if (node) {
+            node.deleted_at = body.deleted_at ?? now;
+            node.updated_at = now;
+            persistState();
+          }
+          return json([]);
+        }
+
+        return json(upsertById(state.nodes, toNodeRow(body)));
+      }
+
+      if (path.includes('/rest/v1/pois')) {
+        const point = pointFromWkt(body.location);
+        const row = {
+          id: body.id,
+          trip_id: body.trip_id ?? tripId,
+          created_by: body.created_by ?? userId,
+          name: body.name ?? 'QA TEST POI',
+          category: body.category ?? 'poi',
+          location: point.latitude !== null && point.longitude !== null
+            ? { type: 'Point', coordinates: [point.longitude, point.latitude] }
+            : { type: 'Point', coordinates: [13.003822, 55.604981] },
+          address: body.address ?? null,
+          source: body.source ?? 'google_places',
+          external_ref: body.external_ref ?? null,
+          rating: body.rating ?? null,
+          opening_hours: body.opening_hours ?? {},
+          contact: body.contact ?? {},
+          imagery: body.imagery ?? [],
+          metadata: body.metadata ?? {},
+          is_private: body.is_private ?? true,
+          version: body.version ?? 1,
+          created_at: now,
+          updated_at: now,
+          deleted_at: null,
+        };
+        return json(upsertById(state.pois, row));
+      }
+
+      if (path.includes('/rest/v1/rpc/move_itinerary_node')) {
+        const ordered = state.nodes.filter((node) => node.deleted_at === null).sort((a, b) => Number(a.sort_order) - Number(b.sort_order));
+        const index = ordered.findIndex((node) => node.id === body.input_node_id);
+        const targetIndex = index + Number(body.input_direction);
+        if (index >= 0 && targetIndex >= 0 && targetIndex < ordered.length) {
+          const current = ordered[index]!;
+          const target = ordered[targetIndex]!;
+          const currentOrder = current.sort_order;
+          current.sort_order = target.sort_order;
+          target.sort_order = currentOrder;
+          persistState();
+        }
+        return json(ordered);
+      }
+
+      if (path.includes('/rest/v1/trip_explore_items')) {
+        if (method === 'GET') {
+          return json(state.exploreItems.filter((item) => item.deleted_at === null));
+        }
+
+        const row = {
+          id: body.id ?? `explore-${state.exploreItems.length + 1}`,
+          trip_id: body.trip_id ?? tripId,
+          created_by: body.created_by ?? userId,
+          item_type: body.item_type ?? 'place',
+          title: body.title ?? 'QA TEST Explore',
+          description: body.description ?? null,
+          category: body.category ?? 'Mat',
+          place_name: body.place_name ?? null,
+          formatted_address: body.formatted_address ?? null,
+          latitude: body.latitude ?? null,
+          longitude: body.longitude ?? null,
+          google_place_id: body.google_place_id ?? null,
+          google_maps_url: body.google_maps_url ?? null,
+          google_rating: body.google_rating ?? null,
+          google_primary_type: body.google_primary_type ?? null,
+          photo_name: body.photo_name ?? null,
+          photo_reference: body.photo_reference ?? null,
+          photo_url: body.photo_url ?? null,
+          photo_attributions: body.photo_attributions ?? [],
+          image_source: body.image_source ?? 'placeholder',
+          sort_order: body.sort_order ?? state.exploreItems.length + 1,
+          metadata: body.metadata ?? {},
+          created_at: now,
+          updated_at: now,
+          deleted_at: null,
+        };
+        return json(upsertById(state.exploreItems, row));
+      }
+
+      return null;
+    }
+
+    window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      refreshStateFromStorage();
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+
+      if (url.includes('supabase.co')) {
+        const response = routeSupabase(url, init);
+        if (response) {
+          return response;
+        }
+      }
+
+      if (url.includes('places.googleapis.com')) {
+        const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {};
+        const isNearby = url.includes(':searchNearby') || Boolean(body.locationBias);
+        state.calls[isNearby ? 'nearby' : 'places'] += 1;
+        persistState();
+        const place = isNearby
+          ? {
+            id: 'qa-nearby-cafe',
+            displayName: { text: 'QA TEST Cafe' },
+            formattedAddress: 'QA TEST Cafe Address',
+            location: { latitude: 55.607, longitude: 13.006 },
+            rating: 4.4,
+            primaryType: 'restaurant',
+            googleMapsUri: 'https://maps.google.com/?q=qa-cafe',
+          }
+          : {
+            id: 'qa-google-place',
+            displayName: { text: body.textQuery?.includes('Munich') ? 'QA TEST München' : 'QA TEST Malmö' },
+            formattedAddress: body.textQuery?.includes('Munich') ? 'Munich, Germany' : 'Malmö, Sweden',
+            location: body.textQuery?.includes('Munich')
+              ? { latitude: 48.1351, longitude: 11.582 }
+              : { latitude: 55.604981, longitude: 13.003822 },
+            rating: 4.6,
+            primaryType: 'locality',
+            googleMapsUri: 'https://maps.google.com/?q=qa-place',
+          };
+        return json({ places: [place] });
+      }
+
+      if (url.includes('routes.googleapis.com')) {
+        state.calls.routes += 1;
+        persistState();
+        return json({
+          routes: [{
+            distanceMeters: 980000,
+            duration: '39600s',
+            polyline: { encodedPolyline: '_p~iF~ps|U_ulLnnqC_mqNvxq`@' },
+            legs: [{
+              distanceMeters: 980000,
+              duration: '39600s',
+              polyline: { encodedPolyline: '_p~iF~ps|U_ulLnnqC_mqNvxq`@' },
+            }],
+          }],
+        });
+      }
+
+      return originalFetch(input, init);
+    }) as typeof window.fetch;
+  });
+}
+
+async function waitForQaConnection(page: Parameters<Parameters<typeof test>[1]>[0]['page']) {
+  await expect(page.getByText(/Ansluten: QA TEST Trip|Molnresan är tom än så länge/).first()).toBeVisible({ timeout: 15_000 });
+}
+
+async function fillStopEditor(page: Parameters<Parameters<typeof test>[1]>[0]['page'], stop: MockStopInput) {
+  const editor = page.getByTestId('day-new-stop-editor').or(page.getByTestId('day-stop-edit-editor')).last();
+  await expect(editor).toBeVisible();
+  if (stop.date !== undefined) {
+    await editor.getByPlaceholder('ÅÅÅÅ-MM-DD').fill(stop.date);
+  }
+  if (stop.time !== undefined) {
+    await editor.getByPlaceholder('TT:MM').fill(stop.time);
+  }
+  await editor.getByPlaceholder('Titel *').fill(stop.title);
+  await editor.getByPlaceholder('Plats eller adress').fill(stop.place);
+  if (stop.cost !== undefined) {
+    await editor.getByPlaceholder('Kostnad').fill(stop.cost);
+  }
+  if (stop.notes !== undefined) {
+    await editor.getByPlaceholder('Anteckningar').fill(stop.notes);
+  }
+  if (stop.latitude !== undefined || stop.longitude !== undefined) {
+    await editor.getByText('Visa detaljer').click();
+    if (stop.latitude !== undefined) {
+      await editor.getByPlaceholder('Latitud').fill(stop.latitude);
+    }
+    if (stop.longitude !== undefined) {
+      await editor.getByPlaceholder('Longitud').fill(stop.longitude);
+    }
+  }
+}
+
+async function saveOpenEditor(page: Parameters<Parameters<typeof test>[1]>[0]['page']) {
+  const editor = page.getByTestId('day-new-stop-editor').or(page.getByTestId('day-stop-edit-editor')).last();
+  await editor.getByText('Spara steg', { exact: true }).click();
 }
 
 test('main workspaces open and no obvious white screen appears', async ({ page }) => {
@@ -159,4 +512,167 @@ test('mobile route can still show an embedded map when the right rail is absent'
   await page.getByTestId('top-nav-route').click();
   await expect(page.getByTestId('desktop-map-rail')).toHaveCount(0);
   await expect(page.getByTestId('center-mobile-map')).toBeVisible();
+});
+
+test('Ny reseplan confirms local reset without claiming cloud deletion', async ({ page }) => {
+  await installQaBackend(page);
+  await page.goto('/');
+  await expect(page.getByText('Alp-roadtrip')).toBeVisible();
+  await waitForQaConnection(page);
+
+  let confirmation = '';
+  page.once('dialog', async (dialog) => {
+    confirmation = dialog.message();
+    await dialog.accept();
+  });
+
+  await page.getByText('Ny reseplan').click();
+  await expect(page.getByText('Börja planera din roadtrip')).toBeVisible();
+  expect(confirmation).toContain('ny tom reseplan');
+  expect(confirmation).toContain('påverkar inte tidigare sparade resor');
+  expect(confirmation).not.toContain('raderar');
+});
+
+test('connected planner can add, edit, persist, move menu, and delete QA stops', async ({ page }) => {
+  await installQaBackend(page);
+  await page.goto('/');
+  await expect(page.getByText('Alp-roadtrip')).toBeVisible();
+  await waitForQaConnection(page);
+  await page.getByTestId('edit-mode-toggle').click();
+
+  await page.getByTestId('sidebar-nav-days').click();
+  await page.getByTestId('empty-add-first-stop').click();
+  await fillStopEditor(page, {
+    title: 'QA TEST Malmö',
+    place: 'Malmö, Sweden',
+    date: '2026-07-12',
+    time: '09:00',
+    cost: '120',
+    notes: 'QA TEST first stop',
+    latitude: '55.604981',
+    longitude: '13.003822',
+  });
+  await saveOpenEditor(page);
+  await expect(page.getByText('Lade till steg: QA TEST Malmö').first()).toBeVisible();
+
+  await page.getByTestId('day-card-add-stop').click();
+  await fillStopEditor(page, {
+    title: 'QA TEST München',
+    place: 'Munich, Germany',
+    date: '2026-07-12',
+    time: '18:00',
+    cost: '300',
+    notes: 'QA TEST second stop',
+    latitude: '48.1351',
+    longitude: '11.582',
+  });
+  await saveOpenEditor(page);
+  await expect(page.getByText('Lade till steg: QA TEST München').first()).toBeVisible();
+
+  const firstStop = page.getByTestId('day-stop-card').filter({ hasText: 'QA TEST Malmö' });
+  await firstStop.getByTestId('stop-menu-button').click();
+  await expect(firstStop.getByTestId('stop-menu-full-editor')).toBeVisible();
+  await expect(firstStop.getByText('Flytta', { exact: true })).toBeVisible();
+  await firstStop.getByTestId('stop-menu-full-editor').click();
+  await fillStopEditor(page, {
+    title: 'QA TEST Malmö edited',
+    place: 'Malmö Centralstation',
+    cost: '150',
+    notes: 'QA TEST edited note',
+  });
+  await saveOpenEditor(page);
+  await expect(page.getByText('Sparade steg: QA TEST Malmö edited').first()).toBeVisible();
+  await expect(page.getByTestId('day-stop-card').filter({ hasText: 'QA TEST Malmö edited' })).toBeVisible();
+
+  const backendTitles = await page.evaluate(() => (
+    (window as unknown as { __roadtripQaBackend: { nodes: Array<{ title?: string; deleted_at?: string | null }> } })
+      .__roadtripQaBackend.nodes
+      .filter((node) => node.deleted_at === null)
+      .map((node) => node.title)
+  ));
+  expect(backendTitles).toContain('QA TEST Malmö edited');
+  expect(backendTitles).toContain('QA TEST München');
+
+  await page.getByTestId('day-stop-edit-editor').getByText('Avbryt', { exact: true }).first().click();
+  const editedStop = page.getByTestId('day-stop-card').filter({ hasText: 'QA TEST Malmö edited' });
+  await editedStop.getByText('Ner').click();
+  await expect(page.getByText('Flyttade steg: QA TEST Malmö edited').first()).toBeVisible();
+
+  await editedStop.getByTestId('stop-menu-button').click();
+  await editedStop.getByText('Ta bort', { exact: true }).click();
+  await editedStop.getByText('Ja, ta bort', { exact: true }).click();
+  await expect(page.getByText('Stopp borttaget.').first()).toBeVisible();
+  await expect(page.getByTestId('day-stop-card').filter({ hasText: 'QA TEST Malmö edited' })).toHaveCount(0);
+});
+
+test('Google places, placeholder, route, fuel, and nearby flows are explicit and usable', async ({ page }) => {
+  await installQaBackend(page);
+  await page.goto('/');
+  await expect(page.getByText('Alp-roadtrip')).toBeVisible();
+  await waitForQaConnection(page);
+  await page.getByTestId('edit-mode-toggle').click();
+
+  await page.getByTestId('sidebar-nav-days').click();
+  await page.getByTestId('empty-add-first-stop').click();
+  await fillStopEditor(page, {
+    title: 'QA TEST Placeholder',
+    place: 'Needs Google place',
+    date: '2026-07-13',
+    time: '09:00',
+    cost: '100',
+  });
+  await saveOpenEditor(page);
+  await expect(page.getByText('Lade till steg: QA TEST Placeholder').first()).toBeVisible();
+
+  await page.getByTestId('day-stop-card').filter({ hasText: 'QA TEST Placeholder' }).getByText('Fixa position', { exact: true }).click();
+  await page.getByPlaceholder('Sök kartposition').fill('QA TEST Malmö');
+  await page.getByText('Sök', { exact: true }).click();
+  await expect(page.getByText('QA TEST Malmö').first()).toBeVisible();
+  await page.getByText('Välj', { exact: true }).click();
+  await expect(page.getByText(/har kartposition|Position klar/).first()).toBeVisible();
+  await expect(page.getByText('Platsnamnet kan ha ändrats')).toHaveCount(0);
+
+  await page.getByTestId('day-card-add-stop').click();
+  await fillStopEditor(page, {
+    title: 'QA TEST München',
+    place: 'Munich, Germany',
+    date: '2026-07-13',
+    time: '18:00',
+    cost: '300',
+    latitude: '48.1351',
+    longitude: '11.582',
+  });
+  await saveOpenEditor(page);
+  await expect(page.getByText('Lade till steg: QA TEST München').first()).toBeVisible();
+
+  await page.getByTestId('day-stop-card').filter({ hasText: 'QA TEST Placeholder' }).getByText('Mellanstopp efter').click();
+  await expect(page.getByText('Planerat men inte bestämt').first()).toBeVisible();
+  await expect(page.getByText('Hitta smart mellanstopp').first()).toBeVisible();
+
+  await page.getByTestId('sidebar-nav-route').click();
+  const routeCallsBefore = await page.evaluate(() => (window as unknown as { __roadtripQaBackend: { calls: { routes: number } } }).__roadtripQaBackend.calls.routes);
+  expect(routeCallsBefore).toBe(0);
+  await page.getByText('Beräkna rutt').click();
+  await expect(page.getByText(/Rutt beräknad med Google Routes/)).toBeVisible();
+  await expect(page.getByText('Delsträckor', { exact: true })).toBeVisible();
+  await expect(page.getByText(/placeholder saknar exakt plats/)).toBeVisible();
+  const routeCallsAfter = await page.evaluate(() => (window as unknown as { __roadtripQaBackend: { calls: { routes: number } } }).__roadtripQaBackend.calls.routes);
+  expect(routeCallsAfter).toBe(1);
+
+  await page.getByPlaceholder('6.5').fill('7,2');
+  await page.getByPlaceholder('20').fill('21');
+  await expect(page.getByText('Bränslekostnad')).toBeVisible();
+  await expect(page.getByText('Per person')).toBeVisible();
+  await page.getByPlaceholder('6.5').fill('');
+  await expect(page.getByText('Beräknad bensin')).toBeVisible();
+
+  await page.getByTestId('sidebar-nav-explore').click();
+  const nearbyCallsBefore = await page.evaluate(() => (window as unknown as { __roadtripQaBackend: { calls: { nearby: number } } }).__roadtripQaBackend.calls.nearby);
+  expect(nearbyCallsBefore).toBe(0);
+  await page.getByText('Sök nära').click();
+  await expect(page.getByText('QA TEST Cafe', { exact: true })).toBeVisible();
+  await page.getByText('Spara i Utforska', { exact: true }).click();
+  await expect(page.getByText('QA TEST Cafe sparades i Utforska.').first()).toBeVisible();
+  const nearbyCallsAfter = await page.evaluate(() => (window as unknown as { __roadtripQaBackend: { calls: { nearby: number } } }).__roadtripQaBackend.calls.nearby);
+  expect(nearbyCallsAfter).toBe(1);
 });
