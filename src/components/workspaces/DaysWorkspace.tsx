@@ -379,7 +379,7 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
               <Text style={styles.secondarySmallButtonText}>Rutt</Text>
             </Pressable>
           </View>
-          <View testID="center-mobile-map" style={styles.contextMapShell}>
+          <View testID="center-mobile-map" style={[styles.contextMapShell, styles.mobileMapContextTall]}>
             <NavigationMap nodes={selectedDayPlan.nodes} activeRoute={routeForMap} followUser={false} compact />
           </View>
         </View>

@@ -478,6 +478,7 @@ export default function App() {
   const [smartStopResults, setSmartStopResults] = useState<GooglePlace[]>([]);
   const [smartStopMessage, setSmartStopMessage] = useState<string | null>(null);
   const [calculatedRoute, setCalculatedRoute] = useState<CalculatedRouteState | null>(null);
+  const [mapExpanded, setMapExpanded] = useState(false);
   const [routeCalculationMessage, setRouteCalculationMessage] = useState<string | null>(null);
   const [isRouteCalculating, setIsRouteCalculating] = useState(false);
   const { activeTripId, setActiveTrip, upsertTrip, upsertPoi: upsertPoiInStore } = useTripStore();
@@ -3236,9 +3237,11 @@ export default function App() {
                 formatDistance={formatDistance}
                 formatDuration={formatDuration}
                 missingCoordinateCount={missingCoordinateCount}
+                mapExpanded={mapExpanded}
                 selectedDayPlan={selectedDayPlan}
                 styles={styles}
                 onGoToView={goToView}
+                onToggleMapExpanded={() => setMapExpanded((current) => !current)}
               />
             ) : null}
           </View>
@@ -4304,7 +4307,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0f2233',
   },
   mapShellMobile: {
-    height: 360,
+    height: 430,
   },
   content: {
     flex: 1,
@@ -4797,15 +4800,25 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   workspaceMapContext: {
-    width: '38%',
-    minWidth: 360,
-    maxWidth: 880,
+    width: '44%',
+    minWidth: 420,
+    maxWidth: 980,
     flexShrink: 0,
     gap: 0,
   },
+  workspaceMapContextRoute: {
+    width: '50%',
+    minWidth: 480,
+    maxWidth: 1100,
+  },
+  workspaceMapContextExpanded: {
+    width: '58%',
+    minWidth: 560,
+    maxWidth: 1240,
+  },
   contextMapCard: {
     flex: 1,
-    minHeight: 720,
+    minHeight: 780,
     gap: 12,
     borderRadius: 24,
     borderWidth: StyleSheet.hairlineWidth,
@@ -4824,6 +4837,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
+    flexWrap: 'wrap',
+  },
+  mapRailActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+    flexWrap: 'wrap',
   },
   contextMapTitle: {
     color: '#0a2540',
@@ -4833,12 +4854,15 @@ const styles = StyleSheet.create({
   },
   contextMapShell: {
     flex: 1,
-    minHeight: 640,
+    minHeight: 700,
     overflow: 'hidden',
     borderRadius: 20,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#d6d3c8',
     backgroundColor: '#fbfdff',
+  },
+  contextMapShellExpanded: {
+    minHeight: 780,
   },
   contextPanel: {
     gap: 7,
@@ -4870,6 +4894,9 @@ const styles = StyleSheet.create({
     borderColor: '#d8e2eb',
     backgroundColor: 'rgba(255,255,255,0.96)',
     padding: 12,
+  },
+  mobileMapContextTall: {
+    minHeight: 340,
   },
   exploreSaveHint: {
     minHeight: 34,
