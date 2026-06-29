@@ -59,6 +59,7 @@ import {
 import { calculateGoogleRoute, getRoutableStops, routeStopSignature } from '@/services/google/googleRoutes';
 import { analyzeDayWarnings, moveNodeToDay, summarizeDay, validatePlannerDraft, type DaySummary } from '@/services/planning/dayAnalysis';
 import { buildTravelBudgetCenter } from '@/services/planning/budgetAnalysis';
+import { buildExplorePlaceDuplicateKey, buildItineraryNodeDuplicateKey, prepareLocalNodeForCloud } from '@/services/planning/cloudSync';
 import { calculateFuelEstimate, parseFuelNumber } from '@/services/routing/fuelEstimate';
 import {
   addExplorePlaceTarget,
@@ -149,6 +150,19 @@ type LocalTripImportOffer = {
   explorePlaces: ExplorePlace[];
   cloudNodeCount: number;
   cloudExploreCount: number;
+};
+
+type CloudSyncBaseState = {
+  nodes: ItineraryNode[];
+  exploreNotes: string;
+  exploreNoteItemId: string | null;
+  explorePlaces: ExplorePlace[];
+};
+
+type CloudSyncResult = CloudSyncBaseState & {
+  importedCount: number;
+  skippedNodeCount: number;
+  failedLabels: string[];
 };
 
 const appTabs = APP_TABS;
@@ -351,18 +365,18 @@ function formatOnlineSaveLabel(state: OnlineSaveState, lastSavedAt: string | nul
   }
 
   if (state === 'saving') {
-    return 'Sparar online...';
+    return 'Resan sparas i Supabase...';
   }
 
   if (state === 'error') {
-    return 'Ej sparat online';
+    return 'Lokala ändringar ej synkade';
   }
 
   if (state === 'saved' && lastSavedAt) {
-    return `Sparat online ${formatShortTime(lastSavedAt)}`;
+    return `Senast sparad i molnet ${formatShortTime(lastSavedAt)}`;
   }
 
-  return 'Online redo';
+  return 'Resan sparas i Supabase';
 }
 
 function formatStatusMessage(value: unknown, fallback: string): string {
@@ -469,6 +483,7 @@ export default function App() {
   const isShowingDemoPlan = !activeTripId && itineraryNodes.length === 0 && !hasStartedBlankPlan;
   const displayedNodes = isShowingDemoPlan ? demoNodes : itineraryNodes;
   const isDemoMode = isShowingDemoPlan || !isEditMode;
+  const hasLocalTripData = !activeTripId && (itineraryNodes.length > 0 || explorePlaces.length > 0 || exploreNotes.trim().length > 0);
   const estimatedRouteSummary = useMemo(() => estimateRouteSummary(displayedNodes), [displayedNodes]);
   const currentRouteSignature = useMemo(() => routeStopSignature(displayedNodes), [displayedNodes]);
   const activeCalculatedRoute = calculatedRoute?.signature === currentRouteSignature ? calculatedRoute : null;
@@ -790,7 +805,7 @@ export default function App() {
     }
   }
 
-  async function connectSupabaseTrip() {
+  async function connectSupabaseTrip(options: { syncLocalWhenCloudEmpty?: boolean } = {}) {
     const configurationError = getSupabaseConfigurationError();
     if (configurationError) {
       setStatusMessage(configurationError);
@@ -814,6 +829,10 @@ export default function App() {
         listTripExploreItems(trip.id),
       ]);
       const cleanedNodes = await cleanLoadedNodesOnline(nodes);
+      const cloudNoteItem = exploreItems.find((item) => item.itemType === 'note') ?? null;
+      const cloudExplorePlaces = exploreItems
+        .map(explorePlaceFromItem)
+        .filter((place): place is ExplorePlace => Boolean(place));
       const importOffer = buildLocalTripImportOffer({
         tripId: trip.id,
         userId: user.id,
@@ -823,9 +842,29 @@ export default function App() {
         cloudNodes: cleanedNodes,
         cloudExploreItems: exploreItems,
       });
+      const canAutoSyncLocalTrip = Boolean(options.syncLocalWhenCloudEmpty && importOffer && cleanedNodes.length === 0 && exploreItems.length === 0);
 
       upsertTrip(trip);
       setActiveTrip(trip.id);
+      if (canAutoSyncLocalTrip && importOffer) {
+        markOnlineSaveStart();
+        const syncResult = await syncLocalTripOfferToSupabase(importOffer, {
+          nodes: cleanedNodes,
+          exploreNotes: cloudNoteItem?.description ?? '',
+          exploreNoteItemId: cloudNoteItem?.id ?? null,
+          explorePlaces: cloudExplorePlaces,
+        });
+        setItineraryNodes(syncResult.nodes);
+        setExploreNotes(syncResult.exploreNotes);
+        setExploreNoteItemId(syncResult.exploreNoteItemId);
+        setExplorePlaces(syncResult.explorePlaces);
+        setLocalTripImportOffer(syncResult.failedLabels.length > 0 ? importOffer : null);
+        markOnlineSaveSuccess();
+        const failedText = syncResult.failedLabels.length > 0 ? ` Kunde inte synka: ${syncResult.failedLabels.slice(0, 3).join(', ')}.` : '';
+        setStatusMessage(`Resan sparas i Supabase. Synkade ${syncResult.importedCount} lokala poster till molnet.${failedText}`);
+        return;
+      }
+
       setItineraryNodes(cleanedNodes);
       applyLoadedExploreItems(exploreItems);
       setLocalTripImportOffer(importOffer);
@@ -833,8 +872,8 @@ export default function App() {
       if (importOffer) {
         setStatusMessage(
           cleanedNodes.length === 0
-            ? 'Molnresan är tom än så länge. Det finns en lokal resa i den här webbläsaren.'
-            : 'Det finns en lokal resa i den här webbläsaren som kan kopieras till molnet.',
+            ? 'Molnresan är tom än så länge. Synka lokal resa till molnet när du är redo.'
+            : 'Det finns både lokal data och en molnresa. Välj om du vill fortsätta med molnresan eller synka lokal resa till molnet.',
         );
       } else {
         setStatusMessage(cleanedNodes.length === 0 ? 'Molnresan är tom än så länge.' : `Ansluten: ${trip.name}`);
@@ -848,6 +887,15 @@ export default function App() {
     }
   }
 
+  async function syncCurrentTripToCloud() {
+    if (activeTripId) {
+      setStatusMessage('Resan sparas redan i Supabase.');
+      return;
+    }
+
+    await connectSupabaseTrip({ syncLocalWhenCloudEmpty: true });
+  }
+
   async function importLocalTripToSupabase() {
     if (!localTripImportOffer || !activeTripId || !userId) {
       setStatusMessage('Anslut resan innan du kopierar lokal data.');
@@ -855,86 +903,102 @@ export default function App() {
     }
 
     setIsLoading(true);
-    setStatusMessage('Kopierar lokal resa till Supabase...');
+    setStatusMessage('Synkar lokal resa till molnet...');
     markOnlineSaveStart();
 
     try {
-      const existingNodeKeys = new Set(itineraryNodes.map(buildItineraryNodeDuplicateKey));
-      const nodesToImport = localTripImportOffer.nodes
-        .map((node, index) => prepareLocalNodeForCloud(node, activeTripId, userId, index))
-        .filter((node) => !existingNodeKeys.has(buildItineraryNodeDuplicateKey(node)));
-      const importedNodes: ItineraryNode[] = [];
-      const failedLabels: string[] = [];
+      const result = await syncLocalTripOfferToSupabase(localTripImportOffer, {
+        nodes: itineraryNodes,
+        exploreNotes,
+        exploreNoteItemId,
+        explorePlaces,
+      });
 
-      for (const node of nodesToImport) {
-        try {
-          const savedNode = await upsertItineraryNode(node);
-          importedNodes.push(savedNode);
-          existingNodeKeys.add(buildItineraryNodeDuplicateKey(savedNode));
-        } catch {
-          failedLabels.push(node.title);
-        }
-      }
-
-      const existingExploreKeys = new Set(explorePlaces.map(buildExplorePlaceDuplicateKey));
-      const placesToImport = localTripImportOffer.explorePlaces
-        .filter((place) => !existingExploreKeys.has(buildExplorePlaceDuplicateKey(place)));
-      const importedPlaces: ExplorePlace[] = [];
-
-      for (const [index, place] of placesToImport.entries()) {
-        try {
-          const savedItem = await upsertTripExploreItem(explorePlaceToItem({
-            place,
-            tripId: activeTripId,
-            userId,
-            sortOrder: explorePlaces.length + importedPlaces.length + index + 1,
-          }));
-          const savedPlace = explorePlaceFromItem(savedItem);
-          if (savedPlace) {
-            importedPlaces.push(savedPlace);
-            existingExploreKeys.add(buildExplorePlaceDuplicateKey(savedPlace));
-          }
-        } catch {
-          failedLabels.push(place.title);
-        }
-      }
-
-      let importedNoteCount = 0;
-      let savedNoteId: string | null = exploreNoteItemId;
-      if (localTripImportOffer.exploreNotes.trim() && !exploreNotes.trim()) {
-        try {
-          const savedItem = await upsertTripExploreItem(noteToExploreItem({
-            tripId: activeTripId,
-            userId,
-            description: localTripImportOffer.exploreNotes,
-          }));
-          savedNoteId = savedItem.id;
-          importedNoteCount = 1;
-        } catch {
-          failedLabels.push('Utforska-anteckningar');
-        }
-      }
-
-      setItineraryNodes(sortNodes([...itineraryNodes, ...importedNodes]));
-      if (localTripImportOffer.exploreNotes.trim() && !exploreNotes.trim()) {
-        setExploreNotes(localTripImportOffer.exploreNotes);
-        setExploreNoteItemId(savedNoteId);
-      }
-      setExplorePlaces([...importedPlaces, ...explorePlaces]);
-      setLocalTripImportOffer(null);
+      setItineraryNodes(result.nodes);
+      setExploreNotes(result.exploreNotes);
+      setExploreNoteItemId(result.exploreNoteItemId);
+      setExplorePlaces(result.explorePlaces);
+      setLocalTripImportOffer(result.failedLabels.length > 0 ? localTripImportOffer : null);
       markOnlineSaveSuccess();
 
-      const skippedNodes = localTripImportOffer.nodes.length - nodesToImport.length;
-      const importedCount = importedNodes.length + importedPlaces.length + importedNoteCount;
-      const skippedText = skippedNodes > 0 ? ` ${skippedNodes} stopp fanns redan och hoppades över.` : '';
-      const failedText = failedLabels.length > 0 ? ` Kunde inte kopiera: ${failedLabels.slice(0, 3).join(', ')}.` : '';
-      setStatusMessage(`Kopierade ${importedCount} lokala poster till Supabase.${skippedText}${failedText}`);
+      const skippedText = result.skippedNodeCount > 0 ? ` ${result.skippedNodeCount} stopp fanns redan och hoppades över.` : '';
+      const failedText = result.failedLabels.length > 0 ? ` Kunde inte synka: ${result.failedLabels.slice(0, 3).join(', ')}.` : '';
+      setStatusMessage(`Resan sparas i Supabase. Synkade ${result.importedCount} lokala poster till molnet.${skippedText}${failedText}`);
     } catch (error) {
       markOnlineSaveError();
-      setStatusMessage(`Kunde inte kopiera lokal resa. Lokal data finns kvar i den här webbläsaren. ${error instanceof Error ? error.message : String(error)}`);
+      setStatusMessage(`Kunde inte synka lokal resa. Lokal data finns kvar i den här webbläsaren. ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setIsLoading(false);
     }
+  }
+
+  async function syncLocalTripOfferToSupabase(offer: LocalTripImportOffer, cloudState: CloudSyncBaseState): Promise<CloudSyncResult> {
+    const existingNodeKeys = new Set(cloudState.nodes.map(buildItineraryNodeDuplicateKey));
+    const preparedNodes = offer.nodes.map((node, index) => prepareLocalNodeForCloud(node, offer.tripId, offer.userId, index));
+    const nodesToImport = preparedNodes.filter((node) => !existingNodeKeys.has(buildItineraryNodeDuplicateKey(node)));
+    const importedNodes: ItineraryNode[] = [];
+    const failedLabels: string[] = [];
+
+    for (const node of nodesToImport) {
+      try {
+        const savedNode = await upsertItineraryNode(node);
+        importedNodes.push(savedNode);
+        existingNodeKeys.add(buildItineraryNodeDuplicateKey(savedNode));
+      } catch {
+        failedLabels.push(node.title);
+      }
+    }
+
+    const existingExploreKeys = new Set(cloudState.explorePlaces.map(buildExplorePlaceDuplicateKey));
+    const placesToImport = offer.explorePlaces
+      .filter((place) => !existingExploreKeys.has(buildExplorePlaceDuplicateKey(place)));
+    const importedPlaces: ExplorePlace[] = [];
+
+    for (const [index, place] of placesToImport.entries()) {
+      try {
+        const savedItem = await upsertTripExploreItem(explorePlaceToItem({
+          place,
+          tripId: offer.tripId,
+          userId: offer.userId,
+          sortOrder: cloudState.explorePlaces.length + importedPlaces.length + index + 1,
+        }));
+        const savedPlace = explorePlaceFromItem(savedItem);
+        if (savedPlace) {
+          importedPlaces.push(savedPlace);
+          existingExploreKeys.add(buildExplorePlaceDuplicateKey(savedPlace));
+        }
+      } catch {
+        failedLabels.push(place.title);
+      }
+    }
+
+    let importedNoteCount = 0;
+    let nextExploreNotes = cloudState.exploreNotes;
+    let nextExploreNoteItemId = cloudState.exploreNoteItemId;
+    if (offer.exploreNotes.trim() && !cloudState.exploreNotes.trim()) {
+      try {
+        const savedItem = await upsertTripExploreItem(noteToExploreItem({
+          tripId: offer.tripId,
+          userId: offer.userId,
+          description: offer.exploreNotes,
+        }));
+        nextExploreNotes = offer.exploreNotes;
+        nextExploreNoteItemId = savedItem.id;
+        importedNoteCount = 1;
+      } catch {
+        failedLabels.push('Utforska-anteckningar');
+      }
+    }
+
+    return {
+      nodes: sortNodes([...cloudState.nodes, ...importedNodes]),
+      exploreNotes: nextExploreNotes,
+      exploreNoteItemId: nextExploreNoteItemId,
+      explorePlaces: [...importedPlaces, ...cloudState.explorePlaces],
+      importedCount: importedNodes.length + importedPlaces.length + importedNoteCount,
+      skippedNodeCount: offer.nodes.length - nodesToImport.length,
+      failedLabels,
+    };
   }
 
   function continueWithEmptyCloudTrip() {
@@ -2677,7 +2741,7 @@ export default function App() {
       setStatusMessage(
         activeTripId && userId
           ? `Importerade ${importedNodes.length} steg till den anslutna resan. Inga befintliga stopp togs bort.`
-          : `Importerade ${importedNodes.length} steg lokalt för granskning. Anslut/Kopiera lokal resa till Supabase när du vill synka.`,
+          : `Importerade ${importedNodes.length} steg lokalt för granskning. Tryck Synka till molnet när du vill spara resan i Supabase.`,
       );
       goToView('days');
     } catch (error) {
@@ -2743,7 +2807,9 @@ export default function App() {
           </View>
           <View style={[styles.headerActions, isMobile && styles.headerActionsMobile]}>
             <View style={[styles.headerStatusSummary, isMobile && styles.headerStatusSummaryMobile, isDark && styles.headerStatusSummaryDark]}>
-              <Text style={[styles.headerStatusTitle, isDark && styles.textDark]}>{activeTripId ? 'Ansluten resa' : 'Anslut för molnsparning'}</Text>
+              <Text style={[styles.headerStatusTitle, isDark && styles.textDark]}>
+                {activeTripId ? 'Molnresa aktiv' : hasLocalTripData ? 'Lokal resa ej synkad' : 'Anslut för molnsparning'}
+              </Text>
               <Text style={[styles.headerStatusMeta, isDark && styles.textMutedDark]} numberOfLines={1}>{visibleStatusMessage}</Text>
             </View>
             <Pressable testID="edit-mode-toggle" style={[styles.modeButton, isEditMode && styles.modeButtonActive]} onPress={toggleEditMode}>
@@ -2757,8 +2823,12 @@ export default function App() {
             >
               <Text style={styles.newTripButtonText}>Ny reseplan</Text>
             </Pressable>
-            <Pressable style={[styles.syncButton, isLoading && styles.disabledButton]} onPress={connectSupabaseTrip} disabled={isLoading}>
-              <Text style={styles.syncButtonText}>{isLoading ? 'Vänta' : activeTripId ? 'Uppdatera' : 'Anslut'}</Text>
+            <Pressable
+              style={[styles.syncButton, isLoading && styles.disabledButton]}
+              onPress={hasLocalTripData ? syncCurrentTripToCloud : () => void connectSupabaseTrip()}
+              disabled={isLoading}
+            >
+              <Text style={styles.syncButtonText}>{isLoading ? 'Vänta' : activeTripId ? 'Uppdatera' : hasLocalTripData ? 'Synka' : 'Anslut'}</Text>
             </Pressable>
           </View>
         </View>
@@ -2777,7 +2847,7 @@ export default function App() {
                 appTabs={appTabs}
                 dayPlans={dayPlans}
                 selectedDayKey={selectedDayPlan?.key ?? null}
-                statusLabel={activeTripId ? 'Ansluten resa' : 'Endast lokalt sparat'}
+                statusLabel={activeTripId ? 'Molnresa aktiv' : 'Endast lokalt sparat'}
                 statusMeta={visibleStatusMessage}
                 styles={styles}
                 tripName={demoTrip.name}
@@ -2908,21 +2978,21 @@ export default function App() {
                   <View style={styles.sectionHeaderRow}>
                     <View style={styles.flexOne}>
                       <Text style={[styles.localImportTitle, isDark && styles.textDark]}>
-                        Du har en lokal resa sparad i den hÃ¤r webblÃ¤saren.
+                        Lokal resa kan synkas till molnet
                       </Text>
                       <Text style={[styles.localImportText, isDark && styles.textMutedDark]}>
                         {localTripImportOffer.cloudNodeCount === 0
-                          ? 'Molnresan Ã¤r tom Ã¤n sÃ¥ lÃ¤nge.'
+                          ? 'Molnresan är tom än så länge.'
                           : `Molnresan har ${localTripImportOffer.cloudNodeCount} stopp.`}
                       </Text>
                       <Text style={[styles.localImportText, isDark && styles.textMutedDark]}>
-                        Vill du kopiera den lokala resan till molnet?
+                        Välj själv. Molnresan skrivs inte över och inget tas bort automatiskt.
                       </Text>
                     </View>
                   </View>
                   <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
                     Lokal data: {localTripImportOffer.nodes.length} stopp
-                    {localTripImportOffer.explorePlaces.length > 0 ? `, ${localTripImportOffer.explorePlaces.length} idÃ©platser` : ''}
+                    {localTripImportOffer.explorePlaces.length > 0 ? `, ${localTripImportOffer.explorePlaces.length} idéplatser` : ''}
                     {localTripImportOffer.exploreNotes.trim() ? ', anteckningar' : ''}. Lokal data tas inte bort automatiskt.
                   </Text>
                   <View style={styles.actionRow}>
@@ -2932,7 +3002,7 @@ export default function App() {
                       onPress={() => void importLocalTripToSupabase()}
                       disabled={isLoading}
                     >
-                      <Text style={styles.commandButtonText}>Kopiera lokal resa till Supabase</Text>
+                      <Text style={styles.commandButtonText}>Synka lokal resa till molnet</Text>
                     </Pressable>
                     <Pressable
                       testID="continue-empty-cloud-trip"
@@ -2940,7 +3010,7 @@ export default function App() {
                       onPress={continueWithEmptyCloudTrip}
                       disabled={isLoading}
                     >
-                      <Text style={styles.secondaryButtonText}>FortsÃ¤tt med tom molnresa</Text>
+                      <Text style={styles.secondaryButtonText}>Fortsätt med molnresan</Text>
                     </Pressable>
                     <Pressable
                       testID="show-local-trip"
@@ -2948,7 +3018,7 @@ export default function App() {
                       onPress={showLocalTripPreview}
                       disabled={isLoading}
                     >
-                      <Text style={styles.secondaryButtonText}>Visa lokal resa</Text>
+                      <Text style={styles.secondaryButtonText}>Visa lokal resa först</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -2963,7 +3033,9 @@ export default function App() {
                   missingCoordinateCount={missingCoordinateCount}
                   onlineSaveLabel={onlineSaveLabel}
                   styles={styles}
+                  hasLocalTripData={hasLocalTripData}
                   onImportCurrentTrip={() => void importReseplanrarePlan()}
+                  onSyncCurrentTripToCloud={() => void syncCurrentTripToCloud()}
                 />
               ) : null}
               {activeView === 'explore' ? (
@@ -3344,7 +3416,7 @@ function buildLocalTripImportOffer(input: {
   const cloudLooksSparse = input.cloudNodes.length === 0
     || (input.cloudNodes.length <= 1 && input.localNodes.length > input.cloudNodes.length);
 
-  if (!cloudLooksSparse && !hasImportableExplorePlace && !hasImportableNote) {
+  if (!cloudLooksSparse && !hasImportableNode && !hasImportableExplorePlace && !hasImportableNote) {
     return null;
   }
 
@@ -3363,52 +3435,6 @@ function buildLocalTripImportOffer(input: {
   };
 }
 
-function prepareLocalNodeForCloud(node: ItineraryNode, tripId: string, userId: string, index: number): ItineraryNode {
-  const now = new Date().toISOString();
-  return {
-    ...cloneItineraryNode(node),
-    id: isUuid(node.id) ? node.id : cryptoRandomId(),
-    tripId,
-    createdBy: userId,
-    updatedBy: userId,
-    createdAt: now,
-    updatedAt: now,
-    deletedAt: null,
-    version: 1,
-    sortOrder: Number.isFinite(node.sortOrder) ? node.sortOrder : (index + 1) * 100,
-  };
-}
-
-function buildItineraryNodeDuplicateKey(node: ItineraryNode): string {
-  const place = typeof node.metadata.place === 'string' ? node.metadata.place : '';
-  const latitude = Number.isFinite(node.location?.latitude) ? node.location!.latitude.toFixed(5) : '';
-  const longitude = Number.isFinite(node.location?.longitude) ? node.location!.longitude.toFixed(5) : '';
-  return [
-    normalizeDuplicateText(node.title),
-    node.type,
-    node.startsAt ?? '',
-    normalizeDuplicateText(place),
-    latitude,
-    longitude,
-  ].join('|');
-}
-
-function buildExplorePlaceDuplicateKey(place: ExplorePlace): string {
-  const latitude = Number.isFinite(place.coordinates?.latitude) ? place.coordinates!.latitude.toFixed(5) : '';
-  const longitude = Number.isFinite(place.coordinates?.longitude) ? place.coordinates!.longitude.toFixed(5) : '';
-  return [
-    normalizeDuplicateText(place.title),
-    normalizeDuplicateText(place.place ?? ''),
-    place.googlePlaceId ?? '',
-    latitude,
-    longitude,
-  ].join('|');
-}
-
-function normalizeDuplicateText(value: string): string {
-  return value.trim().toLowerCase().replace(/\s+/g, ' ');
-}
-
 function formatRouteSkipMessage(stopCount: number, placeholderCount: number): string | null {
   const parts: string[] = [];
   if (stopCount > 0) {
@@ -3419,10 +3445,6 @@ function formatRouteSkipMessage(stopCount: number, placeholderCount: number): st
   }
 
   return parts.length > 0 ? parts.join(' ') : null;
-}
-
-function isUuid(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function buildDayInsight(nodes: ItineraryNode[], route: RouteSummary, budget: BudgetSummary): DayInsightSummary {

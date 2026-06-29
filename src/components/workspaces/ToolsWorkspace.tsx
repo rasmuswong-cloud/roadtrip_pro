@@ -8,10 +8,12 @@ type ToolsWorkspaceProps = {
   isDemoMode: boolean;
   isLoading: boolean;
   isMobile: boolean;
+  hasLocalTripData: boolean;
   missingCoordinateCount: number;
   onlineSaveLabel: string;
   styles: WorkspaceStyles;
   onImportCurrentTrip: () => void;
+  onSyncCurrentTripToCloud: () => void;
 };
 
 export function ToolsWorkspace({
@@ -20,10 +22,12 @@ export function ToolsWorkspace({
   isDemoMode,
   isLoading,
   isMobile,
+  hasLocalTripData,
   missingCoordinateCount,
   onlineSaveLabel,
   styles,
   onImportCurrentTrip,
+  onSyncCurrentTripToCloud,
 }: ToolsWorkspaceProps) {
   return (
     <View style={[styles.panelSection, isDark && styles.panelDark]}>
@@ -52,6 +56,11 @@ export function ToolsWorkspace({
         <Text style={styles.emptySearchText}>Slå på redigering och anslut resan för att visa import, delning och synkverktyg.</Text>
       ) : null}
       <View style={styles.editorActionRow}>
+        {!activeTripId && hasLocalTripData ? (
+          <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={onSyncCurrentTripToCloud} disabled={isLoading}>
+            <Text style={styles.commandButtonText}>Synka till molnet</Text>
+          </Pressable>
+        ) : null}
         <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={onImportCurrentTrip} disabled={isLoading}>
           <Text style={styles.commandButtonText}>Importera aktuell resa</Text>
         </Pressable>

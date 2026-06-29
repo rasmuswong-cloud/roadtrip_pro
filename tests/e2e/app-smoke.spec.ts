@@ -15,8 +15,11 @@ type MockStopInput = {
 
 test.beforeEach(async ({ context }) => {
   await context.addInitScript(() => {
-    window.localStorage.clear();
-    window.sessionStorage.clear();
+    if (window.name !== '__roadtrip_e2e_initialized') {
+      window.localStorage.clear();
+      window.sessionStorage.clear();
+      window.name = '__roadtrip_e2e_initialized';
+    }
   });
 });
 
@@ -374,7 +377,7 @@ async function installQaBackend(page: Parameters<Parameters<typeof test>[1]>[0][
 }
 
 async function waitForQaConnection(page: Parameters<Parameters<typeof test>[1]>[0]['page']) {
-  await expect(page.getByText(/Ansluten: QA TEST Trip|Molnresan är tom än så länge/).first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/Ansluten: QA TEST Trip|Molnresan är tom än så länge|Resan sparas i Supabase/).first()).toBeVisible({ timeout: 15_000 });
 }
 
 async function fillStopEditor(page: Parameters<Parameters<typeof test>[1]>[0]['page'], stop: MockStopInput) {
@@ -408,6 +411,13 @@ async function fillStopEditor(page: Parameters<Parameters<typeof test>[1]>[0]['p
 async function saveOpenEditor(page: Parameters<Parameters<typeof test>[1]>[0]['page']) {
   const editor = page.getByTestId('day-new-stop-editor').or(page.getByTestId('day-stop-edit-editor')).last();
   await editor.getByText('Spara steg', { exact: true }).click();
+}
+
+async function ensureEditMode(page: Parameters<Parameters<typeof test>[1]>[0]['page']) {
+  const editToggle = page.getByTestId('edit-mode-toggle');
+  if (await editToggle.getByText('Redigera', { exact: true }).isVisible()) {
+    await editToggle.click();
+  }
 }
 
 test('main workspaces open and no obvious white screen appears', async ({ page }) => {
@@ -533,12 +543,41 @@ test('Ny reseplan confirms local reset without claiming cloud deletion', async (
   expect(confirmation).not.toContain('raderar');
 });
 
+test('local persisted trip can sync into empty Supabase trip and reload from cloud', async ({ page }) => {
+  await installQaBackend(page);
+  await seedEditableDay(page);
+  await page.goto('/');
+  await expect(page.getByText('Alp-roadtrip')).toBeVisible();
+
+  await expect(page.getByTestId('local-cloud-import-card')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('Lokal resa kan synkas till molnet')).toBeVisible();
+  await page.getByTestId('copy-local-trip-to-supabase').click();
+  await expect(page.getByText(/Resan sparas i Supabase|Synkade/).first()).toBeVisible();
+  await expect(page.getByTestId('local-cloud-import-card')).toHaveCount(0);
+
+  const backendTitles = await page.evaluate(() => (
+    (window as unknown as { __roadtripQaBackend: { nodes: Array<{ title?: string; deleted_at?: string | null }> } })
+      .__roadtripQaBackend.nodes
+      .filter((node) => node.deleted_at === null)
+      .map((node) => node.title)
+  ));
+  expect(backendTitles).toContain('Malmö');
+  expect(backendTitles).toContain('Eventhotel Ö-Cappuccino');
+
+  await page.reload();
+  await expect(page.getByText('Alp-roadtrip')).toBeVisible();
+  await waitForQaConnection(page);
+  await page.getByTestId('day-shortcut-2026-07-12').click();
+  await expect(page.getByTestId('day-stop-card').filter({ hasText: 'Malmö' })).toBeVisible();
+  await expect(page.getByTestId('day-stop-card').filter({ hasText: 'Eventhotel Ö-Cappuccino' })).toBeVisible();
+});
+
 test('connected planner can add, edit, persist, move menu, and delete QA stops', async ({ page }) => {
   await installQaBackend(page);
   await page.goto('/');
   await expect(page.getByText('Alp-roadtrip')).toBeVisible();
   await waitForQaConnection(page);
-  await page.getByTestId('edit-mode-toggle').click();
+  await ensureEditMode(page);
 
   await page.getByTestId('sidebar-nav-days').click();
   await page.getByTestId('empty-add-first-stop').click();
@@ -593,7 +632,14 @@ test('connected planner can add, edit, persist, move menu, and delete QA stops',
   expect(backendTitles).toContain('QA TEST Malmö edited');
   expect(backendTitles).toContain('QA TEST München');
 
-  await page.getByTestId('day-stop-edit-editor').getByText('Avbryt', { exact: true }).first().click();
+  await page.reload();
+  await expect(page.getByText('Alp-roadtrip')).toBeVisible();
+  await waitForQaConnection(page);
+  await page.getByTestId('day-shortcut-2026-07-12').click();
+  await expect(page.getByTestId('day-stop-card').filter({ hasText: 'QA TEST Malmö edited' })).toBeVisible();
+  await expect(page.getByTestId('day-stop-card').filter({ hasText: 'QA TEST München' })).toBeVisible();
+  await ensureEditMode(page);
+
   const editedStop = page.getByTestId('day-stop-card').filter({ hasText: 'QA TEST Malmö edited' });
   await editedStop.getByTestId('stop-menu-button').click();
   await editedStop.getByText('Flytta ner', { exact: true }).click();
@@ -604,6 +650,13 @@ test('connected planner can add, edit, persist, move menu, and delete QA stops',
   await editedStop.getByText('Ja, ta bort', { exact: true }).click();
   await expect(page.getByText('Stopp borttaget.').first()).toBeVisible();
   await expect(page.getByTestId('day-stop-card').filter({ hasText: 'QA TEST Malmö edited' })).toHaveCount(0);
+
+  await page.reload();
+  await expect(page.getByText('Alp-roadtrip')).toBeVisible();
+  await waitForQaConnection(page);
+  await page.getByTestId('day-shortcut-2026-07-12').click();
+  await expect(page.getByTestId('day-stop-card').filter({ hasText: 'QA TEST Malmö edited' })).toHaveCount(0);
+  await expect(page.getByTestId('day-stop-card').filter({ hasText: 'QA TEST München' })).toBeVisible();
 });
 
 test('Google places, placeholder, route, fuel, and nearby flows are explicit and usable', async ({ page }) => {
@@ -611,7 +664,7 @@ test('Google places, placeholder, route, fuel, and nearby flows are explicit and
   await page.goto('/');
   await expect(page.getByText('Alp-roadtrip')).toBeVisible();
   await waitForQaConnection(page);
-  await page.getByTestId('edit-mode-toggle').click();
+  await ensureEditMode(page);
 
   await page.getByTestId('sidebar-nav-days').click();
   await page.getByTestId('empty-add-first-stop').click();
