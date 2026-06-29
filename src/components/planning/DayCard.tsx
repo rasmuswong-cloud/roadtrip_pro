@@ -212,7 +212,7 @@ export default function DayCard(props: DayCardProps) {
           ) : null}
         </View>
       ) : null}
-      {dayPlan.nodes.map((node) => {
+      {dayPlan.nodes.map((node, nodeIndex) => {
         const detailsExpanded = expandedNodeIds.has(node.id);
         const menuOpen = openMenuNodeId === node.id;
         const movePickerOpen = movePickerNodeId === node.id;
@@ -229,6 +229,8 @@ export default function DayCard(props: DayCardProps) {
         const missingInfoChips = buildMissingInfoChips(node);
         const fullEditorOpen = selectedPlannerNodeId === node.id;
         const placeholderChips = placeholderStatusChips(node);
+        const canMoveUp = nodeIndex > 0;
+        const canMoveDown = nodeIndex < dayPlan.nodes.length - 1;
 
         return (
           <View
@@ -478,6 +480,28 @@ export default function DayCard(props: DayCardProps) {
                   ) : (
                     <Text style={dayCardStyles.inlineCostText}>{formatRawNodeCost(node) || 'Fyll i kostnad'}</Text>
                   )}
+                  {canEdit && dayPlan.nodes.length > 1 ? (
+                    <View style={dayCardStyles.stopMoveControls}>
+                      <Pressable
+                        testID="stop-move-up"
+                        accessibilityLabel="Flytta stopp upp"
+                        style={[dayCardStyles.moveStepButton, (!canMoveUp || isLoading) && dayCardStyles.moveStepButtonDisabled]}
+                        onPress={() => void onMoveStop(node.id, -1)}
+                        disabled={!canMoveUp || isLoading}
+                      >
+                        <Text style={[dayCardStyles.moveStepButtonText, !canMoveUp && dayCardStyles.moveStepButtonTextDisabled]}>Upp</Text>
+                      </Pressable>
+                      <Pressable
+                        testID="stop-move-down"
+                        accessibilityLabel="Flytta stopp ner"
+                        style={[dayCardStyles.moveStepButton, (!canMoveDown || isLoading) && dayCardStyles.moveStepButtonDisabled]}
+                        onPress={() => void onMoveStop(node.id, 1)}
+                        disabled={!canMoveDown || isLoading}
+                      >
+                        <Text style={[dayCardStyles.moveStepButtonText, !canMoveDown && dayCardStyles.moveStepButtonTextDisabled]}>Ner</Text>
+                      </Pressable>
+                    </View>
+                  ) : null}
                   {canEdit ? (
                     <View style={[dayCardStyles.stopMenuWrap, menuOpen && dayCardStyles.stopMenuWrapOpen]}>
                       <Pressable

@@ -60,6 +60,7 @@ import { calculateGoogleRoute, getRoutableStops, routeStopSignature } from '@/se
 import { analyzeDayWarnings, moveNodeToDay, summarizeDay, validatePlannerDraft, type DaySummary } from '@/services/planning/dayAnalysis';
 import { buildTravelBudgetCenter } from '@/services/planning/budgetAnalysis';
 import { buildExplorePlaceDuplicateKey, buildItineraryNodeDuplicateKey, prepareLocalNodeForCloud } from '@/services/planning/cloudSync';
+import { dayKeyForNode as itineraryDayKeyForNode, mergeManualDayKeys, normalizeDayKey, suggestNewDayKey } from '@/services/planning/dayManagement';
 import { calculateFuelEstimate, parseFuelNumber } from '@/services/routing/fuelEstimate';
 import {
   addExplorePlaceTarget,
@@ -449,6 +450,7 @@ export default function App() {
   const [plannerNotes, setPlannerNotes] = useState('');
   const [plannerSearchText, setPlannerSearchText] = useState('');
   const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
+  const [manualDayKeys, setManualDayKeys] = useState<string[]>([]);
   const [showPlannerTechnicalDetails, setShowPlannerTechnicalDetails] = useState(false);
   const [travelerCountText, setTravelerCountText] = useState(() => initialPersistedState?.travelerCountText ?? '2');
   const [fuelConsumptionText, setFuelConsumptionText] = useState(() => initialPersistedState?.fuelConsumptionText ?? '6.5');
@@ -490,7 +492,11 @@ export default function App() {
   const routeSummary = activeCalculatedRoute?.route ?? estimatedRouteSummary;
   const routableStopCount = useMemo(() => getRoutableStops(displayedNodes).length, [displayedNodes]);
   const routeSkippedStopCount = displayedNodes.length - routableStopCount;
-  const dayPlans = useMemo(() => buildDayPlans(displayedNodes), [displayedNodes]);
+  const dayPlans = useMemo(() => buildDayPlans(displayedNodes, manualDayKeys), [displayedNodes, manualDayKeys]);
+  const suggestedNewDayKey = useMemo(
+    () => suggestNewDayKey(dayPlans.map((dayPlan) => dayPlan.key)),
+    [dayPlans],
+  );
   const dayMoveTargets = useMemo(() => dayPlans
     .filter((dayPlan) => dayPlan.key !== 'unscheduled')
     .map((dayPlan) => ({ key: dayPlan.key, title: dayPlan.title })), [dayPlans]);
@@ -1909,6 +1915,25 @@ export default function App() {
     setStatusMessage('Fyll i det nya steget direkt i dagen och tryck Spara steg.');
   }
 
+  function addManualDay(dayKeyInput: string) {
+    const dayKey = normalizeDayKey(dayKeyInput);
+    if (!dayKey) {
+      setStatusMessage('Ange datum som YYYY-MM-DD.');
+      return;
+    }
+
+    if (dayPlans.some((dayPlan) => dayPlan.key === dayKey)) {
+      setSelectedDayKey(dayKey);
+      setStatusMessage(`${formatDayKey(dayKey)} finns redan i resan.`);
+      return;
+    }
+
+    setManualDayKeys((current) => mergeManualDayKeys([], [...current, dayKey]));
+    setPlannerSearchText('');
+    startNewPlannerStep(dayKey);
+    setStatusMessage(`${formatDayKey(dayKey)} lades till. Lägg till första stoppet för att spara dagen i resan.`);
+  }
+
   function startPlaceSearch(dayKey: string, suggestedQuery?: string) {
     setActivePlaceDayKey(dayKey);
     setSelectedDayKey(dayKey);
@@ -3171,7 +3196,9 @@ export default function App() {
                 selectedDayPlan={selectedDayPlan}
                 selectedPlannerNodeId={selectedPlannerNodeId}
                 styles={styles}
+                suggestedNewDayKey={suggestedNewDayKey}
                 visibleDayPlans={visibleDayPlans}
+                onAddManualDay={addManualDay}
                 onAddPlaceholderAfterStop={(node) => void addPlaceholderAfterStop(node)}
                 onAddPackingItem={addPackingItem}
                 onCalculateRoute={() => void calculateRouteFromSavedStops()}
@@ -3296,16 +3323,19 @@ function nextSortOrder(nodes: ItineraryNode[]): number {
   return maxSortOrder + 100;
 }
 
-function buildDayPlans(nodes: ItineraryNode[]): DayPlan[] {
+function buildDayPlans(nodes: ItineraryNode[], manualDayKeys: string[] = []): DayPlan[] {
   const sortedNodes = sortNodes(nodes);
   const groups = new Map<string, ItineraryNode[]>();
 
   sortedNodes.forEach((node) => {
-    const key = node.startsAt ? node.startsAt.slice(0, 10) : 'unscheduled';
+    const key = itineraryDayKeyForNode(node);
     groups.set(key, [...(groups.get(key) ?? []), node]);
   });
 
-  return Array.from(groups.entries()).map(([key, groupNodes], index) => {
+  const mergedDayKeys = mergeManualDayKeys(Array.from(groups.keys()), manualDayKeys);
+
+  return mergedDayKeys.map((key, index) => {
+    const groupNodes = groups.get(key) ?? [];
     const route = estimateRouteSummary(groupNodes);
     const budget = buildBudgetSummary(groupNodes);
     const insight = buildDayInsight(groupNodes, route, budget);
@@ -6055,6 +6085,30 @@ const styles = StyleSheet.create({
   daySelectorRail: {
     flexDirection: 'row',
     gap: 10,
+    flexWrap: 'wrap',
+  },
+  addDayPanel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    flexWrap: 'wrap',
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#cfe8df',
+    backgroundColor: '#f6fbf8',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  addDayCopy: {
+    flex: 1,
+    minWidth: 220,
+  },
+  addDayControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
     flexWrap: 'wrap',
   },
   daySelectorCard: {

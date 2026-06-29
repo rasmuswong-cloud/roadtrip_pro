@@ -105,6 +105,34 @@ export const dayCardStyles = StyleSheet.create({
     gap: 8,
     flexWrap: 'wrap',
   },
+  stopMoveControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  moveStepButton: {
+    minWidth: 42,
+    minHeight: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#cfe8df',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 9,
+  },
+  moveStepButtonDisabled: {
+    borderColor: '#e5e7eb',
+    backgroundColor: '#f7f7f7',
+  },
+  moveStepButtonText: {
+    color: '#0f766e',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  moveStepButtonTextDisabled: {
+    color: '#9ca3af',
+  },
   coordinateReadyRow: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -40,7 +40,9 @@ type DaysWorkspaceProps = {
   selectedDayPlan: DayPlan | null;
   selectedPlannerNodeId: string | null;
   styles: WorkspaceStyles;
+  suggestedNewDayKey: string;
   visibleDayPlans: DayPlan[];
+  onAddManualDay: (dayKey: string) => void;
   onAddPackingItem: (dayPlan: DayPlan) => Promise<void>;
   onAddPlaceholderAfterStop: (node: ItineraryNode) => void;
   onCalculateRoute: () => void;
@@ -100,7 +102,9 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
     selectedDayPlan,
     selectedPlannerNodeId,
     styles,
+    suggestedNewDayKey,
     visibleDayPlans,
+    onAddManualDay,
     onAddPackingItem,
     onAddPlaceholderAfterStop,
     onCalculateRoute,
@@ -128,6 +132,11 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
     onStartPlaceSearch,
     onTogglePackingItem,
   } = props;
+  const [newDayDate, setNewDayDate] = React.useState(suggestedNewDayKey);
+
+  React.useEffect(() => {
+    setNewDayDate(suggestedNewDayKey);
+  }, [suggestedNewDayKey]);
 
   const routeForMap = activeRoute.geometry ? activeRoute : demoRoute;
   const planningStatus = buildPlanningStatus({
@@ -193,6 +202,34 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
           </View>
         ) : null}
       </View>
+      {!isDemoMode ? (
+        <View style={styles.addDayPanel}>
+          <View style={styles.addDayCopy}>
+            <Text style={[styles.itemTitle, isDark && styles.textDark]}>Lägg till dag</Text>
+            <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
+              Förslag: {formatDayKey(suggestedNewDayKey)}. Dagen sparas i resan när du lägger till första stoppet.
+            </Text>
+          </View>
+          <View style={styles.addDayControls}>
+            <TextInput
+              testID="add-day-date-input"
+              value={newDayDate}
+              onChangeText={setNewDayDate}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={isDark ? '#737373' : '#78716c'}
+              style={[styles.coordinateInput, isDark && styles.inputDark]}
+            />
+            <Pressable
+              testID="add-day-button"
+              style={[styles.commandButton, isLoading && styles.disabledButton]}
+              onPress={() => onAddManualDay(newDayDate)}
+              disabled={isLoading}
+            >
+              <Text style={styles.commandButtonText}>Lägg till dag</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
       {plannerSearchText.trim() ? (
         <Text style={styles.searchResultText}>{filteredStopCount} av {displayedNodesLength} stopp matchar sökningen.</Text>
       ) : null}
