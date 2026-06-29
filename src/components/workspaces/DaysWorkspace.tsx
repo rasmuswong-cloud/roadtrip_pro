@@ -136,6 +136,7 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
     routeSkippedStopCount,
     maxItems: 4,
   });
+  const selectedAddLabel = selectedDayPlan?.nodes.length === 0 ? 'Lägg till första stoppet' : 'Lägg till stopp';
 
   function runPlanningStatusAction(item: PlanningStatusItem) {
     if (item.dayKey) {
@@ -186,11 +187,8 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
         </View>
         {!isDemoMode ? (
           <View style={styles.dayHeaderActions}>
-            <Pressable style={styles.secondaryButton} onPress={() => onStartNewPlannerStep('unscheduled')}>
-              <Text style={styles.secondaryButtonText}>Lägg till oschemalagt</Text>
-            </Pressable>
             <Pressable testID="add-to-selected-day" style={[styles.commandButton, !selectedDayPlan && styles.disabledButton]} onPress={() => selectedDayPlan && onStartNewPlannerStep(selectedDayPlan.key)} disabled={!selectedDayPlan}>
-              <Text style={styles.commandButtonText}>Lägg till stopp</Text>
+              <Text style={styles.commandButtonText}>{selectedAddLabel}</Text>
             </Pressable>
           </View>
         ) : null}

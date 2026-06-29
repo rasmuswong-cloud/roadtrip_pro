@@ -31,6 +31,7 @@ export function DayHeader({
   const actionFlags = dayPlan.smartFlags.filter((flag) => flag !== 'Ser planerad ut');
   const visibleFlags = actionFlags.length > 0 ? actionFlags : ['Ser bra ut'];
   const displayedFlags = expandedFlags ? visibleFlags : visibleFlags.slice(0, 1);
+  const addStopLabel = dayPlan.nodes.length === 0 ? 'Lägg till första stoppet' : 'Lägg till stopp';
 
   return (
     <View style={styles.dayHeader}>
@@ -64,10 +65,11 @@ export function DayHeader({
           </Pressable>
           <Pressable
             testID="day-card-add-stop"
-            style={styles.commandButton}
+            style={[styles.commandButton, isLoading && styles.disabledButton]}
             onPress={() => onStartNewPlannerStep(dayPlan.key)}
+            disabled={isLoading}
           >
-            <Text style={styles.commandButtonText}>Lägg till stopp</Text>
+            <Text style={styles.commandButtonText}>{addStopLabel}</Text>
           </Pressable>
         </View>
       ) : null}

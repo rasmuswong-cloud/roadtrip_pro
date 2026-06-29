@@ -553,7 +553,7 @@ test('connected planner can add, edit, persist, move menu, and delete QA stops',
     longitude: '13.003822',
   });
   await saveOpenEditor(page);
-  await expect(page.getByText('Lade till steg: QA TEST Malmö').first()).toBeVisible();
+  await expect(page.getByText('Sparat').first()).toBeVisible();
 
   await page.getByTestId('day-card-add-stop').click();
   await fillStopEditor(page, {
@@ -567,7 +567,7 @@ test('connected planner can add, edit, persist, move menu, and delete QA stops',
     longitude: '11.582',
   });
   await saveOpenEditor(page);
-  await expect(page.getByText('Lade till steg: QA TEST München').first()).toBeVisible();
+  await expect(page.getByText('Sparat').first()).toBeVisible();
 
   const firstStop = page.getByTestId('day-stop-card').filter({ hasText: 'QA TEST Malmö' });
   await firstStop.getByTestId('stop-menu-button').click();
@@ -581,7 +581,7 @@ test('connected planner can add, edit, persist, move menu, and delete QA stops',
     notes: 'QA TEST edited note',
   });
   await saveOpenEditor(page);
-  await expect(page.getByText('Sparade steg: QA TEST Malmö edited').first()).toBeVisible();
+  await expect(page.getByText('Ändringar sparade').first()).toBeVisible();
   await expect(page.getByTestId('day-stop-card').filter({ hasText: 'QA TEST Malmö edited' })).toBeVisible();
 
   const backendTitles = await page.evaluate(() => (
@@ -595,7 +595,8 @@ test('connected planner can add, edit, persist, move menu, and delete QA stops',
 
   await page.getByTestId('day-stop-edit-editor').getByText('Avbryt', { exact: true }).first().click();
   const editedStop = page.getByTestId('day-stop-card').filter({ hasText: 'QA TEST Malmö edited' });
-  await editedStop.getByText('Ner').click();
+  await editedStop.getByTestId('stop-menu-button').click();
+  await editedStop.getByText('Flytta ner', { exact: true }).click();
   await expect(page.getByText('Flyttade steg: QA TEST Malmö edited').first()).toBeVisible();
 
   await editedStop.getByTestId('stop-menu-button').click();
@@ -622,9 +623,9 @@ test('Google places, placeholder, route, fuel, and nearby flows are explicit and
     cost: '100',
   });
   await saveOpenEditor(page);
-  await expect(page.getByText('Lade till steg: QA TEST Placeholder').first()).toBeVisible();
+  await expect(page.getByText('Sparat').first()).toBeVisible();
 
-  await page.getByTestId('day-stop-card').filter({ hasText: 'QA TEST Placeholder' }).getByText('Fixa position', { exact: true }).click();
+  await page.getByTestId('day-stop-card').filter({ hasText: 'QA TEST Placeholder' }).getByText('Fixa plats', { exact: true }).click();
   await page.getByPlaceholder('Sök kartposition').fill('QA TEST Malmö');
   await page.getByText('Sök', { exact: true }).click();
   await expect(page.getByText('QA TEST Malmö').first()).toBeVisible();
@@ -643,9 +644,11 @@ test('Google places, placeholder, route, fuel, and nearby flows are explicit and
     longitude: '11.582',
   });
   await saveOpenEditor(page);
-  await expect(page.getByText('Lade till steg: QA TEST München').first()).toBeVisible();
+  await expect(page.getByText('Sparat').first()).toBeVisible();
 
-  await page.getByTestId('day-stop-card').filter({ hasText: 'QA TEST Placeholder' }).getByText('Mellanstopp efter').click();
+  const placeholderStop = page.getByTestId('day-stop-card').filter({ hasText: 'QA TEST Placeholder' });
+  await placeholderStop.getByTestId('stop-menu-button').click();
+  await placeholderStop.getByText('Lägg placeholder efter', { exact: true }).click();
   await expect(page.getByText('Planerat men inte bestämt').first()).toBeVisible();
   await expect(page.getByText('Hitta smart mellanstopp').first()).toBeVisible();
 

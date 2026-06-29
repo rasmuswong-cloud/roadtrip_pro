@@ -1138,11 +1138,6 @@ export default function App() {
   }
 
   async function addPlaceholderAfterStop(node: ItineraryNode) {
-    if (!activeTripId || !userId) {
-      setStatusMessage('Anslut innan du lägger till en placeholder.');
-      return;
-    }
-
     const nextStop = itineraryNodes
       .filter((candidate) => dayKeyForNode(candidate) === dayKeyForNode(node) && candidate.sortOrder > node.sortOrder)
       .sort((left, right) => left.sortOrder - right.sortOrder)[0];
@@ -1151,8 +1146,8 @@ export default function App() {
     const sortOrder = nextStop ? Math.round((node.sortOrder + nextStop.sortOrder) / 2) : node.sortOrder + 50;
     const placeholderNode: ItineraryNode = {
       id: cryptoRandomId(),
-      tripId: activeTripId,
-      createdBy: userId,
+      tripId: activeTripId || 'local-current-roadtrip',
+      createdBy: userId ?? 'local-import',
       type: placeholderType.nodeType,
       title: placeholderType.title,
       startsAt: node.startsAt ?? null,
@@ -1185,11 +1180,11 @@ export default function App() {
     setStatusMessage('Lägger till placeholder...');
 
     try {
-      const savedNode = await saveItineraryNodeOnline(placeholderNode);
+      const savedNode = activeTripId && userId ? await saveItineraryNodeOnline(placeholderNode) : placeholderNode;
       setItineraryNodes((current) => sortNodes([...current, savedNode]));
-      setStatusMessage(`${savedNode.title} lades till som placeholder.`);
+      setStatusMessage('Sparat');
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : String(error));
+      setStatusMessage('Kunde inte spara. Försök igen.');
     } finally {
       setIsLoading(false);
     }
@@ -1263,13 +1258,8 @@ export default function App() {
   }
 
   async function fillPlaceholderFromSmartStop(node: ItineraryNode, place: GooglePlace) {
-    if (!activeTripId || !userId) {
-      setSmartStopMessage('Anslut innan du fyller en placeholder.');
-      return;
-    }
-
-    const poi = googlePlaceToPoi(place, activeTripId, userId);
-    if (!poi) {
+    const poi = activeTripId && userId ? googlePlaceToPoi(place, activeTripId, userId) : null;
+    if (activeTripId && userId && !poi) {
       setSmartStopMessage('Den valda platsen saknar koordinater.');
       return;
     }
@@ -1277,20 +1267,22 @@ export default function App() {
     rememberUndo('fyll placeholder');
     setIsLoading(true);
     setSmartStopMessage(null);
-    setStatusMessage(`Fyller placeholder med ${poi.name}...`);
+    setStatusMessage(`Fyller placeholder med ${place.displayName?.text ?? node.title}...`);
 
     try {
-      const savedPoi = await upsertPoi(poi);
-      const filledNode = fillPlaceholderWithGooglePlace(node, place, savedPoi.id);
-      const savedNode = await saveItineraryNodeOnline(filledNode);
-      upsertPoiInStore(savedPoi);
+      const savedPoi = poi ? await upsertPoi(poi) : null;
+      const filledNode = fillPlaceholderWithGooglePlace(node, place, savedPoi?.id ?? null);
+      const savedNode = activeTripId && userId ? await saveItineraryNodeOnline(filledNode) : filledNode;
+      if (savedPoi) {
+        upsertPoiInStore(savedPoi);
+      }
       setItineraryNodes((current) => sortNodes(current.map((candidate) => (candidate.id === savedNode.id ? savedNode : candidate))));
       setSmartStopNodeId(null);
       setSmartStopResults([]);
       setSmartStopMessage(null);
-      setStatusMessage(`${savedNode.title} ersatte placeholdern och har kartposition.`);
+      setStatusMessage('Position klar');
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = 'Kunde inte spara. Försök igen.';
       setSmartStopMessage(message);
       setStatusMessage(message);
     } finally {
@@ -1616,14 +1608,16 @@ export default function App() {
     setStatusMessage('Tar bort stopp...');
 
     try {
-      await deleteItineraryNodeOnline(nodeId);
+      if (activeTripId) {
+        await deleteItineraryNodeOnline(nodeId);
+      }
       setItineraryNodes((current) => current.filter((node) => node.id !== nodeId));
       if (selectedPlannerNodeId === nodeId) {
         clearPlannerEditor();
       }
       setStatusMessage('Stopp borttaget.');
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : String(error));
+      setStatusMessage('Kunde inte ta bort. Försök igen.');
     } finally {
       setIsLoading(false);
     }
@@ -1687,9 +1681,24 @@ export default function App() {
     rememberUndo('flytta stopp');
     setIsLoading(true);
     setStatusMessage(`Flyttar ${currentNode.title}...`);
-    markOnlineSaveStart();
 
     try {
+      if (!activeTripId) {
+        const now = new Date().toISOString();
+        const movedNodes = [
+          { ...currentNode, sortOrder: targetNode.sortOrder, updatedAt: now, version: currentNode.version + 1 },
+          { ...targetNode, sortOrder: currentNode.sortOrder, updatedAt: now, version: targetNode.version + 1 },
+        ];
+        const movedNodeIds = new Set(movedNodes.map((node) => node.id));
+        setItineraryNodes((current) => sortNodes([
+          ...current.filter((node) => !movedNodeIds.has(node.id)),
+          ...movedNodes,
+        ]));
+        setStatusMessage('Ändringar sparade');
+        return;
+      }
+
+      markOnlineSaveStart();
       const movedNodes = await moveItineraryNode(nodeId, direction);
       const movedNodeIds = new Set(movedNodes.map((node) => node.id));
       setItineraryNodes((current) => sortNodes([
@@ -1714,8 +1723,8 @@ export default function App() {
       return;
     }
 
-    if (!activeTripId || itineraryNodes.length === 0) {
-      setStatusMessage('Anslut resan innan du flyttar stopp mellan dagar.');
+    if (itineraryNodes.length === 0) {
+      setStatusMessage('Anslut resan innan du flyttar demo-stopp.');
       return;
     }
 
@@ -1750,15 +1759,14 @@ export default function App() {
     setStatusMessage(`Flyttar ${currentNode.title} till ${formatDayKey(targetDayKey)}...`);
 
     try {
-      const savedNode = await saveItineraryNodeOnline(movedNode);
+      const savedNode = activeTripId && userId ? await saveItineraryNodeOnline(movedNode) : movedNode;
       setItineraryNodes((current) => sortNodes(current.map((node) => (node.id === savedNode.id ? savedNode : node))));
       if (selectedPlannerNodeId === savedNode.id) {
         populatePlannerEditor(savedNode);
       }
-      setStatusMessage(`Flyttade ${savedNode.title} till ${formatDayKey(targetDayKey)}.`);
+      setStatusMessage('Ändringar sparade');
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setStatusMessage(`Kunde inte flytta stoppet. Planen är oförändrad. ${message}`);
+      setStatusMessage('Kunde inte spara. Försök igen.');
     } finally {
       movingStopIdsRef.current.delete(nodeId);
       setIsLoading(false);
@@ -1993,18 +2001,18 @@ export default function App() {
       const nextNode = applyInlineFieldUpdate(node, field, value);
       rememberUndo(`ändra ${inlineFieldLabel(field)}`);
       setIsLoading(true);
-      const savedNode = await saveItineraryNodeOnline(nextNode);
+      const savedNode = activeTripId && userId ? await saveItineraryNodeOnline(nextNode) : nextNode;
 
       setItineraryNodes((current) => sortNodes(current.map((candidate) => (candidate.id === savedNode.id ? savedNode : candidate))));
       if (selectedPlannerNodeId === savedNode.id) {
         populatePlannerEditor(savedNode);
       }
-      setStatusMessage(`Sparade ${inlineFieldLabel(field)}: ${String(value ?? '').trim() || 'tomt'}`);
+      setStatusMessage('Ändringar sparade');
       setActiveInlineDraftChanged(false);
       setInlineEditMessage(null);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setStatusMessage(message || 'Kunde inte spara fältet.');
+      const message = 'Kunde inte spara. Försök igen.';
+      setStatusMessage(message);
       throw error;
     } finally {
       inlineSaveInFlightRef.current = false;
@@ -2067,13 +2075,8 @@ export default function App() {
   }
 
   async function selectCoordinatePlace(node: ItineraryNode, place: GooglePlace) {
-    if (!activeTripId || !userId) {
-      setCoordinateSearchMessage('Tryck Anslut innan du uppdaterar kartpositionen.');
-      return;
-    }
-
-    const poi = googlePlaceToPoi(place, activeTripId, userId);
-    if (!poi) {
+    const poi = activeTripId && userId ? googlePlaceToPoi(place, activeTripId, userId) : null;
+    if (activeTripId && userId && !poi) {
       setCoordinateSearchMessage('Den valda platsen saknar koordinater.');
       return;
     }
@@ -2084,13 +2087,15 @@ export default function App() {
     setStatusMessage(`Uppdaterar kartposition för ${node.title}...`);
 
     try {
-      const savedPoi = await upsertPoi(poi);
+      const savedPoi = poi ? await upsertPoi(poi) : null;
       const nextNode = isPlaceholderStop(node)
-        ? fillPlaceholderWithGooglePlace(node, place, savedPoi.id)
-        : applyGooglePlaceCoordinateUpdate(node, place, savedPoi.id);
-      const savedNode = await saveItineraryNodeOnline(nextNode);
+        ? fillPlaceholderWithGooglePlace(node, place, savedPoi?.id ?? null)
+        : applyGooglePlaceCoordinateUpdate(node, place, savedPoi?.id ?? null);
+      const savedNode = activeTripId && userId ? await saveItineraryNodeOnline(nextNode) : nextNode;
 
-      upsertPoiInStore(savedPoi);
+      if (savedPoi) {
+        upsertPoiInStore(savedPoi);
+      }
       setItineraryNodes((current) => sortNodes(current.map((candidate) => (candidate.id === savedNode.id ? savedNode : candidate))));
       if (selectedPlannerNodeId === savedNode.id) {
         populatePlannerEditor(savedNode);
@@ -2099,11 +2104,11 @@ export default function App() {
       setCoordinateSearchQuery('');
       setCoordinateSearchResults([]);
       setCoordinateSearchMessage(null);
-      setStatusMessage(`Kartposition uppdaterad: ${savedPoi.name}.`);
+      setStatusMessage('Position klar');
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setCoordinateSearchMessage(message || 'Kunde inte uppdatera kartpositionen.');
-      setStatusMessage(message || 'Kunde inte uppdatera kartpositionen.');
+      const message = 'Kunde inte spara. Försök igen.';
+      setCoordinateSearchMessage(message);
+      setStatusMessage(message);
     } finally {
       setIsLoading(false);
     }
@@ -2327,7 +2332,7 @@ export default function App() {
         delete nextMetadata.place;
       }
 
-      const savedNode = await saveItineraryNodeOnline({
+      const nextNode: ItineraryNode = {
         ...node,
         type: plannerType,
         title: plannerTitle.trim(),
@@ -2338,24 +2343,20 @@ export default function App() {
         metadata: nextMetadata,
         updatedAt: new Date().toISOString(),
         version: node.version + 1,
-      });
+      };
+      const savedNode = activeTripId && userId ? await saveItineraryNodeOnline(nextNode) : nextNode;
 
       setItineraryNodes((current) => sortNodes(current.map((candidate) => (candidate.id === savedNode.id ? savedNode : candidate))));
       populatePlannerEditor(savedNode);
-      setStatusMessage(`Sparade steg: ${savedNode.title}`);
+      setStatusMessage('Ändringar sparade');
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : String(error));
+      setStatusMessage('Kunde inte spara. Försök igen.');
     } finally {
       setIsLoading(false);
     }
   }
 
   async function addPlannerStep() {
-    if (!activeTripId || !userId) {
-      setStatusMessage('Anslut innan du lägger till ett steg.');
-      return;
-    }
-
     const validation = validatePlannerDraft({
       title: plannerTitle,
       type: plannerType,
@@ -2380,10 +2381,10 @@ export default function App() {
       const longitude = plannerLongitude.trim() ? Number(plannerLongitude.replace(',', '.')) : null;
 
       const now = new Date().toISOString();
-      const savedNode = await saveItineraryNodeOnline({
+      const nextNode: ItineraryNode = {
         id: cryptoRandomId(),
-        tripId: activeTripId,
-        createdBy: userId,
+        tripId: activeTripId || 'local-current-roadtrip',
+        createdBy: userId ?? 'local-import',
         type: plannerType,
         title: plannerTitle.trim(),
         startsAt: buildIsoFromInputs(plannerDate, plannerTime),
@@ -2405,13 +2406,14 @@ export default function App() {
         updatedAt: now,
         deletedAt: null,
         version: 1,
-      });
+      };
+      const savedNode = activeTripId && userId ? await saveItineraryNodeOnline(nextNode) : nextNode;
 
       setItineraryNodes((current) => sortNodes([...current, savedNode]));
       populatePlannerEditor(savedNode);
-      setStatusMessage(`Lade till steg: ${savedNode.title}`);
+      setStatusMessage('Sparat');
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : String(error));
+      setStatusMessage('Kunde inte spara. Försök igen.');
     } finally {
       setIsLoading(false);
     }
