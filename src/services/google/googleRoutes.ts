@@ -218,7 +218,7 @@ function decodePolylineValue(value: string, startIndex: number): { delta: number
     index += 1;
     result |= (byte & 0x1f) << shift;
     shift += 5;
-  } while (byte >= 0x20 && index <= value.length);
+  } while (byte >= 0x20 && index < value.length);
 
   return {
     delta: result & 1 ? ~(result >> 1) : result >> 1,
