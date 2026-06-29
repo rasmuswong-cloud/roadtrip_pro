@@ -2629,14 +2629,9 @@ export default function App() {
   }
 
   async function importReseplanrarePlan() {
-    if (!activeTripId || !userId) {
-      setStatusMessage('Anslut innan du laddar resplanen.');
-      return;
-    }
-
-    rememberUndo('ladda resplan');
+    rememberUndo('importera aktuell resa');
     setIsLoading(true);
-    setStatusMessage('Laddar resplan...');
+    setStatusMessage(activeTripId && userId ? 'Importerar aktuell resa till den anslutna resan...' : 'Importerar aktuell resa lokalt...');
 
     try {
       const importPlan = planReseplanrareImport(itineraryNodes, reseplanrareSeedRows);
@@ -2650,32 +2645,39 @@ export default function App() {
         const existingNode = importPlan.existingNodesBySourceRow.get(row.sourceRow);
         const nextNode = existingNode
           ? applySeedRowToExistingNode(existingNode, row)
-          : buildNodeFromSeedRow(row, activeTripId, userId);
-        importedNodes.push(await saveItineraryNodeOnline(nextNode));
+          : buildNodeFromSeedRow(row, activeTripId || 'local-current-roadtrip', userId ?? 'local-import');
+        importedNodes.push(activeTripId && userId ? await saveItineraryNodeOnline(nextNode) : nextNode);
       }
 
-      const now = new Date().toISOString();
       const importedNodeIds = new Set(importedNodes.map((node) => node.id));
-      const obsoleteNodes = importPlan.obsoleteNodes
-        .filter((node) => !importedNodeIds.has(node.id))
-        .map((node) => ({
-          ...node,
-          deletedAt: now,
-          updatedAt: now,
-          version: node.version + 1,
-        }));
-
-      for (const node of obsoleteNodes) {
-        await saveItineraryNodeOnline(node);
-      }
-
-      const obsoleteNodeIds = new Set(obsoleteNodes.map((node) => node.id));
-      setItineraryNodes((current) => sortNodes([
-        ...current.filter((node) => !importedNodeIds.has(node.id) && !obsoleteNodeIds.has(node.id)),
+      const nextNodes = sortNodes([
+        ...itineraryNodes.filter((node) => !importedNodeIds.has(node.id)),
         ...importedNodes,
-      ]));
-      const cleanupText = obsoleteNodes.length > 0 ? ` Rensade ${obsoleteNodes.length} gamla importerade stopp.` : '';
-      setStatusMessage(`Laddade ${importedNodes.length} steg till dagplaneringen.${cleanupText} Idéplatser sparade: ${reseplanrareIdeaPlaces.length}.`);
+      ]);
+
+      setItineraryNodes(nextNodes);
+      setHasStartedBlankPlan(true);
+      setIsEditMode(true);
+      setSelectedDayKey('2026-07-12');
+      setCalculatedRoute(null);
+      setRouteCalculationMessage(null);
+      if (!(activeTripId && userId)) {
+        savePersistedAppState({
+          itineraryNodes: nextNodes,
+          travelerCountText,
+          isEditMode: true,
+          exploreNotes,
+          explorePlaces,
+          fuelConsumptionText,
+          fuelPriceText,
+        });
+      }
+      setStatusMessage(
+        activeTripId && userId
+          ? `Importerade ${importedNodes.length} steg till den anslutna resan. Inga befintliga stopp togs bort.`
+          : `Importerade ${importedNodes.length} steg lokalt för granskning. Anslut/Kopiera lokal resa till Supabase när du vill synka.`,
+      );
+      goToView('days');
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -2849,8 +2851,8 @@ export default function App() {
 
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
                 <SectionTitle title="Resplan" dark={isDark} styles={styles} />
-                <Pressable style={[styles.commandButton, (isLoading || !activeTripId) && styles.disabledButton]} onPress={importReseplanrarePlan} disabled={isLoading || !activeTripId}>
-                  <Text style={styles.commandButtonText}>Ladda resplan</Text>
+                <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={importReseplanrarePlan} disabled={isLoading}>
+                  <Text style={styles.commandButtonText}>Importera aktuell resa</Text>
                 </Pressable>
                 <Pressable
                   style={[styles.secondaryButton, (isLoading || !activeTripId || missingCoordinateCount === 0) && styles.disabledButton]}
@@ -2954,10 +2956,12 @@ export default function App() {
                   activeTripId={activeTripId ?? null}
                   isDark={isDark}
                   isDemoMode={isDemoMode}
+                  isLoading={isLoading}
                   isMobile={isMobile}
                   missingCoordinateCount={missingCoordinateCount}
                   onlineSaveLabel={onlineSaveLabel}
                   styles={styles}
+                  onImportCurrentTrip={() => void importReseplanrarePlan()}
                 />
               ) : null}
               {activeView === 'explore' ? (
@@ -3794,8 +3798,15 @@ function buildNodeFromSeedRow(row: ReseplanrareSeedRow, tripId: string, userId: 
   const now = new Date().toISOString();
   const title = titleFromSeedRow(row);
   const startsAt = row.date ? new Date(`${row.date}T09:00:00`).toISOString() : null;
-  const costParts = [row.lodgingCost, row.activityCost].filter(Boolean);
+  const costParts = [row.lodgingCost, row.activityCost, row.cost].filter(Boolean);
   const notes = notesFromSeedRow(row);
+  const placeholder = row.placeholderType
+    ? placeholderMetadata({
+      type: row.placeholderType,
+      ...(row.placeholderIntent ? { intent: row.placeholderIntent } : {}),
+      ...(row.preferredDriveTimeRange ? { preferredDriveTimeRange: row.preferredDriveTimeRange } : {}),
+    })
+    : {};
 
   return {
     id: cryptoRandomId(),
@@ -3814,16 +3825,20 @@ function buildNodeFromSeedRow(row: ReseplanrareSeedRow, tripId: string, userId: 
     equipment: [],
     facilities: {},
     metadata: {
-      source: 'reseplanrare.xlsx',
+      source: 'current-roadtrip-plan',
       sourceRow: row.sourceRow,
       place: row.place,
       externalRef: row.googlePlaceId ?? null,
       website: row.website ?? null,
       phone: row.phone ?? null,
       email: row.email ?? null,
+      hotel: row.hotel ?? null,
+      activityName: row.activity ?? null,
       lodgingCostSek: row.lodgingCost ?? null,
       activityCostSek: row.activityCost ?? null,
+      costSek: row.cost ?? null,
       cost: costParts.join(' + '),
+      ...placeholder,
     },
     createdAt: now,
     updatedAt: now,
@@ -3838,13 +3853,12 @@ function applySeedRowToExistingNode(node: ItineraryNode, row: ReseplanrareSeedRo
     ...node.metadata,
     ...seedNode.metadata,
   };
-  const notes = row.notes ?? node.notes ?? seedNode.notes;
 
   return {
     ...node,
     type: seedNode.type,
     title: seedNode.title,
-    notes: notes ?? null,
+    notes: seedNode.notes ?? node.notes ?? null,
     startsAt: node.startsAt ?? seedNode.startsAt ?? null,
     endsAt: node.endsAt ?? seedNode.endsAt ?? null,
     timezone: node.timezone ?? seedNode.timezone ?? null,
@@ -3878,12 +3892,29 @@ function titleFromSeedRow(row: ReseplanrareSeedRow): string {
 }
 
 function notesFromSeedRow(row: ReseplanrareSeedRow): string | null {
-  if (row.notes) {
-    return row.notes;
+  const lines: string[] = [];
+
+  if (row.place && row.place !== titleFromSeedRow(row)) {
+    lines.push(row.place);
   }
 
-  const title = titleFromSeedRow(row);
-  return row.place !== title ? row.place : null;
+  if (row.hotel) {
+    lines.push(`Hotel: ${row.hotel}`);
+  }
+
+  if (row.activity && row.activity !== titleFromSeedRow(row)) {
+    lines.push(`Aktivitet: ${row.activity}`);
+  }
+
+  if (row.notes) {
+    lines.push(row.notes);
+  }
+
+  if (row.placeholderIntent) {
+    lines.push(`Placeholder: ${row.placeholderIntent}`);
+  }
+
+  return lines.length > 0 ? Array.from(new Set(lines)).join('\n') : null;
 }
 
 function formatTime(value?: string | null): string {

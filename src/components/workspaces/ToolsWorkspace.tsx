@@ -1,4 +1,4 @@
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { SectionTitle, type WorkspaceStyles } from './WorkspaceBits';
 
@@ -6,20 +6,24 @@ type ToolsWorkspaceProps = {
   activeTripId: string | null;
   isDark: boolean;
   isDemoMode: boolean;
+  isLoading: boolean;
   isMobile: boolean;
   missingCoordinateCount: number;
   onlineSaveLabel: string;
   styles: WorkspaceStyles;
+  onImportCurrentTrip: () => void;
 };
 
 export function ToolsWorkspace({
   activeTripId,
   isDark,
   isDemoMode,
+  isLoading,
   isMobile,
   missingCoordinateCount,
   onlineSaveLabel,
   styles,
+  onImportCurrentTrip,
 }: ToolsWorkspaceProps) {
   return (
     <View style={[styles.panelSection, isDark && styles.panelDark]}>
@@ -31,7 +35,7 @@ export function ToolsWorkspace({
         <View style={styles.toolSummaryItem}>
           <Text style={styles.toolSummaryLabel}>Import</Text>
           <Text style={styles.toolSummaryTitle}>Importera/uppdatera resplan</Text>
-          <Text style={styles.toolSummaryText}>Ladda den korrigerade rutten och rensa gamla importerade stopp.</Text>
+          <Text style={styles.toolSummaryText}>Ladda den aktuella resplanen utan att ta bort befintliga stopp.</Text>
         </View>
         <View style={styles.toolSummaryItem}>
           <Text style={styles.toolSummaryLabel}>Karta</Text>
@@ -47,6 +51,11 @@ export function ToolsWorkspace({
       {isDemoMode ? (
         <Text style={styles.emptySearchText}>Slå på redigering och anslut resan för att visa import, delning och synkverktyg.</Text>
       ) : null}
+      <View style={styles.editorActionRow}>
+        <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={onImportCurrentTrip} disabled={isLoading}>
+          <Text style={styles.commandButtonText}>Importera aktuell resa</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
