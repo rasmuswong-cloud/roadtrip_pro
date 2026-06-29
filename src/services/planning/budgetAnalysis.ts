@@ -1,4 +1,12 @@
 import type { ItineraryNode, ItineraryNodeType } from '@/models';
+import {
+  hasKnownDetailedNodeCost,
+  hasKnownNodeCost,
+  hasKnownRawNodeCost,
+  parseCostValue,
+} from '@/services/planning/costs';
+
+export { parseCostValue } from '@/services/planning/costs';
 
 export type BudgetCategoryKey =
   | 'lodging'
@@ -83,7 +91,7 @@ export function buildTravelBudgetCenter(nodes: ItineraryNode[], travelerCount = 
     const dayBucket = dayMap.get(dayKey) ?? { nodes: [], total: 0, itemCount: 0, missingCostCount: 0 };
 
     dayBucket.nodes.push(node);
-    if (cost > 0) {
+    if (hasKnownNodeCost(node)) {
       categoryBucket.total += cost;
       categoryBucket.itemCount += 1;
       dayBucket.total += cost;
@@ -140,7 +148,7 @@ export function buildTravelBudgetCenter(nodes: ItineraryNode[], travelerCount = 
     days,
     missingItems,
     hasItineraryItems: nodes.length > 0,
-    hasRegisteredCosts: total > 0,
+    hasRegisteredCosts: categories.some((category) => category.itemCount > 0),
   };
 }
 
@@ -160,7 +168,7 @@ export function nodeCostBreakdown(node: ItineraryNode): Record<BudgetCategoryKey
   const lodgingCost = parseCostValue(node.metadata.lodgingCostSek);
   const activityCost = parseCostValue(node.metadata.activityCostSek);
 
-  if (lodgingCost > 0 || activityCost > 0) {
+  if (hasKnownDetailedNodeCost(node)) {
     return {
       ...empty,
       lodging: lodgingCost,
@@ -169,7 +177,7 @@ export function nodeCostBreakdown(node: ItineraryNode): Record<BudgetCategoryKey
   }
 
   const rawCost = parseCostValue(node.metadata.costSek ?? node.metadata.cost ?? node.metadata.price);
-  if (rawCost <= 0) {
+  if (!hasKnownRawNodeCost(node)) {
     return empty;
   }
 
@@ -177,24 +185,6 @@ export function nodeCostBreakdown(node: ItineraryNode): Record<BudgetCategoryKey
     ...empty,
     [budgetCategoryForNode(node)]: rawCost,
   };
-}
-
-export function parseCostValue(value: unknown): number {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) && value > 0 ? value : 0;
-  }
-
-  if (typeof value !== 'string') {
-    return 0;
-  }
-
-  if (/^\s*-/.test(value)) {
-    return 0;
-  }
-
-  const match = value.replace(/\s/g, '').replace(',', '.').match(/\d+(\.\d+)?/);
-  const parsed = match ? Number(match[0]) : 0;
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
 export function budgetCategoryForNode(node: ItineraryNode): BudgetCategoryKey {
@@ -216,7 +206,7 @@ export function budgetCategoryForNode(node: ItineraryNode): BudgetCategoryKey {
 }
 
 export function shouldTrackMissingCost(node: ItineraryNode): boolean {
-  return likelyCostTypes.has(node.type) && nodeCostTotal(node) <= 0;
+  return likelyCostTypes.has(node.type) && !hasKnownNodeCost(node);
 }
 
 function normalizeTravelerCount(value: number): number {

@@ -1,4 +1,5 @@
 import type { ItineraryNode } from '@/models';
+import { formatKnownCostLabel, hasKnownNodeCost } from '@/services/planning/costs';
 import { isPlaceholderStop } from '@/services/planning/placeholderStops';
 
 export function formatDistance(value: number): string {
@@ -40,11 +41,11 @@ export function formatItineraryTime(value?: string | null): string {
 export function formatRawNodeCost(node: ItineraryNode): string {
   const cost = node.metadata.costSek ?? node.metadata.cost ?? node.metadata.price;
   if (typeof cost === 'number') {
-    return String(cost);
+    return formatKnownCostLabel(String(cost));
   }
 
   if (typeof cost === 'string') {
-    return cost;
+    return cost.trim() ? formatKnownCostLabel(cost) : '';
   }
 
   return '';
@@ -92,7 +93,7 @@ export function buildMissingInfoChips(node: ItineraryNode): string[] {
     chips.push('Tid saknas');
   }
 
-  if (!readNodeCost(node)) {
+  if (!hasKnownNodeCost(node)) {
     chips.push('Kostnad saknas');
   }
 
@@ -154,17 +155,4 @@ function normalizePlaceText(value: string): string {
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim()
     .replace(/\s+/g, ' ');
-}
-
-function readNodeCost(node: ItineraryNode): string {
-  const cost = node.metadata.costSek ?? node.metadata.cost ?? node.metadata.price;
-  if (typeof cost === 'number') {
-    return String(cost);
-  }
-
-  if (typeof cost === 'string') {
-    return cost;
-  }
-
-  return '';
 }

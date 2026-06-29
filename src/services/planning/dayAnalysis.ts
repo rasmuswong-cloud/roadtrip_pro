@@ -1,4 +1,5 @@
 import type { ItineraryNode, ItineraryNodeType, RouteSummary } from '@/models';
+import { hasKnownNodeCost, parseCostValue } from '@/services/planning/costs';
 
 export const DAY_ANALYSIS_LIMITS = {
   longDriveHours: 5,
@@ -129,8 +130,8 @@ export function validatePlannerDraft(draft: PlannerDraft): PlannerValidationResu
     errors.push('Sluttid ska anges som TT:MM.');
   }
 
-  if (draft.cost?.trim() && parseCostValue(draft.cost) <= 0) {
-    errors.push('Kostnad behöver vara ett positivt tal.');
+  if (draft.cost?.trim() && !hasValidCostInput(draft.cost)) {
+    errors.push('Kostnad behöver vara 0 eller ett positivt tal.');
   }
 
   if (hasLatitude !== hasLongitude) {
@@ -171,7 +172,7 @@ export function analyzeDayWarnings(
   }
 
   sortedNodes.forEach((node) => {
-    if (nodeCostTotal(node) <= 0) {
+    if (!hasKnownNodeCost(node)) {
       warnings.push({ code: 'missing_cost', severity: 'info', nodeId: node.id, message: `${node.title} saknar kostnad.` });
     }
 
@@ -218,25 +219,22 @@ function nodeCostTotal(node: ItineraryNode): number {
     + parseCostValue(node.metadata.activityCostSek);
 }
 
-function parseCostValue(value: unknown): number {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : 0;
-  }
-
-  if (typeof value !== 'string') {
-    return 0;
-  }
-
-  const match = value.replace(/\s/g, '').replace(',', '.').match(/\d+(\.\d+)?/);
-  return match ? Number(match[0]) : 0;
-}
-
 function hasIncompleteCoordinates(node: ItineraryNode): boolean {
   if (!node.location) {
     return false;
   }
 
   return !Number.isFinite(node.location.latitude) || !Number.isFinite(node.location.longitude);
+}
+
+function hasValidCostInput(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed || /^\s*-/.test(trimmed)) {
+    return false;
+  }
+
+  const parsed = Number(trimmed.replace(',', '.'));
+  return Number.isFinite(parsed) && parsed >= 0;
 }
 
 function placeLabel(node: ItineraryNode | undefined): string {

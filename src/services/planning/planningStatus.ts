@@ -1,4 +1,5 @@
 import type { DayPlan, ItineraryNode } from '@/models';
+import { hasKnownNodeCost } from './costs';
 import { isPlaceholderStop } from './placeholderStops';
 
 export type PlanningStatusAction =
@@ -138,7 +139,7 @@ function missingTimeItems(dayPlans: DayPlan[]): PlanningStatusItem[] {
 
 function missingCostItems(dayPlans: DayPlan[]): PlanningStatusItem[] {
   return flatNodes(dayPlans)
-    .filter(({ node }) => !readNodeCost(node))
+    .filter(({ node }) => !hasKnownNodeCost(node))
     .map(({ dayPlan, node }) => ({
       id: `cost:${node.id}`,
       label: `Lägg in kostnad för ${node.title}`,
@@ -155,13 +156,4 @@ function flatNodes(dayPlans: DayPlan[]): Array<{ dayPlan: DayPlan; node: Itinera
 
 function hasAccommodation(nodes: ItineraryNode[]): boolean {
   return nodes.some((node) => node.type === 'lodging' || node.type === 'camping');
-}
-
-function readNodeCost(node: ItineraryNode): string {
-  const cost = node.metadata.costSek ?? node.metadata.cost ?? node.metadata.price;
-  if (typeof cost === 'number') {
-    return Number.isFinite(cost) && cost > 0 ? String(cost) : '';
-  }
-
-  return typeof cost === 'string' ? cost.trim() : '';
 }

@@ -118,6 +118,21 @@ test('analyzeDayWarnings reports missing lodging, long drive, missing cost, over
   assert.ok(codes.includes('daily_budget_exceeded'));
 });
 
+test('zero cost validates and is not a missing-cost warning', () => {
+  const validation = validatePlannerDraft({
+    title: 'Free activity',
+    type: 'activity',
+    cost: '0',
+  });
+  const warnings = analyzeDayWarnings([
+    node({ id: 'free-stop', title: 'Gratis aktivitet', metadata: { cost: '0' } }),
+  ], { ...route, durationSeconds: 0 });
+
+  assert.equal(validation.valid, true);
+  assert.equal(calculateDayCost([node({ metadata: { cost: '0' } })]), 0);
+  assert.equal(warnings.some((warning) => warning.code === 'missing_cost'), false);
+});
+
 test('moveNodeToDay changes date and keeps stable ordering', () => {
   const moved = moveNodeToDay([
     node({ id: 'a', startsAt: '2026-06-11T09:00:00.000Z', endsAt: '2026-06-11T11:30:00.000Z', sortOrder: 100 }),
@@ -186,6 +201,6 @@ test('validatePlannerDraft returns Swedish validation errors', () => {
   assert.ok(result.errors.includes('Titel måste fyllas i.'));
   assert.ok(result.errors.includes('Datum ska anges som ÅÅÅÅ-MM-DD.'));
   assert.ok(result.errors.includes('Starttid ska anges som TT:MM.'));
-  assert.ok(result.errors.includes('Kostnad behöver vara ett positivt tal.'));
+  assert.ok(result.errors.includes('Kostnad behöver vara 0 eller ett positivt tal.'));
   assert.ok(result.errors.includes('Ange både latitud och longitud, eller lämna båda tomma.'));
 });

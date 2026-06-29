@@ -4,6 +4,7 @@ import type { ItineraryNode } from '../src/models';
 import { calculateDayCost, summarizeDay } from '../src/services/planning/dayAnalysis';
 import {
   applyInlineFieldUpdate,
+  displayInlineFieldValue,
   inlineFieldValue,
   shouldSaveInlineField,
   validateInlineFieldValue,
@@ -137,6 +138,24 @@ test('type, cost, currency, booking status and booking reference can be changed'
   assert.equal(updated.metadata.currency, 'EUR');
   assert.equal(updated.metadata.bookingStatus, 'requested');
   assert.equal(updated.reservation.reference, 'XYZ-789');
+});
+
+test('inline cost accepts zero as a saved known free cost', () => {
+  const updated = applyInlineFieldUpdate(node(), 'cost', '0');
+
+  assert.equal(validateInlineFieldValue(node(), 'cost', '0').valid, true);
+  assert.equal(updated.metadata.costSek, '0');
+  assert.equal(updated.metadata.cost, undefined);
+  assert.equal(displayInlineFieldValue(updated, 'cost'), 'Gratis');
+  assert.equal(calculateDayCost([updated]), 0);
+});
+
+test('empty inline cost still clears the cost field', () => {
+  const updated = applyInlineFieldUpdate(node({ metadata: { costSek: '250' } }), 'cost', '');
+
+  assert.equal(updated.metadata.costSek, undefined);
+  assert.equal(updated.metadata.cost, undefined);
+  assert.equal(displayInlineFieldValue(updated, 'cost'), 'Kostnad saknas');
 });
 
 test('notes can be changed and cleared', () => {

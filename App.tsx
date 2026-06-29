@@ -60,6 +60,13 @@ import { calculateGoogleRoute, getRoutableStops, routeStopSignature } from '@/se
 import { analyzeDayWarnings, moveNodeToDay, summarizeDay, validatePlannerDraft, type DaySummary } from '@/services/planning/dayAnalysis';
 import { buildTravelBudgetCenter } from '@/services/planning/budgetAnalysis';
 import { buildExplorePlaceDuplicateKey, buildItineraryNodeDuplicateKey, prepareLocalNodeForCloud } from '@/services/planning/cloudSync';
+import {
+  formatKnownCostLabel,
+  hasKnownDetailedNodeCost,
+  hasKnownNodeCost,
+  hasKnownRawNodeCost,
+  parseCostValue,
+} from '@/services/planning/costs';
 import { dayKeyForNode as itineraryDayKeyForNode, mergeManualDayKeys, normalizeDayKey, suggestNewDayKey } from '@/services/planning/dayManagement';
 import { calculateFuelEstimate, parseFuelNumber } from '@/services/routing/fuelEstimate';
 import {
@@ -1957,7 +1964,7 @@ export default function App() {
     }
 
     const firstNode = dayPlan.nodes[0];
-    const missingCostNode = dayPlan.nodes.find((node) => nodeCostTotal(node) <= 0);
+    const missingCostNode = dayPlan.nodes.find((node) => !hasKnownNodeCost(node));
     const missingTimeNode = dayPlan.nodes.find((node) => !node.startsAt);
     const missingLocationNode = dayPlan.nodes.find((node) => !node.location);
     const missingReservationNode = dayPlan.nodes.find((node) => !formatReservation(node));
@@ -2414,6 +2421,8 @@ export default function App() {
         nextMetadata.cost = plannerCost.trim();
       } else {
         delete nextMetadata.cost;
+        delete nextMetadata.costSek;
+        delete nextMetadata.price;
       }
 
       if (plannerPlace.trim()) {
@@ -2490,7 +2499,7 @@ export default function App() {
         metadata: {
           source: 'planner',
           place: plannerPlace.trim() || null,
-          cost: plannerCost.trim() || null,
+          cost: plannerCost.trim() ? plannerCost.trim() : null,
         },
         createdAt: now,
         updatedAt: now,
@@ -3627,7 +3636,7 @@ function buildBudgetSummary(nodes: ItineraryNode[]): BudgetSummary {
     const breakdown = nodeCostBreakdown(node);
     const nodeTotal = Object.values(breakdown).reduce((sum, value) => sum + value, 0);
 
-    if (nodeTotal <= 0) {
+    if (!hasKnownNodeCost(node)) {
       missingCostCount += 1;
     }
 
@@ -3670,7 +3679,7 @@ function buildBudgetWarnings(nodes: ItineraryNode[], total: number, missingCostC
     warnings.push(`${missingCostCount} steg saknar kostnad.`);
   }
 
-  if (total === 0) {
+  if (total === 0 && !nodes.some(hasKnownNodeCost)) {
     warnings.push('Ingen budget inlagd än. Lägg till kostnader i planeringen för att få totalsummor.');
   }
 
@@ -3681,7 +3690,7 @@ function nodeCostBreakdown(node: ItineraryNode): BudgetCategories {
   const lodgingCost = parseCostValue(node.metadata.lodgingCostSek);
   const activityCost = parseCostValue(node.metadata.activityCostSek);
 
-  if (lodgingCost > 0 || activityCost > 0) {
+  if (hasKnownDetailedNodeCost(node)) {
     return {
       lodging: lodgingCost,
       activity: activityCost,
@@ -3700,7 +3709,7 @@ function nodeCostBreakdown(node: ItineraryNode): BudgetCategories {
     other: 0,
   };
 
-  if (rawCost <= 0) {
+  if (!hasKnownRawNodeCost(node)) {
     return empty;
   }
 
@@ -3732,34 +3741,6 @@ function budgetCategoryForNode(node: ItineraryNode): keyof BudgetCategories {
   }
 }
 
-function parseCostValue(value: unknown): number {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value !== 'string') {
-    return 0;
-  }
-
-  const parts = value.split('+');
-  return parts.reduce((sum, part) => sum + parseCostPart(part), 0);
-}
-
-function parseCostPart(value: string): number {
-  const matches = value.replace(',', '.').match(/\d+(?:\.\d+)?/g);
-  if (!matches?.length) {
-    return 0;
-  }
-
-  const numbers = matches.map(Number).filter(Number.isFinite);
-  if (value.includes('-') && numbers.length >= 2) {
-    const [low = 0, high = 0] = numbers;
-    return (low + high) / 2;
-  }
-
-  return numbers.reduce((sum, number) => sum + number, 0);
-}
-
 function formatSek(value: number): string {
   return `${Math.round(value).toLocaleString('sv-SE')} SEK`;
 }
@@ -3784,11 +3765,11 @@ function formatPercentage(value: number): string {
 function formatRawNodeCost(node: ItineraryNode): string {
   const cost = node.metadata.costSek ?? node.metadata.cost ?? node.metadata.price;
   if (typeof cost === 'number') {
-    return String(cost);
+    return formatKnownCostLabel(String(cost));
   }
 
   if (typeof cost === 'string') {
-    return cost;
+    return cost.trim() ? formatKnownCostLabel(cost) : '';
   }
 
   return '';

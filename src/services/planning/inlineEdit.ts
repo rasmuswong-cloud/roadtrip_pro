@@ -1,4 +1,5 @@
 import type { CurrencyCode, ItineraryNode, ItineraryNodeType } from '@/models';
+import { formatKnownCostLabel } from '@/services/planning/costs';
 
 export type InlineFieldKey =
   | 'title'
@@ -101,7 +102,7 @@ export function displayInlineFieldValue(node: ItineraryNode, field: InlineFieldK
     case 'endTime':
       return value || '--:--';
     case 'cost':
-      return value || 'Kostnad saknas';
+      return value ? formatKnownCostLabel(value) : 'Kostnad saknas';
     case 'currency':
       return value || 'SEK';
     case 'bookingStatus':
@@ -157,7 +158,7 @@ export function validateInlineFieldValue(node: ItineraryNode, field: InlineField
   if (field === 'cost' && value) {
     const parsed = Number(value.replace(',', '.'));
     if (!Number.isFinite(parsed) || parsed < 0) {
-      return { valid: false, value, error: 'Kostnad behöver vara ett positivt tal.' };
+      return { valid: false, value, error: 'Kostnad behöver vara 0 eller ett positivt tal.' };
     }
   }
 

@@ -59,6 +59,26 @@ test('planning status stays calm when no important gaps remain', () => {
   assert.equal(status.subtitle, 'Resan ser redo ut för nästa genomgång.');
 });
 
+test('planning status treats zero cost as filled in', () => {
+  const plans = [
+    buildDayPlan('2026-07-12', 'Dag 1', [
+      buildNode('free-activity', 'Gratis badplats', 'activity', {
+        startsAt: '2026-07-12T14:00:00.000+02:00',
+        metadata: { place: 'Badplats', costSek: 0 },
+      }),
+    ]),
+  ];
+
+  const status = buildPlanningStatus({
+    dayPlans: plans,
+    routeIsCalculated: true,
+    routeSkippedStopCount: 0,
+    maxItems: 10,
+  });
+
+  assert.equal(status.items.some((item) => item.id === 'cost:free-activity'), false);
+});
+
 function buildDayPlan(key: string, shortTitle: string, nodes: ItineraryNode[]): DayPlan {
   return {
     key,

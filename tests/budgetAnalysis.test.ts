@@ -90,6 +90,23 @@ test('missing cost detection focuses on cost-bearing itinerary types', () => {
   assert.equal(budget.missingItems[0]?.title, missingHotel.title);
 });
 
+test('zero cost is known, counted, and not treated as missing', () => {
+  const freeActivity = node({ type: 'activity', metadata: { cost: '0' } });
+  const includedHotel = node({ type: 'lodging', metadata: { lodgingCostSek: 0 } });
+  const missingFuel = node({ type: 'fuel', metadata: {} });
+  const budget = buildTravelBudgetCenter([freeActivity, includedHotel, missingFuel], 2);
+
+  assert.equal(parseCostValue('0'), 0);
+  assert.equal(nodeCostTotal(freeActivity), 0);
+  assert.equal(shouldTrackMissingCost(freeActivity), false);
+  assert.equal(shouldTrackMissingCost(includedHotel), false);
+  assert.equal(shouldTrackMissingCost(missingFuel), true);
+  assert.equal(budget.total, 0);
+  assert.equal(budget.costItemCount, 2);
+  assert.equal(budget.missingCostCount, 1);
+  assert.equal(budget.hasRegisteredCosts, true);
+});
+
 test('invalid and missing cost values are treated as zero', () => {
   const budget = buildTravelBudgetCenter([
     node({ type: 'transport', metadata: { cost: 'gratis' } }),

@@ -69,6 +69,13 @@ test('day card missing info chips stay empty for complete itinerary items', () =
   assert.deepEqual(buildMissingInfoChips(makeNode()), []);
 });
 
+test('day card treats zero cost as known and displays it as free', () => {
+  const node = makeNode({ metadata: { costSek: 0 } });
+
+  assert.equal(formatRawNodeCost(node), 'Gratis');
+  assert.equal(buildMissingInfoChips(node).includes('Kostnad saknas'), false);
+});
+
 test('coordinate status stays calm after a selected place is saved', () => {
   const node = makeNode({
     metadata: {
@@ -121,6 +128,7 @@ test('day card raw cost formatter reads imported cost metadata', () => {
   assert.equal(formatRawNodeCost(makeNode({ metadata: { costSek: 1500 } })), '1500');
   assert.equal(formatRawNodeCost(makeNode({ metadata: { cost: '1200 SEK' } })), '1200 SEK');
   assert.equal(formatRawNodeCost(makeNode({ metadata: { price: '99' } })), '99');
+  assert.equal(formatRawNodeCost(makeNode({ metadata: { cost: '0 SEK' } })), 'Gratis');
   assert.equal(formatRawNodeCost(makeNode({ metadata: {} })), '');
 });
 
