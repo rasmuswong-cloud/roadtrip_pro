@@ -30,22 +30,26 @@ export function SidebarNav({
 }: SidebarNavProps) {
   return (
     <View style={styles.workspaceSidebar}>
-      <Text style={styles.workspaceSidebarKicker}>Resa</Text>
+      <Text style={styles.workspaceSidebarKicker}>Roadtrip</Text>
       <Text style={styles.workspaceSidebarTitle}>{tripName}</Text>
       <View style={styles.workspaceNavList}>
-        {appTabs.map((tab) => (
-          <Pressable
-            key={tab.key}
-            testID={`sidebar-nav-${tab.key}`}
-            style={[styles.workspaceNavItem, activeView === tab.key && styles.workspaceNavItemActive]}
-            onPress={() => onGoToView(tab.key)}
-          >
-            <Text style={[styles.workspaceNavText, activeView === tab.key && styles.workspaceNavTextActive]}>{tab.label}</Text>
-          </Pressable>
-        ))}
+        {appTabs.map((tab) => {
+          const active = activeView === tab.key;
+          return (
+            <Pressable
+              key={tab.key}
+              testID={`sidebar-nav-${tab.key}`}
+              style={[styles.workspaceNavItem, active && styles.workspaceNavItemActive]}
+              onPress={() => onGoToView(tab.key)}
+            >
+              <View style={[styles.workspaceNavMarker, active && styles.workspaceNavMarkerActive]} />
+              <Text style={[styles.workspaceNavText, active && styles.workspaceNavTextActive]}>{tab.label}</Text>
+            </Pressable>
+          );
+        })}
       </View>
       <View style={styles.workspaceDivider} />
-      <Text style={styles.workspaceSidebarKicker}>Dagar</Text>
+      <Text style={styles.workspaceSidebarKicker}>Planerade dagar</Text>
       <View style={styles.dayShortcutList}>
         {dayPlans.slice(0, 9).map((dayPlan) => {
           const active = selectedDayKey === dayPlan.key && activeView === 'days';

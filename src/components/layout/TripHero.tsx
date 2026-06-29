@@ -32,6 +32,13 @@ export function TripHero({
       <View style={styles.heroPlaneOne} />
       <View style={styles.heroPlaneTwo} />
       <View style={styles.heroPlaneThree} />
+      <View style={styles.heroScenicPanel}>
+        <View style={styles.heroScenicSky} />
+        <View style={styles.heroScenicSun} />
+        <View style={styles.heroScenicRidgeBack} />
+        <View style={styles.heroScenicRidgeFront} />
+        <View style={styles.heroScenicRoad} />
+      </View>
       <View style={[styles.tripHeroCopy, isMobile && styles.tripHeroCopyMobile]}>
         <Text style={styles.heroEyebrow}>{copy.eyebrow}</Text>
         <Text style={styles.heroTitle}>{copy.title}</Text>
