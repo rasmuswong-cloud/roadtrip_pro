@@ -7,7 +7,6 @@ import { Metric, SectionTitle, type WorkspaceStyles } from './WorkspaceBits';
 
 type RouteWorkspaceProps = {
   activeRoute: RouteSummary;
-  demoRoute: RouteSummary;
   displayedNodes: ItineraryNode[];
   fuelConsumptionText: string;
   fuelEstimate: FuelEstimate;
@@ -36,7 +35,6 @@ type RouteWorkspaceProps = {
 
 export function RouteWorkspace({
   activeRoute,
-  demoRoute,
   displayedNodes,
   fuelConsumptionText,
   fuelEstimate,
@@ -62,8 +60,9 @@ export function RouteWorkspace({
   onSetFuelConsumptionText,
   onSetFuelPriceText,
 }: RouteWorkspaceProps) {
-  const routeForMap = activeRoute.geometry ? activeRoute : demoRoute;
+  const routeForMap = activeRoute.provider === 'google_routes' && activeRoute.geometry ? activeRoute : null;
   const routeSourceLabel = routeIsCalculated ? 'Google Routes' : 'Offline uppskattning';
+  const mapRouteLabel = routeForMap ? 'Rutt beräknad med Google' : routeIsCalculated ? 'Rutt saknar vägdata – beräkna rutt igen' : 'Ingen beräknad vägrutt ännu';
   const routeActionLabel = routeIsCalculated ? 'Uppdatera rutt' : 'Beräkna rutt';
   const tooFewStopsWithPosition = routeIncludedStopCount < 2;
   const routeLegs = routeIsCalculated ? (activeRoute.legs ?? []) : [];
@@ -123,7 +122,7 @@ export function RouteWorkspace({
               <View style={[styles.legendDot, { backgroundColor: '#0f766e' }]} />
               <Text style={styles.legendText}>planerat stopp</Text>
               <View style={[styles.legendDot, { backgroundColor: '#f6b35f' }]} />
-              <Text style={styles.legendText}>rutt</Text>
+              <Text style={styles.legendText}>{mapRouteLabel}</Text>
             </View>
           </View>
         ) : (

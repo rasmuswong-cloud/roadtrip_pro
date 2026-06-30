@@ -19,7 +19,6 @@ type DaysWorkspaceProps = {
   coordinateSearchQuery: string;
   coordinateSearchResults: GooglePlace[];
   dayPlans: DayPlan[];
-  demoRoute: RouteSummary;
   draftPlannerDayKey: string | null;
   displayedNodesLength: number;
   filteredStopCount: number;
@@ -81,7 +80,6 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
     coordinateSearchQuery,
     coordinateSearchResults,
     dayPlans,
-    demoRoute,
     draftPlannerDayKey,
     displayedNodesLength,
     filteredStopCount,
@@ -138,7 +136,7 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
     setNewDayDate(suggestedNewDayKey);
   }, [suggestedNewDayKey]);
 
-  const routeForMap = activeRoute.geometry ? activeRoute : demoRoute;
+  const routeForMap = activeRoute.provider === 'google_routes' && activeRoute.geometry ? activeRoute : null;
   const planningStatus = buildPlanningStatus({
     dayPlans,
     routeIsCalculated,

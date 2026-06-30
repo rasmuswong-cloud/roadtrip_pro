@@ -11,7 +11,6 @@ type OverviewWorkspaceProps = {
   budgetSummary: { missingCostCount: number };
   costPerTraveler: number;
   dayCount: number;
-  demoRoute: RouteSummary;
   displayedNodes: ItineraryNode[];
   firstRouteStop: ItineraryNode | null;
   formatDistance: (meters: number) => string;
@@ -32,7 +31,6 @@ export function OverviewWorkspace({
   budgetSummary,
   costPerTraveler,
   dayCount,
-  demoRoute,
   displayedNodes,
   firstRouteStop,
   formatDistance,
@@ -47,7 +45,7 @@ export function OverviewWorkspace({
   tripReadiness,
   onGoToView,
 }: OverviewWorkspaceProps) {
-  const routeForMap = activeRoute.geometry ? activeRoute : demoRoute;
+  const routeForMap = activeRoute.provider === 'google_routes' && activeRoute.geometry ? activeRoute : null;
   const primaryActions = [
     { label: 'Redigera dagar', target: 'days' as AppView },
     { label: 'Kontrollera rutt', target: 'route' as AppView },

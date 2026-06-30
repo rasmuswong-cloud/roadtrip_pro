@@ -18,13 +18,6 @@ export function estimateRouteSummary(nodes: ItineraryNode[]): RouteSummary {
     instructions: [],
   };
 
-  if (routableNodes.length > 1) {
-    summary.geometry = {
-      type: 'LineString',
-      coordinates: routableNodes.map((node) => [node.location!.longitude, node.location!.latitude]),
-    };
-  }
-
   return summary;
 }
 

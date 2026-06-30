@@ -70,6 +70,7 @@ export async function calculateGoogleRoute(input: GoogleRouteInput): Promise<Goo
       intermediates: intermediates.map(waypointFromCoordinates),
       travelMode: 'DRIVE',
       routingPreference: 'TRAFFIC_UNAWARE',
+      polylineQuality: 'HIGH_QUALITY',
       units: 'METRIC',
       languageCode: 'sv-SE',
     }),
@@ -86,12 +87,7 @@ export async function calculateGoogleRoute(input: GoogleRouteInput): Promise<Goo
   }
 
   const routeLegs = buildRouteLegs(routableStops, route.legs);
-  const routeGeometry = route.polyline?.encodedPolyline
-    ? {
-        type: 'LineString' as const,
-        coordinates: decodePolyline(route.polyline.encodedPolyline).map((point) => [point.longitude, point.latitude]),
-      }
-    : undefined;
+  const routeGeometry = buildRouteGeometry(route.polyline?.encodedPolyline);
   const routeSummary: RouteSummary = {
     distanceMeters: route.distanceMeters,
     durationSeconds: parseDurationSeconds(route.duration),
@@ -173,6 +169,23 @@ function parseDurationSeconds(value: string | undefined): number {
   return match ? Math.round(Number(match[1])) : 0;
 }
 
+function buildRouteGeometry(encodedPolyline: string | undefined): RouteSummary['geometry'] | undefined {
+  if (!encodedPolyline) {
+    return undefined;
+  }
+
+  const coordinates = decodePolyline(encodedPolyline)
+    .filter(isValidCoordinate)
+    .map((point) => [point.longitude, point.latitude]);
+
+  return coordinates.length > 1
+    ? {
+        type: 'LineString',
+        coordinates,
+      }
+    : undefined;
+}
+
 async function formatGoogleRoutesError(response: Response): Promise<string> {
   let statusText = '';
 
@@ -194,10 +207,16 @@ function decodePolyline(value: string): Coordinates[] {
 
   while (index < value.length) {
     const latitudeResult = decodePolylineValue(value, index);
+    if (!latitudeResult) {
+      return [];
+    }
     latitude += latitudeResult.delta;
     index = latitudeResult.nextIndex;
 
     const longitudeResult = decodePolylineValue(value, index);
+    if (!longitudeResult) {
+      return [];
+    }
     longitude += longitudeResult.delta;
     index = longitudeResult.nextIndex;
 
@@ -207,18 +226,25 @@ function decodePolyline(value: string): Coordinates[] {
   return points;
 }
 
-function decodePolylineValue(value: string, startIndex: number): { delta: number; nextIndex: number } {
+function decodePolylineValue(value: string, startIndex: number): { delta: number; nextIndex: number } | null {
   let result = 0;
   let shift = 0;
   let index = startIndex;
   let byte = 0;
 
   do {
+    if (index >= value.length) {
+      return null;
+    }
+
     byte = value.charCodeAt(index) - 63;
+    if (!Number.isFinite(byte) || byte < 0) {
+      return null;
+    }
     index += 1;
     result |= (byte & 0x1f) << shift;
     shift += 5;
-  } while (byte >= 0x20 && index < value.length);
+  } while (byte >= 0x20);
 
   return {
     delta: result & 1 ? ~(result >> 1) : result >> 1,

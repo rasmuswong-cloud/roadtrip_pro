@@ -5,7 +5,7 @@ import type { DayPlan, ItineraryNode, RouteSummary } from '@/models';
 import type { AppView } from './workspaceTypes';
 
 type MapRailProps = {
-  activeRoute: RouteSummary;
+  activeRoute: RouteSummary | null;
   activeView: AppView;
   displayedNodes: ItineraryNode[];
   formatDistance: (meters: number) => string;
@@ -33,6 +33,7 @@ export function MapRail({
 }: MapRailProps) {
   const mapNodes = activeView === 'days' && selectedDayPlan ? selectedDayPlan.nodes : displayedNodes;
   const mapTitle = activeView === 'days' && selectedDayPlan ? selectedDayPlan.shortTitle : 'Hela resan';
+  const hasGoogleRouteGeometry = Boolean(activeRoute?.provider === 'google_routes' && activeRoute.geometry);
 
   return (
     <View
@@ -64,8 +65,10 @@ export function MapRail({
       </View>
       <View style={styles.contextPanel}>
         <Text style={styles.packingTitle}>Rutt</Text>
-        <Text style={styles.contextPanelTitle}>{formatDistance(activeRoute.distanceMeters)}</Text>
-        <Text style={styles.contextPanelText}>{formatDuration(activeRoute.durationSeconds)} / {displayedNodes.length} stopp</Text>
+        <Text style={styles.contextPanelTitle}>{hasGoogleRouteGeometry ? formatDistance(activeRoute!.distanceMeters) : 'Ingen vägrutt'}</Text>
+        <Text style={styles.contextPanelText}>
+          {hasGoogleRouteGeometry ? `${formatDuration(activeRoute!.durationSeconds)} / ${displayedNodes.length} stopp` : 'Beräkna rutt för att visa Google-vägdata.'}
+        </Text>
         {missingCoordinateCount > 0 ? (
           <>
             <Text style={styles.warningText}>Positioner behöver fixas i Dagar.</Text>

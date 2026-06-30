@@ -96,6 +96,7 @@ test('Google Routes calculation is explicit and uses saved stop coordinates', as
     assert.equal(result.includedStopCount, 3);
     assert.equal(result.skippedStopCount, 1);
     assert.equal((requestedBody.intermediates as unknown[]).length, 1);
+    assert.equal(requestedBody.polylineQuality, 'HIGH_QUALITY');
     assert.equal(result.route.geometry?.coordinates.length, 3);
     assert.deepEqual(result.route.legs?.map((leg) => `${leg.fromTitle}->${leg.toTitle}:${leg.distanceMeters}`), [
       'a->b:50000',
@@ -130,6 +131,36 @@ test('Google Routes does not fake route geometry when no polyline is returned', 
     assert.equal(result.route.legs?.length, 1);
     assert.equal(result.includedStopCount, 2);
     assert.equal(result.skippedStopCount, 0);
+  } finally {
+    restoreEnvironment();
+  }
+});
+
+test('Google Routes ignores empty or malformed route polylines', async () => {
+  process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY = 'routes-key-for-test';
+  delete process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+
+  try {
+    for (const encodedPolyline of ['', '_']) {
+      globalThis.fetch = (async () => new Response(JSON.stringify({
+        routes: [{
+          distanceMeters: 1000,
+          duration: '600s',
+          legs: [{ distanceMeters: 1000, duration: '600s' }],
+          polyline: { encodedPolyline },
+        }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as typeof fetch;
+
+      const result = await calculateGoogleRoute({
+        stops: [
+          node('a', 55.605, 13.0038),
+          node('b', 56.0, 14.0),
+        ],
+      });
+
+      assert.equal(result.route.geometry, undefined);
+      assert.equal(result.route.legs?.length, 1);
+    }
   } finally {
     restoreEnvironment();
   }

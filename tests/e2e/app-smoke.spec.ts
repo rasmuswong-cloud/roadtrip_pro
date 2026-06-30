@@ -775,7 +775,7 @@ test('Google places, placeholder, route, fuel, and nearby flows are explicit and
   await page.getByTestId('sidebar-nav-route').click();
   const routeCallsBefore = await page.evaluate(() => (window as unknown as { __roadtripQaBackend: { calls: { routes: number } } }).__roadtripQaBackend.calls.routes);
   expect(routeCallsBefore).toBe(0);
-  await page.getByText('Beräkna rutt').click();
+  await page.getByText('Beräkna rutt', { exact: true }).click();
   await expect(page.getByText(/Rutt beräknad med Google Routes/)).toBeVisible();
   await expect(page.getByText('Delsträckor', { exact: true })).toBeVisible();
   await expect(page.getByText(/placeholder saknar exakt plats/)).toBeVisible();

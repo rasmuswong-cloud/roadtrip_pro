@@ -232,19 +232,6 @@ const demoTrip: Trip = {
 
 const demoNodes: ItineraryNode[] = reseplanrareSeedRows.map((row) => buildDemoNodeFromSeedRow(row));
 
-const demoRoute: RouteSummary = {
-  distanceMeters: 1_920_000,
-  durationSeconds: 76_800,
-  provider: 'mapbox',
-  geometry: {
-    type: 'LineString',
-    coordinates: reseplanrareSeedRows
-      .filter((row) => row.location)
-      .map((row) => [row.location!.longitude, row.location!.latitude]),
-  },
-  instructions: [],
-};
-
 const demoExpenses: Expense[] = [
   {
     id: '55555555-5555-4555-8555-555555555555',
@@ -2268,8 +2255,11 @@ export default function App() {
         includedStopCount: result.includedStopCount,
         skippedStopCount: result.skippedStopCount,
       });
+      const geometryMessage = result.route.geometry
+        ? 'Rutt beräknad med Google Routes'
+        : 'Rutt saknar vägdata – beräkna rutt igen';
       setRouteCalculationMessage(
-        `Rutt beräknad med Google Routes: ${result.includedStopCount} stopp ingår${result.skippedStopCount > 0 ? `, ${result.skippedStopCount} hoppades över` : ''}.`,
+        `${geometryMessage}: ${result.includedStopCount} stopp ingår${result.skippedStopCount > 0 ? `, ${result.skippedStopCount} hoppades över` : ''}.`,
       );
     } catch (error) {
       setRouteCalculationMessage(error instanceof Error ? error.message : String(error));
@@ -3160,7 +3150,6 @@ export default function App() {
               {activeView === 'route' ? (
               <RouteWorkspace
                 activeRoute={routeSummary}
-                demoRoute={demoRoute}
                 displayedNodes={displayedNodes}
                 formatDateLabel={formatDateLabel}
                 formatDistance={formatDistance}
@@ -3194,7 +3183,6 @@ export default function App() {
                 budgetSummary={budgetSummary}
                 costPerTraveler={costPerTraveler}
                 dayCount={dayPlans.length}
-                demoRoute={demoRoute}
                 displayedNodes={displayedNodes}
                 firstRouteStop={firstRouteStop}
                 formatDistance={formatDistance}
@@ -3236,7 +3224,6 @@ export default function App() {
                 coordinateSearchQuery={coordinateSearchQuery}
                 coordinateSearchResults={coordinateSearchResults}
                 dayPlans={dayPlans}
-                demoRoute={demoRoute}
                 displayedNodesLength={displayedNodes.length}
                 draftPlannerDayKey={draftPlannerDayKey}
                 filteredStopCount={filteredStopCount}
@@ -3291,7 +3278,7 @@ export default function App() {
             </View>
             {!isMobile ? (
               <MapRail
-                activeRoute={routeSummary.geometry ? routeSummary : demoRoute}
+                activeRoute={routeSummary.provider === 'google_routes' && routeSummary.geometry ? routeSummary : null}
                 activeView={activeView}
                 displayedNodes={displayedNodes}
                 formatDistance={formatDistance}
