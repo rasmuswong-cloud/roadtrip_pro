@@ -125,7 +125,7 @@ export function buildTravelBudgetCenter(nodes: ItineraryNode[], travelerCount = 
 
   const days = Array.from(dayMap.entries()).map(([key, bucket], index) => ({
     key,
-    label: key === 'unscheduled' ? 'Oschemalagt' : `Dag ${index + 1}`,
+    label: key === 'unscheduled' ? 'Generella budgetposter' : `Dag ${index + 1}`,
     dateLabel: formatDayLabel(key),
     routeLabel: routeLabel(bucket.nodes),
     total: bucket.total,

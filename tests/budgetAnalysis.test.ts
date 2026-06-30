@@ -79,6 +79,15 @@ test('buildTravelBudgetCenter groups per-day totals and missing counts', () => {
   assert.equal(budget.mostExpensiveDay?.key, '2026-06-11');
 });
 
+test('buildTravelBudgetCenter labels unscheduled costs as general budget items', () => {
+  const budget = buildTravelBudgetCenter([
+    node({ id: 'general', startsAt: null, metadata: { cost: 1200 } }),
+  ], 2);
+
+  assert.equal(budget.days[0]?.key, 'unscheduled');
+  assert.equal(budget.days[0]?.label, 'Generella budgetposter');
+});
+
 test('missing cost detection focuses on cost-bearing itinerary types', () => {
   const missingHotel = node({ type: 'lodging', metadata: {} });
   const note = node({ type: 'note', metadata: {} });

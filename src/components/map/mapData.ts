@@ -1,4 +1,5 @@
 import type { Coordinates, ItineraryNode, RouteSummary } from '@/models';
+import { isPlaceholderStop } from '@/services/planning/placeholderStops';
 import { formatDistance, formatDuration } from '@/utils/formatters';
 
 export type MapMarkerData = {
@@ -24,7 +25,7 @@ export const DEFAULT_MAP_CENTER: Coordinates = { latitude: 55.604981, longitude:
 
 export function extractValidMapMarkers(nodes: ItineraryNode[]): MapMarkerData[] {
   return nodes
-    .filter((node): node is ItineraryNode & { location: Coordinates } => !node.deletedAt && isValidCoordinate(node.location))
+    .filter((node): node is ItineraryNode & { location: Coordinates } => !node.deletedAt && !isPlaceholderStop(node) && isValidCoordinate(node.location))
     .map((node, index) => ({
       id: node.id,
       title: markerTitle(node),
@@ -34,16 +35,24 @@ export function extractValidMapMarkers(nodes: ItineraryNode[]): MapMarkerData[] 
 }
 
 export function calculateMapViewport(markers: MapMarkerData[]): MapViewport {
-  if (markers.length === 0) {
+  return calculateCoordinateViewport(markers.map((marker) => marker.coordinates));
+}
+
+export function calculateRouteAwareMapViewport(markers: MapMarkerData[], routePath: Coordinates[]): MapViewport {
+  return calculateCoordinateViewport(routePath.length > 1 ? routePath : markers.map((marker) => marker.coordinates));
+}
+
+function calculateCoordinateViewport(coordinates: Coordinates[]): MapViewport {
+  if (coordinates.length === 0) {
     return { state: 'empty', center: null, bounds: null };
   }
 
-  if (markers.length === 1) {
-    return { state: 'single', center: markers[0]!.coordinates, bounds: null };
+  if (coordinates.length === 1) {
+    return { state: 'single', center: coordinates[0]!, bounds: null };
   }
 
-  const latitudes = markers.map((marker) => marker.coordinates.latitude);
-  const longitudes = markers.map((marker) => marker.coordinates.longitude);
+  const latitudes = coordinates.map((coordinate) => coordinate.latitude);
+  const longitudes = coordinates.map((coordinate) => coordinate.longitude);
   const north = Math.max(...latitudes);
   const south = Math.min(...latitudes);
   const east = Math.max(...longitudes);

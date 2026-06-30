@@ -145,6 +145,8 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
   }, [suggestedNewDayKey]);
 
   const routeForMap = activeRoute.provider === 'google_routes' && activeRoute.geometry ? activeRoute : null;
+  const datedVisibleDayPlans = visibleDayPlans.filter((dayPlan) => dayPlan.key !== 'unscheduled');
+  const unscheduledDayPlan = visibleDayPlans.find((dayPlan) => dayPlan.key === 'unscheduled') ?? null;
   const planningStatus = buildPlanningStatus({
     dayPlans,
     routeIsCalculated,
@@ -268,27 +270,45 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
         )}
       </View>
       {visibleDayPlans.length > 0 ? (
-        <View style={styles.daySelectorRail}>
-          {visibleDayPlans.map((dayPlan) => {
-            const isSelected = selectedDayPlan?.key === dayPlan.key;
-            const missingInfoCount = dayPlan.smartFlags.filter((flag) => flag !== 'Ser planerad ut').length;
-            const routeText = dayPlan.summary.startPlace === dayPlan.summary.endPlace
-              ? dayPlan.summary.startPlace
-              : `${dayPlan.summary.startPlace} → ${dayPlan.summary.endPlace}`;
+        <>
+          <View style={styles.daySelectorRail}>
+            {datedVisibleDayPlans.map((dayPlan) => {
+              const isSelected = selectedDayPlan?.key === dayPlan.key;
+              const missingInfoCount = dayPlan.smartFlags.filter((flag) => flag !== 'Ser planerad ut').length;
+              const actionText = missingInfoCount > 0 ? `${missingInfoCount} saker kvar` : 'Öppna';
+              const routeText = formatDaySelectorRoute(dayPlan);
 
-            return (
-              <Pressable key={dayPlan.key} style={[styles.daySelectorCard, isSelected && styles.daySelectorCardActive]} onPress={() => onSelectDay(dayPlan.key)}>
+              return (
+                <Pressable key={dayPlan.key} style={[styles.daySelectorCard, isSelected && styles.daySelectorCardActive]} onPress={() => onSelectDay(dayPlan.key)}>
+                  <View style={styles.daySelectorHeader}>
+                    <Text style={[styles.daySelectorTitle, isSelected && styles.daySelectorTitleActive]}>{dayPlan.shortTitle}</Text>
+                    <Text style={[styles.daySelectorCount, isSelected && styles.daySelectorCountActive]}>{dayPlan.nodes.length} steg</Text>
+                  </View>
+                  <Text style={[styles.daySelectorDate, isSelected && styles.daySelectorDateActive]}>{formatDayKey(dayPlan.key)}</Text>
+                  <Text style={[styles.daySelectorRoute, isSelected && styles.daySelectorRouteActive]} numberOfLines={1}>{routeText}</Text>
+                  <Text style={[styles.daySelectorMissing, missingInfoCount === 0 && styles.daySelectorReady]}>{actionText}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          {unscheduledDayPlan ? (
+            <View style={styles.unscheduledDaySection}>
+              <Text style={styles.unscheduledDayLabel}>Utanför dagsplanen</Text>
+              <Pressable
+                testID="unscheduled-day-shortcut"
+                style={[styles.daySelectorCard, styles.unscheduledDayCard, selectedDayPlan?.key === unscheduledDayPlan.key && styles.daySelectorCardActive]}
+                onPress={() => onSelectDay(unscheduledDayPlan.key)}
+              >
                 <View style={styles.daySelectorHeader}>
-                  <Text style={[styles.daySelectorTitle, isSelected && styles.daySelectorTitleActive]}>{dayPlan.shortTitle}</Text>
-                  <Text style={[styles.daySelectorCount, isSelected && styles.daySelectorCountActive]}>{dayPlan.nodes.length} steg</Text>
+                  <Text style={[styles.daySelectorTitle, selectedDayPlan?.key === unscheduledDayPlan.key && styles.daySelectorTitleActive]}>{unscheduledDayPlan.shortTitle}</Text>
+                  <Text style={[styles.daySelectorCount, selectedDayPlan?.key === unscheduledDayPlan.key && styles.daySelectorCountActive]}>{unscheduledDayPlan.nodes.length} poster</Text>
                 </View>
-                <Text style={[styles.daySelectorDate, isSelected && styles.daySelectorDateActive]}>{formatDayKey(dayPlan.key)}</Text>
-                <Text style={[styles.daySelectorRoute, isSelected && styles.daySelectorRouteActive]} numberOfLines={1}>{routeText}</Text>
-                <Text style={[styles.daySelectorMissing, missingInfoCount === 0 && styles.daySelectorReady]}>{missingInfoCount > 0 ? 'Planera vidare' : 'Ser bra ut'}</Text>
+                <Text style={[styles.daySelectorDate, selectedDayPlan?.key === unscheduledDayPlan.key && styles.daySelectorDateActive]}>Generella budgetposter och stopp utan datum</Text>
+                <Text style={[styles.daySelectorMissing, styles.daySelectorReady]}>Öppna</Text>
               </Pressable>
-            );
-          })}
-        </View>
+            </View>
+          ) : null}
+        </>
       ) : null}
       {selectedDayPlan ? (
         <View testID="selected-day-summary" style={styles.selectedDaySummary}>
@@ -401,4 +421,22 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
       ) : null}
     </View>
   );
+}
+
+function formatDaySelectorRoute(dayPlan: DayPlan): string {
+  const start = shortenPlaceLabel(dayPlan.summary.startPlace);
+  const end = shortenPlaceLabel(dayPlan.summary.endPlace);
+  return start === end ? end : `${start} → ${end}`;
+}
+
+function shortenPlaceLabel(value: string): string {
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= 28) {
+    return normalized;
+  }
+
+  const firstPart = normalized.split(/\s+[→/-]\s+|,\s+/)[0]?.trim() || normalized;
+  const candidate = firstPart.length <= 28 ? firstPart : firstPart.slice(0, 28);
+  const lastSpace = candidate.lastIndexOf(' ');
+  return `${(lastSpace >= 12 ? candidate.slice(0, lastSpace) : candidate).trim()}...`;
 }

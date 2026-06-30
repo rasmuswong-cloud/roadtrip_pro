@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import type { Coordinates, ItineraryNode, RouteSummary } from '@/models';
 import {
   buildRouteDrivingLabels,
-  calculateMapViewport,
+  calculateRouteAwareMapViewport,
   extractRoutePathCoordinates,
   extractValidMapMarkers,
   mapInitialCenter,
@@ -90,7 +90,7 @@ export function NavigationMap({
   const markers = useMemo(() => extractValidMapMarkers(nodes), [nodes]);
   const routePath = useMemo(() => extractRoutePathCoordinates(activeRoute), [activeRoute]);
   const routeLabels = useMemo(() => buildRouteDrivingLabels(activeRoute, nodes), [activeRoute, nodes]);
-  const viewport = useMemo(() => calculateMapViewport(markers), [markers]);
+  const viewport = useMemo(() => calculateRouteAwareMapViewport(markers, routePath), [markers, routePath]);
 
   useEffect(() => {
     if (!googleMapsApiKey) {
@@ -119,7 +119,7 @@ export function NavigationMap({
         }
 
         ensureMapLabelStyles();
-        applyViewport(mapRef.current, maps, markers, routePath);
+        applyViewport(mapRef.current, maps, markers, routePath, viewport);
         mapClickListenerRef.current?.remove();
         mapClickListenerRef.current = onMapPress
           ? mapRef.current.addListener('click', (event) => {
@@ -351,9 +351,7 @@ function formatCoordinate(value: number): string {
   return value.toFixed(5);
 }
 
-function applyViewport(map: GoogleMapInstance, maps: GoogleMapsNamespace, markers: MapMarkerData[], routePath: Coordinates[]) {
-  const viewport = calculateMapViewport(markers);
-
+function applyViewport(map: GoogleMapInstance, maps: GoogleMapsNamespace, markers: MapMarkerData[], routePath: Coordinates[], viewport: ReturnType<typeof calculateRouteAwareMapViewport>) {
   if (viewport.state === 'empty') {
     map.setCenter(toLatLng(mapInitialCenter(viewport)));
     map.setZoom(5);
@@ -368,8 +366,8 @@ function applyViewport(map: GoogleMapInstance, maps: GoogleMapsNamespace, marker
 
   if (viewport.state === 'bounds') {
     const bounds = new maps.LatLngBounds();
-    markers.forEach((marker) => bounds.extend(toLatLng(marker.coordinates)));
-    routePath.forEach((coordinates) => bounds.extend(toLatLng(coordinates)));
+    const fitCoordinates = routePath.length > 1 ? routePath : markers.map((marker) => marker.coordinates);
+    fitCoordinates.forEach((coordinates) => bounds.extend(toLatLng(coordinates)));
     map.fitBounds(bounds, 48);
   }
 }

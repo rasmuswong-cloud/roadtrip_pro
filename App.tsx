@@ -3447,13 +3447,13 @@ function buildDayPlans(nodes: ItineraryNode[], manualDayKeys: string[] = []): Da
     const route = estimateRouteSummary(groupNodes);
     const budget = buildBudgetSummary(groupNodes);
     const insight = buildDayInsight(groupNodes, route, budget);
-    const title = key === 'unscheduled' ? 'Oschemalagt' : `Dag ${index + 1} / ${formatDateLabel(key)}`;
+    const title = key === 'unscheduled' ? 'Ej schemalagda poster' : `Dag ${index + 1} / ${formatDateLabel(key)}`;
     const summary = summarizeDay(groupNodes, key, index + 1);
 
     return {
       key,
       title,
-      shortTitle: key === 'unscheduled' ? 'Oschemalagt' : `Dag ${index + 1}`,
+      shortTitle: key === 'unscheduled' ? 'Generella poster' : `Dag ${index + 1}`,
       nodes: groupNodes,
       route,
       budget,
@@ -3764,7 +3764,7 @@ function buildBudgetWarnings(nodes: ItineraryNode[], total: number, missingCostC
 
   if (mostExpensiveEntry && mostExpensiveEntry[1] > 0) {
     const [mostExpensiveDay, mostExpensiveTotal] = mostExpensiveEntry;
-    warnings.push(`Dyraste dagen: ${mostExpensiveDay === 'unscheduled' ? 'Oschemalagt' : formatDateLabel(mostExpensiveDay)} med ${formatSek(mostExpensiveTotal)}.`);
+    warnings.push(`Dyraste dagen: ${mostExpensiveDay === 'unscheduled' ? 'Generella budgetposter' : formatDateLabel(mostExpensiveDay)} med ${formatSek(mostExpensiveTotal)}.`);
   }
 
   if (missingCostCount > 0) {
@@ -3921,7 +3921,7 @@ function formatDateLabel(dateKey: string): string {
 }
 
 function formatDayKey(dayKey: string): string {
-  return dayKey === 'unscheduled' ? 'oschemalagt' : formatDateLabel(dayKey);
+  return dayKey === 'unscheduled' ? 'ej schemalagt' : formatDateLabel(dayKey);
 }
 
 function buildNodeFromSeedRow(row: ReseplanrareSeedRow, tripId: string, userId: string): ItineraryNode {
@@ -6267,9 +6267,10 @@ const styles = StyleSheet.create({
   planningStatusRow: {
     minHeight: 40,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 10,
+    flexWrap: 'wrap',
     borderRadius: 10,
     backgroundColor: 'rgba(255,255,255,0.58)',
     borderWidth: StyleSheet.hairlineWidth,
@@ -6279,7 +6280,7 @@ const styles = StyleSheet.create({
   },
   planningStatusItemText: {
     flex: 1,
-    minWidth: 0,
+    minWidth: 220,
     color: '#1f2933',
     fontSize: 13,
     fontWeight: '800',
@@ -6295,6 +6296,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     flexWrap: 'wrap',
+  },
+  unscheduledDaySection: {
+    gap: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(95,75,50,0.14)',
+    paddingTop: 12,
+  },
+  unscheduledDayLabel: {
+    color: '#6b7280',
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
   },
   addDayPanel: {
     flexDirection: 'row',
@@ -6337,6 +6350,11 @@ const styles = StyleSheet.create({
   daySelectorCardActive: {
     borderColor: '#0f766e',
     backgroundColor: 'rgba(255,255,255,0.9)',
+  },
+  unscheduledDayCard: {
+    maxWidth: 420,
+    borderStyle: 'dashed',
+    backgroundColor: 'rgba(255,255,255,0.46)',
   },
   daySelectorHeader: {
     flexDirection: 'row',
@@ -6958,11 +6976,13 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 8,
+    maxWidth: '100%',
   },
   secondarySmallButtonText: {
     color: '#0f766e',
     fontSize: 12,
     fontWeight: '900',
+    lineHeight: 16,
   },
   ghostSmallButton: {
     borderRadius: 999,

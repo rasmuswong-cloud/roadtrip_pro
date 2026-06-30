@@ -5,6 +5,7 @@ import {
   DEFAULT_MAP_CENTER,
   buildRouteDrivingLabels,
   calculateMapViewport,
+  calculateRouteAwareMapViewport,
   extractRoutePathCoordinates,
   extractValidMapMarkers,
   mapInitialCenter,
@@ -83,6 +84,19 @@ test('extractValidMapMarkers ignores missing and invalid coordinates', () => {
   assert.deepEqual(markers.map((marker) => marker.label), ['1']);
 });
 
+test('extractValidMapMarkers numbers only visible mapped stops without gaps', () => {
+  const markers = extractValidMapMarkers([
+    node({ id: 'a', location: { latitude: 55, longitude: 13 } }),
+    node({ id: 'missing', location: null }),
+    node({ id: 'placeholder', location: { latitude: 56, longitude: 14 }, metadata: { isPlaceholder: true } }),
+    node({ id: 'b', location: { latitude: 57, longitude: 15 } }),
+    node({ id: 'c', location: { latitude: 58, longitude: 16 } }),
+  ]);
+
+  assert.deepEqual(markers.map((marker) => marker.id), ['a', 'b', 'c']);
+  assert.deepEqual(markers.map((marker) => marker.label), ['1', '2', '3']);
+});
+
 test('calculateMapViewport reports empty, single center, and bounds states', () => {
   assert.deepEqual(calculateMapViewport([]), { state: 'empty', center: null, bounds: null });
   assert.deepEqual(mapInitialCenter(calculateMapViewport([])), DEFAULT_MAP_CENTER);
@@ -103,6 +117,24 @@ test('calculateMapViewport reports empty, single center, and bounds states', () 
     state: 'bounds',
     center: { latitude: 47, longitude: 12 },
     bounds: { north: 48, south: 46, east: 13, west: 11 },
+  });
+});
+
+test('calculateRouteAwareMapViewport fits route geometry before marker-only bounds', () => {
+  const markers = extractValidMapMarkers([
+    node({ id: 'a', location: { latitude: 55, longitude: 13 } }),
+    node({ id: 'b', location: { latitude: 55.2, longitude: 13.2 } }),
+  ]);
+  const routePath = [
+    { latitude: 55, longitude: 13 },
+    { latitude: 47, longitude: 8 },
+    { latitude: 44, longitude: 12 },
+  ];
+
+  assert.deepEqual(calculateRouteAwareMapViewport(markers, routePath), {
+    state: 'bounds',
+    center: { latitude: 49.5, longitude: 10.5 },
+    bounds: { north: 55, south: 44, east: 13, west: 8 },
   });
 });
 
