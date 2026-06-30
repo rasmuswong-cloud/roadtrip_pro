@@ -393,6 +393,61 @@ async function installQaBackend(page: Parameters<Parameters<typeof test>[1]>[0][
   });
 }
 
+async function installMockGoogleMaps(page: Parameters<Parameters<typeof test>[1]>[0]['page']) {
+  await page.addInitScript(() => {
+    class MockMap {
+      private element: HTMLElement;
+
+      constructor(element: HTMLElement) {
+        this.element = element;
+      }
+
+      addListener(eventName: string, handler: (event: { latLng: { lat: () => number; lng: () => number } }) => void) {
+        const listener = () => handler({
+          latLng: {
+            lat: () => 55.61234,
+            lng: () => 13.04567,
+          },
+        });
+        if (eventName === 'click') {
+          this.element.addEventListener('click', listener);
+        }
+        return {
+          remove: () => this.element.removeEventListener('click', listener),
+        };
+      }
+
+      setCenter() {}
+      setZoom() {}
+      fitBounds() {}
+    }
+
+    class MockMarker {
+      setMap() {}
+    }
+
+    class MockPolyline {
+      setMap() {}
+    }
+
+    class MockLatLngBounds {
+      extend() {}
+    }
+
+    Object.defineProperty(window, 'google', {
+      configurable: true,
+      value: {
+        maps: {
+          Map: MockMap,
+          Marker: MockMarker,
+          Polyline: MockPolyline,
+          LatLngBounds: MockLatLngBounds,
+        },
+      },
+    });
+  });
+}
+
 async function waitForQaConnection(page: Parameters<Parameters<typeof test>[1]>[0]['page']) {
   await expect(page.getByText(/Ansluten: QA TEST Trip|Molnresan är tom än så länge|Resan sparas i Supabase/).first()).toBeVisible({ timeout: 15_000 });
 }
@@ -539,6 +594,88 @@ test('mobile route can still show an embedded map when the right rail is absent'
   await page.getByTestId('top-nav-route').click();
   await expect(page.getByTestId('desktop-map-rail')).toHaveCount(0);
   await expect(page.getByTestId('center-mobile-map')).toBeVisible();
+});
+
+test('map click add prompts before opening the existing stop editor', async ({ page }) => {
+  await installQaBackend(page);
+  await installMockGoogleMaps(page);
+  await page.addInitScript(() => {
+    const backend = (window as unknown as { __roadtripQaBackend?: { nodes: Array<Record<string, unknown>> } }).__roadtripQaBackend;
+    if (!backend) {
+      return;
+    }
+    backend.nodes.push({
+      id: 'map-click-existing-stop',
+      trip_id: 'trip-qa-e2e',
+      poi_id: null,
+      created_by: 'user-qa-e2e',
+      updated_by: null,
+      type: 'custom',
+      title: 'QA TEST Existing map day',
+      notes: null,
+      starts_at: '2026-07-12T09:00:00.000+02:00',
+      ends_at: null,
+      timezone: 'Europe/Stockholm',
+      location: { type: 'Point', coordinates: [13.003822, 55.604981] },
+      sort_order: 10,
+      transport_mode: 'driving',
+      route_to_next: null,
+      reservation: {},
+      equipment: [],
+      facilities: {},
+      metadata: { place: 'Malmo, Sweden' },
+      version: 1,
+      created_at: '2026-06-29T10:00:00.000Z',
+      updated_at: '2026-06-29T10:00:00.000Z',
+      deleted_at: null,
+    });
+    window.sessionStorage.setItem('__roadtripQaBackendState', JSON.stringify(backend));
+  });
+
+  await page.goto('/');
+  await waitForQaConnection(page);
+  await ensureEditMode(page);
+  await page.getByTestId('day-shortcut-2026-07-12').click();
+
+  const activeNodesBefore = await page.evaluate(() => (
+    (window as unknown as { __roadtripQaBackend: { nodes: Array<{ deleted_at?: string | null }> } })
+      .__roadtripQaBackend.nodes
+      .filter((node) => node.deleted_at === null)
+      .length
+  ));
+
+  await page.getByTestId('navigation-map-canvas').first().click();
+  await expect(page.getByTestId('map-click-add-prompt').first()).toBeVisible();
+  await expect(page.getByText('Lägg till plats här?').first()).toBeVisible();
+  await page.getByTestId('map-click-cancel').first().click();
+  await expect(page.getByTestId('map-click-add-prompt')).toHaveCount(0);
+  await expect(page.getByTestId('day-new-stop-editor')).toHaveCount(0);
+
+  const activeNodesAfterCancel = await page.evaluate(() => (
+    (window as unknown as { __roadtripQaBackend: { nodes: Array<{ deleted_at?: string | null }> } })
+      .__roadtripQaBackend.nodes
+      .filter((node) => node.deleted_at === null)
+      .length
+  ));
+  expect(activeNodesAfterCancel).toBe(activeNodesBefore);
+
+  await page.getByTestId('navigation-map-canvas').first().click();
+  await page.getByTestId('map-click-confirm').first().click();
+
+  const editor = page.getByTestId('day-new-stop-editor');
+  await expect(editor).toBeVisible();
+  await expect(editor.getByPlaceholder('Titel *')).toHaveValue('Vald plats på kartan');
+  await expect(editor.getByPlaceholder('Plats eller adress')).toHaveValue('Vald plats på kartan');
+  await expect(editor.getByPlaceholder('Latitud')).toHaveValue('55.61234');
+  await expect(editor.getByPlaceholder('Longitud')).toHaveValue('13.04567');
+
+  const activeNodesAfterConfirm = await page.evaluate(() => (
+    (window as unknown as { __roadtripQaBackend: { nodes: Array<{ deleted_at?: string | null }> } })
+      .__roadtripQaBackend.nodes
+      .filter((node) => node.deleted_at === null)
+      .length
+  ));
+  expect(activeNodesAfterConfirm).toBe(activeNodesBefore);
 });
 
 test('Ny reseplan confirms local reset without claiming cloud deletion', async ({ page }) => {

@@ -3,7 +3,7 @@ import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { NavigationMap } from '@/components/map/NavigationMap';
 import DayCard from '@/components/planning/DayCard';
-import type { DayChecklistItem, DayPlan, ItineraryNode, RouteSummary } from '@/models';
+import type { Coordinates, DayChecklistItem, DayPlan, ItineraryNode, RouteSummary } from '@/models';
 import type { GooglePlace } from '@/services/google/googlePlaces';
 import type { ActiveInlineEdit, InlineFieldKey, InlineFieldValue } from '@/services/planning/inlineEdit';
 import { buildPlanningStatus, type PlanningStatusItem } from '@/services/planning/planningStatus';
@@ -30,6 +30,7 @@ type DaysWorkspaceProps = {
   isMobile: boolean;
   itineraryNodesLength: number;
   packingDraft: string;
+  pendingAddLocation: Coordinates | null;
   plannerSearchText: string;
   renderDayPlaceSearch: (dayKey: string) => React.ReactNode;
   renderPlannerInlineEditor: (mode: 'edit' | 'new') => React.ReactNode;
@@ -45,14 +46,17 @@ type DaysWorkspaceProps = {
   onAddPackingItem: (dayPlan: DayPlan) => Promise<void>;
   onAddPlaceholderAfterStop: (node: ItineraryNode) => void;
   onCalculateRoute: () => void;
+  onCancelPendingAddLocation: () => void;
   onCancelCoordinateSearch: () => void;
   onChangeCoordinateSearchQuery: (text: string) => void;
   onClearInlineEdit: () => void;
+  onConfirmPendingAddLocation: () => void;
   onGoToRoute: () => void;
   onGoToTools: () => void;
   onInlineDraftChange: (changed: boolean) => void;
   onMoveStop: (nodeId: string, direction: -1 | 1) => Promise<void>;
   onMoveStopToDay: (nodeId: string, targetDayKey: string) => Promise<void>;
+  onMapPress: (coordinates: Coordinates) => void;
   onRemoveStop: (nodeId: string) => Promise<void>;
   onRunChecklistAction: (dayPlan: DayPlan, item: DayChecklistItem) => void;
   onSaveInlineField: (node: ItineraryNode, field: InlineFieldKey, value: InlineFieldValue) => Promise<void>;
@@ -91,6 +95,7 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
     isMobile,
     itineraryNodesLength,
     packingDraft,
+    pendingAddLocation,
     plannerSearchText,
     renderDayPlaceSearch,
     renderPlannerInlineEditor,
@@ -106,14 +111,17 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
     onAddPackingItem,
     onAddPlaceholderAfterStop,
     onCalculateRoute,
+    onCancelPendingAddLocation,
     onCancelCoordinateSearch,
     onChangeCoordinateSearchQuery,
     onClearInlineEdit,
+    onConfirmPendingAddLocation,
     onGoToRoute,
     onGoToTools,
     onInlineDraftChange,
     onMoveStop,
     onMoveStopToDay,
+    onMapPress,
     onRemoveStop,
     onRunChecklistAction,
     onSaveInlineField,
@@ -378,7 +386,16 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
             </Pressable>
           </View>
           <View testID="center-mobile-map" style={[styles.contextMapShell, styles.mobileMapContextTall]}>
-            <NavigationMap nodes={selectedDayPlan.nodes} activeRoute={routeForMap} followUser={false} compact />
+            <NavigationMap
+              nodes={selectedDayPlan.nodes}
+              activeRoute={routeForMap}
+              followUser={false}
+              compact
+              pendingAddLocation={pendingAddLocation}
+              onCancelPendingAddLocation={onCancelPendingAddLocation}
+              onConfirmPendingAddLocation={onConfirmPendingAddLocation}
+              onMapPress={onMapPress}
+            />
           </View>
         </View>
       ) : null}

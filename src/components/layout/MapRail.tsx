@@ -1,7 +1,7 @@
 import { Pressable, Text, View } from 'react-native';
 
 import { NavigationMap } from '@/components/map/NavigationMap';
-import type { DayPlan, ItineraryNode, RouteSummary } from '@/models';
+import type { Coordinates, DayPlan, ItineraryNode, RouteSummary } from '@/models';
 import type { AppView } from './workspaceTypes';
 
 type MapRailProps = {
@@ -12,9 +12,13 @@ type MapRailProps = {
   formatDuration: (seconds: number) => string;
   missingCoordinateCount: number;
   mapExpanded: boolean;
+  pendingAddLocation: Coordinates | null;
   selectedDayPlan: DayPlan | null;
   styles: any;
+  onCancelPendingAddLocation: () => void;
+  onConfirmPendingAddLocation: () => void;
   onGoToView: (view: AppView) => void;
+  onMapPress: (coordinates: Coordinates) => void;
   onToggleMapExpanded: () => void;
 };
 
@@ -26,9 +30,13 @@ export function MapRail({
   formatDuration,
   missingCoordinateCount,
   mapExpanded,
+  pendingAddLocation,
   selectedDayPlan,
   styles,
+  onCancelPendingAddLocation,
+  onConfirmPendingAddLocation,
   onGoToView,
+  onMapPress,
   onToggleMapExpanded,
 }: MapRailProps) {
   const mapNodes = activeView === 'days' && selectedDayPlan ? selectedDayPlan.nodes : displayedNodes;
@@ -60,7 +68,16 @@ export function MapRail({
           </View>
         </View>
         <View testID="primary-map-surface" style={[styles.contextMapShell, mapExpanded && styles.contextMapShellExpanded]}>
-          <NavigationMap nodes={mapNodes} activeRoute={activeRoute} followUser={false} compact />
+          <NavigationMap
+            nodes={mapNodes}
+            activeRoute={activeRoute}
+            followUser={false}
+            compact
+            pendingAddLocation={pendingAddLocation}
+            onCancelPendingAddLocation={onCancelPendingAddLocation}
+            onConfirmPendingAddLocation={onConfirmPendingAddLocation}
+            onMapPress={onMapPress}
+          />
         </View>
       </View>
       <View style={styles.contextPanel}>

@@ -15,7 +15,11 @@ type NavigationMapProps = {
   activeRoute?: RouteSummary | null;
   followUser?: boolean;
   compact?: boolean;
+  pendingAddLocation?: Coordinates | null;
   onUserLocationChange?: (coordinates: Coordinates) => void;
+  onMapPress?: (coordinates: Coordinates) => void;
+  onCancelPendingAddLocation?: () => void;
+  onConfirmPendingAddLocation?: () => void;
 };
 
 type GoogleMapsNamespace = {
@@ -26,6 +30,7 @@ type GoogleMapsNamespace = {
 };
 
 type GoogleMapInstance = {
+  addListener: (eventName: string, handler: (event: GoogleMapMouseEvent) => void) => GoogleMapsListener;
   setCenter: (coordinates: { lat: number; lng: number }) => void;
   setZoom: (zoom: number) => void;
   fitBounds: (bounds: GoogleLatLngBounds, padding?: number) => void;
@@ -43,6 +48,17 @@ type GoogleLatLngBounds = {
   extend: (coordinates: { lat: number; lng: number }) => void;
 };
 
+type GoogleMapsListener = {
+  remove: () => void;
+};
+
+type GoogleMapMouseEvent = {
+  latLng?: {
+    lat: () => number;
+    lng: () => number;
+  };
+};
+
 declare global {
   interface Window {
     google?: { maps?: GoogleMapsNamespace };
@@ -52,12 +68,22 @@ declare global {
 
 const googleMapsApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
 
-export function NavigationMap({ nodes, activeRoute, compact = false }: NavigationMapProps) {
+export function NavigationMap({
+  nodes,
+  activeRoute,
+  compact = false,
+  pendingAddLocation,
+  onMapPress,
+  onCancelPendingAddLocation,
+  onConfirmPendingAddLocation,
+}: NavigationMapProps) {
   const mapElementRef = useRef<HTMLElement | null>(null);
   const mapRef = useRef<GoogleMapInstance | null>(null);
   const markerRefs = useRef<GoogleMarkerInstance[]>([]);
   const routePolylineRef = useRef<GooglePolylineInstance | null>(null);
   const routeLabelRefs = useRef<GoogleMarkerInstance[]>([]);
+  const pendingMarkerRef = useRef<GoogleMarkerInstance | null>(null);
+  const mapClickListenerRef = useRef<GoogleMapsListener | null>(null);
   const [loadState, setLoadState] = useState<'idle' | 'loading' | 'ready' | 'missing-key' | 'error'>(
     googleMapsApiKey ? 'idle' : 'missing-key',
   );
@@ -87,11 +113,22 @@ export function NavigationMap({ nodes, activeRoute, compact = false }: Navigatio
             mapTypeControl: false,
             streetViewControl: false,
             fullscreenControl: false,
+            clickableIcons: false,
+            draggableCursor: onMapPress ? 'crosshair' : undefined,
           });
         }
 
         ensureMapLabelStyles();
         applyViewport(mapRef.current, maps, markers, routePath);
+        mapClickListenerRef.current?.remove();
+        mapClickListenerRef.current = onMapPress
+          ? mapRef.current.addListener('click', (event) => {
+              const coordinates = coordinatesFromMapEvent(event);
+              if (coordinates) {
+                onMapPress(coordinates);
+              }
+            })
+          : null;
         routePolylineRef.current?.setMap(null);
         routePolylineRef.current = routePath.length > 1
           ? new maps.Polyline({
@@ -124,6 +161,16 @@ export function NavigationMap({ nodes, activeRoute, compact = false }: Navigatio
           icon: transparentMarkerIcon,
           zIndex: 20,
         }));
+        pendingMarkerRef.current?.setMap(null);
+        pendingMarkerRef.current = pendingAddLocation
+          ? new maps.Marker({
+              position: toLatLng(pendingAddLocation),
+              map: mapRef.current,
+              title: 'Vald plats',
+              label: '+',
+              zIndex: 30,
+            })
+          : null;
         setLoadState('ready');
       })
       .catch(() => {
@@ -135,13 +182,17 @@ export function NavigationMap({ nodes, activeRoute, compact = false }: Navigatio
     return () => {
       cancelled = true;
     };
-  }, [compact, markers, routeLabels, routePath, viewport]);
+  }, [compact, markers, onMapPress, pendingAddLocation, routeLabels, routePath, viewport]);
 
   useEffect(() => () => {
     markerRefs.current.forEach((marker) => marker.setMap(null));
     markerRefs.current = [];
     routeLabelRefs.current.forEach((marker) => marker.setMap(null));
     routeLabelRefs.current = [];
+    pendingMarkerRef.current?.setMap(null);
+    pendingMarkerRef.current = null;
+    mapClickListenerRef.current?.remove();
+    mapClickListenerRef.current = null;
     routePolylineRef.current?.setMap(null);
     routePolylineRef.current = null;
   }, []);
@@ -156,7 +207,7 @@ export function NavigationMap({ nodes, activeRoute, compact = false }: Navigatio
 
   return (
     <View style={[styles.container, compact && styles.compactContainer]}>
-      <View ref={mapElementRef as never} style={[styles.map, compact && styles.compactMap]} />
+      <View testID="navigation-map-canvas" ref={mapElementRef as never} style={[styles.map, compact && styles.compactMap]} />
       {loadState !== 'ready' ? (
         <View style={styles.loadingOverlay}>
           <Text style={styles.loadingText}>Laddar karta...</Text>
@@ -166,6 +217,32 @@ export function NavigationMap({ nodes, activeRoute, compact = false }: Navigatio
         <View style={styles.emptyOverlay}>
           <Text style={styles.emptyTitle}>Saknar koordinater för kartvisning</Text>
           <Text style={styles.emptyText}>Lägg till eller uppdatera kartpositioner för stoppen.</Text>
+        </View>
+      ) : null}
+      {loadState === 'ready' && pendingAddLocation ? (
+        <View testID="map-click-add-prompt" style={styles.pendingAddOverlay}>
+          <Text style={styles.pendingAddTitle}>Lägg till plats här?</Text>
+          <Text style={styles.pendingAddText}>
+            Vald plats på kartan · {formatCoordinate(pendingAddLocation.latitude)}, {formatCoordinate(pendingAddLocation.longitude)}
+          </Text>
+          <View style={styles.pendingAddActions}>
+            <Text
+              testID="map-click-cancel"
+              accessibilityRole="button"
+              onPress={onCancelPendingAddLocation}
+              style={styles.pendingAddSecondary}
+            >
+              Avbryt
+            </Text>
+            <Text
+              testID="map-click-confirm"
+              accessibilityRole="button"
+              onPress={onConfirmPendingAddLocation}
+              style={styles.pendingAddPrimary}
+            >
+              Lägg till stopp
+            </Text>
+          </View>
         </View>
       ) : null}
     </View>
@@ -249,6 +326,30 @@ const transparentMarkerIcon = {
   url: 'data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%221%22%20height%3D%221%22%3E%3C/svg%3E',
   scaledSize: { width: 1, height: 1 },
 };
+
+function coordinatesFromMapEvent(event: GoogleMapMouseEvent): Coordinates | null {
+  const latitude = event.latLng?.lat();
+  const longitude = event.latLng?.lng();
+  const coordinates = { latitude, longitude };
+  return isValidCoordinate(coordinates) ? coordinates : null;
+}
+
+function isValidCoordinate(coordinates: { latitude?: number | undefined; longitude?: number | undefined }): coordinates is Coordinates {
+  return Boolean(
+    Number.isFinite(coordinates.latitude)
+      && Number.isFinite(coordinates.longitude)
+      && coordinates.latitude !== undefined
+      && coordinates.latitude >= -90
+      && coordinates.latitude <= 90
+      && coordinates.longitude !== undefined
+      && coordinates.longitude >= -180
+      && coordinates.longitude <= 180,
+  );
+}
+
+function formatCoordinate(value: number): string {
+  return value.toFixed(5);
+}
 
 function applyViewport(map: GoogleMapInstance, maps: GoogleMapsNamespace, markers: MapMarkerData[], routePath: Coordinates[]) {
   const viewport = calculateMapViewport(markers);
@@ -334,6 +435,62 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     marginTop: 3,
     textAlign: 'center',
+  },
+  pendingAddOverlay: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    borderWidth: 1,
+    borderColor: 'rgba(15,118,110,0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    shadowColor: '#0a2540',
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+  },
+  pendingAddTitle: {
+    color: '#0a2540',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  pendingAddText: {
+    color: '#425466',
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 17,
+    marginTop: 3,
+  },
+  pendingAddActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 10,
+  },
+  pendingAddPrimary: {
+    overflow: 'hidden',
+    borderRadius: 999,
+    backgroundColor: '#0f766e',
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '900',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  pendingAddSecondary: {
+    overflow: 'hidden',
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#d7e1ea',
+    backgroundColor: '#ffffff',
+    color: '#0a2540',
+    fontSize: 12,
+    fontWeight: '900',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   fallback: {
     flex: 1,

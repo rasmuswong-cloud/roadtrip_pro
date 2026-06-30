@@ -16,7 +16,11 @@ type NavigationMapProps = {
   activeRoute?: RouteSummary | null;
   followUser?: boolean;
   compact?: boolean;
+  pendingAddLocation?: Coordinates | null;
   onUserLocationChange?: (coordinates: Coordinates) => void;
+  onMapPress?: (coordinates: Coordinates) => void;
+  onCancelPendingAddLocation?: () => void;
+  onConfirmPendingAddLocation?: () => void;
 };
 
 export function NavigationMap({

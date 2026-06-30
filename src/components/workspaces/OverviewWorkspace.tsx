@@ -2,7 +2,7 @@ import { Pressable, Text, View } from 'react-native';
 
 import { NavigationMap } from '@/components/map/NavigationMap';
 import type { AppView } from '@/components/layout/workspaceTypes';
-import type { ItineraryNode, RouteSummary } from '@/models';
+import type { Coordinates, ItineraryNode, RouteSummary } from '@/models';
 import type { TripReadiness } from '@/services/planning/tripReadiness';
 import { DayInsight, OverviewFocusCard, SectionTitle, type WorkspaceStyles } from './WorkspaceBits';
 
@@ -20,10 +20,14 @@ type OverviewWorkspaceProps = {
   isMobile: boolean;
   lastRouteStop: ItineraryNode | null;
   missingCoordinateCount: number;
+  pendingAddLocation: Coordinates | null;
   styles: WorkspaceStyles;
   totalSpend: number;
   tripReadiness: TripReadiness;
+  onCancelPendingAddLocation: () => void;
+  onConfirmPendingAddLocation: () => void;
   onGoToView: (view: AppView) => void;
+  onMapPress: (coordinates: Coordinates) => void;
 };
 
 export function OverviewWorkspace({
@@ -40,10 +44,14 @@ export function OverviewWorkspace({
   isMobile,
   lastRouteStop,
   missingCoordinateCount,
+  pendingAddLocation,
   styles,
   totalSpend,
   tripReadiness,
+  onCancelPendingAddLocation,
+  onConfirmPendingAddLocation,
   onGoToView,
+  onMapPress,
 }: OverviewWorkspaceProps) {
   const routeForMap = activeRoute.provider === 'google_routes' && activeRoute.geometry ? activeRoute : null;
   const primaryActions = [
@@ -147,7 +155,16 @@ export function OverviewWorkspace({
         </View>
         {isMobile ? (
           <View testID="center-mobile-map" style={styles.overviewMapShell}>
-            <NavigationMap nodes={displayedNodes} activeRoute={routeForMap} followUser={false} compact />
+            <NavigationMap
+              nodes={displayedNodes}
+              activeRoute={routeForMap}
+              followUser={false}
+              compact
+              pendingAddLocation={pendingAddLocation}
+              onCancelPendingAddLocation={onCancelPendingAddLocation}
+              onConfirmPendingAddLocation={onConfirmPendingAddLocation}
+              onMapPress={onMapPress}
+            />
           </View>
         ) : (
           <View testID="overview-center-summary" style={styles.overviewRouteSummaryGrid}>

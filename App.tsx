@@ -24,7 +24,7 @@ import { RouteWorkspace } from '@/components/workspaces/RouteWorkspace';
 import { ToolsWorkspace } from '@/components/workspaces/ToolsWorkspace';
 import { SectionTitle } from '@/components/workspaces/WorkspaceBits';
 import { reseplanrareIdeaPlaces, reseplanrareSeedRows, type ReseplanrareSeedRow } from '@/data/reseplanrareSeed';
-import type { BudgetCategories, BudgetSummary, DayChecklistItem, DayInsightSummary, DayPlan, Expense, ItineraryNode, ItineraryNodeType, Poi, RouteSummary, Trip, TripMember } from '@/models';
+import type { BudgetCategories, BudgetSummary, Coordinates, DayChecklistItem, DayInsightSummary, DayPlan, Expense, ItineraryNode, ItineraryNodeType, Poi, RouteSummary, Trip, TripMember } from '@/models';
 import { getCurrentUser, getOrCreateAnonymousUser, sendMagicLink, signOut } from '@/services/auth/authService';
 import { applyConfirmedMutationPlan } from '@/services/ai/applyMutationPlan';
 import { parseItineraryCommand } from '@/services/ai/agent';
@@ -438,6 +438,7 @@ export default function App() {
   const [latestAiPlan, setLatestAiPlan] = useState<ItineraryMutationPlan | null>(null);
   const [selectedPlannerNodeId, setSelectedPlannerNodeId] = useState<string | null>(null);
   const [draftPlannerDayKey, setDraftPlannerDayKey] = useState<string | null>(null);
+  const [pendingMapAddLocation, setPendingMapAddLocation] = useState<Coordinates | null>(null);
   const [plannerTitle, setPlannerTitle] = useState('');
   const [plannerType, setPlannerType] = useState<ItineraryNodeType>('custom');
   const [plannerPlace, setPlannerPlace] = useState('');
@@ -652,6 +653,7 @@ export default function App() {
     setDraftPlannerDayKey(null);
     setPlannerSearchText('');
     setSelectedDayKey(null);
+    setPendingMapAddLocation(null);
     setPackingDraftByDay({});
     setCalculatedRoute(null);
     setRouteCalculationMessage(null);
@@ -1055,6 +1057,7 @@ export default function App() {
     setExploreNotes(localTripImportOffer.exploreNotes);
     setExplorePlaces(localTripImportOffer.explorePlaces);
     setLocalTripImportOffer(null);
+    setPendingMapAddLocation(null);
     setStatusMessage('Visar lokal resa. Den är inte kopierad till Supabase ännu.');
   }
 
@@ -1087,6 +1090,7 @@ export default function App() {
       setGeneratedShareCode('');
       setGeneratedShareLink('');
       setTripMembers([]);
+      setPendingMapAddLocation(null);
       setStatusMessage('Utloggad.');
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
@@ -1935,13 +1939,50 @@ export default function App() {
     setPlannerNotes('');
   }
 
-  function startNewPlannerStep(dayKey: string) {
+  function startNewPlannerStep(dayKey: string, prefill?: { coordinates?: Coordinates; title?: string; place?: string }) {
     clearPlannerEditor();
     setDraftPlannerDayKey(dayKey);
     setSelectedDayKey(dayKey);
     setPlannerDate(dayKey === 'unscheduled' ? '' : dayKey);
-    setShowPlannerTechnicalDetails(false);
+    setPlannerTitle(prefill?.title ?? '');
+    setPlannerPlace(prefill?.place ?? '');
+    setPlannerLatitude(prefill?.coordinates ? String(prefill.coordinates.latitude) : '');
+    setPlannerLongitude(prefill?.coordinates ? String(prefill.coordinates.longitude) : '');
+    setShowPlannerTechnicalDetails(Boolean(prefill?.coordinates));
     setStatusMessage('Fyll i det nya steget direkt i dagen och tryck Spara steg.');
+  }
+
+  function handleMapPress(coordinates: Coordinates) {
+    if (isDemoMode) {
+      setStatusMessage('Tryck Redigera innan du lägger till stopp från kartan.');
+      return;
+    }
+
+    setPendingMapAddLocation(coordinates);
+    setStatusMessage('Vald plats på kartan. Bekräfta för att lägga till stopp.');
+  }
+
+  function cancelPendingMapAddLocation() {
+    setPendingMapAddLocation(null);
+    setStatusMessage('Kartval avbrutet. Inget stopp sparades.');
+  }
+
+  function confirmPendingMapAddLocation() {
+    if (!pendingMapAddLocation) {
+      return;
+    }
+
+    const targetDayKey = selectedDayPlan?.key ?? selectedDayKey ?? visibleDayPlans.find((dayPlan) => dayPlan.key !== 'unscheduled')?.key ?? 'unscheduled';
+    const coordinates = pendingMapAddLocation;
+    setPendingMapAddLocation(null);
+    setPlannerSearchText('');
+    startNewPlannerStep(targetDayKey, {
+      coordinates,
+      title: 'Vald plats på kartan',
+      place: 'Vald plats på kartan',
+    });
+    goToView('days');
+    setStatusMessage('Vald plats är förifylld. Kontrollera dag, titel och detaljer innan du sparar.');
   }
 
   function addManualDay(dayKeyInput: string) {
@@ -3162,6 +3203,7 @@ export default function App() {
                 isLoading={isLoading}
                 isRouteCalculating={isRouteCalculating}
                 isMobile={isMobile}
+                pendingAddLocation={pendingMapAddLocation}
                 placeholderSkippedCount={unresolvedPlaceholderCount}
                 routeCalculationMessage={routeCalculationMessage}
                 routeIncludedStopCount={activeCalculatedRoute?.includedStopCount ?? routableStopCount}
@@ -3171,9 +3213,12 @@ export default function App() {
                 styles={styles}
                 tripName={demoTrip.name}
                 onCalculateRoute={() => void calculateRouteFromSavedStops()}
+                onCancelPendingAddLocation={cancelPendingMapAddLocation}
+                onConfirmPendingAddLocation={confirmPendingMapAddLocation}
                 onSetFuelConsumptionText={setFuelConsumptionText}
                 onSetFuelPriceText={setFuelPriceText}
                 onGoToDays={() => goToView('days')}
+                onMapPress={handleMapPress}
               />
               ) : null}
 
@@ -3192,10 +3237,14 @@ export default function App() {
                 isMobile={isMobile}
                 lastRouteStop={lastRouteStop}
                 missingCoordinateCount={missingCoordinateCount}
+                pendingAddLocation={pendingMapAddLocation}
                 styles={styles}
                 totalSpend={totalSpend}
                 tripReadiness={tripReadiness}
+                onCancelPendingAddLocation={cancelPendingMapAddLocation}
+                onConfirmPendingAddLocation={confirmPendingMapAddLocation}
                 onGoToView={goToView}
+                onMapPress={handleMapPress}
               />
               ) : null}
 
@@ -3235,6 +3284,7 @@ export default function App() {
                 isMobile={isMobile}
                 itineraryNodesLength={itineraryNodes.length}
                 packingDraft={selectedDayPlan ? packingDraftByDay[selectedDayPlan.key] ?? '' : ''}
+                pendingAddLocation={pendingMapAddLocation}
                 plannerSearchText={plannerSearchText}
                 renderDayPlaceSearch={renderDayPlaceSearch}
                 renderPlannerInlineEditor={renderPlannerInlineEditor}
@@ -3250,14 +3300,17 @@ export default function App() {
                 onAddPlaceholderAfterStop={(node) => void addPlaceholderAfterStop(node)}
                 onAddPackingItem={addPackingItem}
                 onCalculateRoute={() => void calculateRouteFromSavedStops()}
+                onCancelPendingAddLocation={cancelPendingMapAddLocation}
                 onCancelCoordinateSearch={cancelCoordinateSearch}
                 onChangeCoordinateSearchQuery={setCoordinateSearchQuery}
                 onClearInlineEdit={clearInlineEdit}
+                onConfirmPendingAddLocation={confirmPendingMapAddLocation}
                 onGoToRoute={() => goToView('route')}
                 onGoToTools={() => goToView('tools')}
                 onInlineDraftChange={setActiveInlineDraftChanged}
                 onMoveStop={moveStop}
                 onMoveStopToDay={moveStopToDay}
+                onMapPress={handleMapPress}
                 onRemoveStop={removeStop}
                 onRunChecklistAction={runChecklistAction}
                 onSaveInlineField={saveInlineField}
@@ -3285,9 +3338,13 @@ export default function App() {
                 formatDuration={formatDuration}
                 missingCoordinateCount={missingCoordinateCount}
                 mapExpanded={mapExpanded}
+                pendingAddLocation={pendingMapAddLocation}
                 selectedDayPlan={selectedDayPlan}
                 styles={styles}
+                onCancelPendingAddLocation={cancelPendingMapAddLocation}
+                onConfirmPendingAddLocation={confirmPendingMapAddLocation}
                 onGoToView={goToView}
+                onMapPress={handleMapPress}
                 onToggleMapExpanded={() => setMapExpanded((current) => !current)}
               />
             ) : null}

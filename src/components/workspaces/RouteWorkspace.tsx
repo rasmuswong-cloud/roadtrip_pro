@@ -1,7 +1,7 @@
 import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { NavigationMap } from '@/components/map/NavigationMap';
-import type { ItineraryNode, RouteSummary } from '@/models';
+import type { Coordinates, ItineraryNode, RouteSummary } from '@/models';
 import type { FuelEstimate } from '@/services/routing/fuelEstimate';
 import { Metric, SectionTitle, type WorkspaceStyles } from './WorkspaceBits';
 
@@ -20,6 +20,7 @@ type RouteWorkspaceProps = {
   isRouteCalculating: boolean;
   isMobile: boolean;
   missingCoordinateCount: number;
+  pendingAddLocation: Coordinates | null;
   placeholderSkippedCount: number;
   routeCalculationMessage: string | null;
   routeIncludedStopCount: number;
@@ -28,7 +29,10 @@ type RouteWorkspaceProps = {
   styles: WorkspaceStyles;
   tripName: string;
   onCalculateRoute: () => void;
+  onCancelPendingAddLocation: () => void;
+  onConfirmPendingAddLocation: () => void;
   onGoToDays: () => void;
+  onMapPress: (coordinates: Coordinates) => void;
   onSetFuelConsumptionText: (value: string) => void;
   onSetFuelPriceText: (value: string) => void;
 };
@@ -48,6 +52,7 @@ export function RouteWorkspace({
   isRouteCalculating,
   isMobile,
   missingCoordinateCount,
+  pendingAddLocation,
   placeholderSkippedCount,
   routeCalculationMessage,
   routeIncludedStopCount,
@@ -56,7 +61,10 @@ export function RouteWorkspace({
   styles,
   tripName,
   onCalculateRoute,
+  onCancelPendingAddLocation,
+  onConfirmPendingAddLocation,
   onGoToDays,
+  onMapPress,
   onSetFuelConsumptionText,
   onSetFuelPriceText,
 }: RouteWorkspaceProps) {
@@ -112,7 +120,15 @@ export function RouteWorkspace({
         </View>
         {isMobile ? (
           <View testID="center-mobile-map" style={[styles.mapShell, styles.mapShellMobile]}>
-            <NavigationMap nodes={displayedNodes} activeRoute={routeForMap} followUser={false} />
+            <NavigationMap
+              nodes={displayedNodes}
+              activeRoute={routeForMap}
+              followUser={false}
+              pendingAddLocation={pendingAddLocation}
+              onCancelPendingAddLocation={onCancelPendingAddLocation}
+              onConfirmPendingAddLocation={onConfirmPendingAddLocation}
+              onMapPress={onMapPress}
+            />
             <View style={styles.mapOverlayPanelMobile}>
               <Text style={styles.mapOverlayKicker}>Aktuell plan</Text>
               <Text style={styles.mapOverlayTitle}>{tripName}</Text>
