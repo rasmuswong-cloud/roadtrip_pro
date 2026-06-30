@@ -1,4 +1,4 @@
-import type { Expense, ItineraryNode, Trip } from '@/models';
+import type { Expense, ItineraryNode, Trip, TripMember, TripRole } from '@/models';
 import { supabase } from '@/services/supabaseClient';
 import { expenseFromRow, expenseToRow, itineraryNodeFromRow, itineraryNodeToRow, tripFromRow, tripToRow } from './mappers';
 import type { ExpenseRow, ItineraryNodeRow, TripRow } from './rows';
@@ -7,6 +7,7 @@ type TripMemberRow = {
   trip_id: string;
   user_id: string;
   role: 'owner' | 'editor' | 'viewer';
+  joined_at?: string;
 };
 
 export async function listTrips(): Promise<Trip[]> {
@@ -98,6 +99,25 @@ export async function joinTripByShareCode(code: string): Promise<Trip> {
   }
 
   return tripFromRow(data as TripRow);
+}
+
+export async function listTripMembers(tripId: string): Promise<TripMember[]> {
+  const { data, error } = await supabase
+    .from('trip_members')
+    .select('trip_id, user_id, role, joined_at')
+    .eq('trip_id', tripId)
+    .order('joined_at', { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  return ((data ?? []) as TripMemberRow[]).map((row) => ({
+    tripId: row.trip_id,
+    userId: row.user_id,
+    role: row.role as TripRole,
+    joinedAt: row.joined_at ?? '',
+  }));
 }
 
 async function ensureTripOwnerMembership(tripId: string, userId: string): Promise<TripMemberRow> {

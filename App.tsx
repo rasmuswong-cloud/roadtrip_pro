@@ -24,7 +24,7 @@ import { RouteWorkspace } from '@/components/workspaces/RouteWorkspace';
 import { ToolsWorkspace } from '@/components/workspaces/ToolsWorkspace';
 import { SectionTitle } from '@/components/workspaces/WorkspaceBits';
 import { reseplanrareIdeaPlaces, reseplanrareSeedRows, type ReseplanrareSeedRow } from '@/data/reseplanrareSeed';
-import type { BudgetCategories, BudgetSummary, DayChecklistItem, DayInsightSummary, DayPlan, Expense, ItineraryNode, ItineraryNodeType, Poi, RouteSummary, Trip } from '@/models';
+import type { BudgetCategories, BudgetSummary, DayChecklistItem, DayInsightSummary, DayPlan, Expense, ItineraryNode, ItineraryNodeType, Poi, RouteSummary, Trip, TripMember } from '@/models';
 import { getCurrentUser, getOrCreateAnonymousUser, sendMagicLink, signOut } from '@/services/auth/authService';
 import { applyConfirmedMutationPlan } from '@/services/ai/applyMutationPlan';
 import { parseItineraryCommand } from '@/services/ai/agent';
@@ -46,6 +46,7 @@ import {
   ensureFirstTrip,
   joinTripByShareCode,
   listItineraryNodes,
+  listTripMembers,
   moveItineraryNode,
   upsertItineraryNode,
 } from '@/services/database/tripRepository';
@@ -120,6 +121,7 @@ import { buildTripReadiness } from '@/services/planning/tripReadiness';
 import { buildTripQualityCounts } from '@/services/planning/tripQuality';
 import { estimateRouteSummary } from '@/services/routing/routeEstimate';
 import { getSupabaseConfigurationError } from '@/services/supabaseClient';
+import { buildShareInviteLink, normalizeShareCode, readShareCodeFromLocation } from '@/services/sharing/tripSharing';
 import { useTripStore } from '@/store/tripStore';
 import { formatDateLabel as formatSafeDateLabel, formatTimeLabel } from '@/utils/dateTimeLabels';
 import { formatDistance, formatDuration } from '@/utils/formatters';
@@ -425,6 +427,10 @@ export default function App() {
   const [email, setEmail] = useState('');
   const [shareCode, setShareCode] = useState('');
   const [generatedShareCode, setGeneratedShareCode] = useState('');
+  const [generatedShareLink, setGeneratedShareLink] = useState('');
+  const initialInviteCode = useMemo(() => readShareCodeFromLocation(), []);
+  const [pendingInviteCode, setPendingInviteCode] = useState(initialInviteCode);
+  const [tripMembers, setTripMembers] = useState<TripMember[]>([]);
   const [placeQuery, setPlaceQuery] = useState('camping nära Cortina');
   const [activePlaceDayKey, setActivePlaceDayKey] = useState<string | null>(null);
   const [placeResults, setPlaceResults] = useState<GooglePlace[]>([]);
@@ -586,7 +592,7 @@ export default function App() {
   }, [activeTripId, hasLoadedPersistentState, itineraryNodes, travelerCountText, isEditMode, exploreNotes, explorePlaces, fuelConsumptionText, fuelPriceText]);
 
   useEffect(() => {
-    void connectSupabaseTrip();
+    void connectSupabaseTrip(pendingInviteCode ? { inviteCode: pendingInviteCode } : {});
   }, []);
 
   useEffect(() => {
@@ -819,7 +825,7 @@ export default function App() {
     }
   }
 
-  async function connectSupabaseTrip(options: { syncLocalWhenCloudEmpty?: boolean } = {}) {
+  async function connectSupabaseTrip(options: { syncLocalWhenCloudEmpty?: boolean; inviteCode?: string } = {}) {
     const configurationError = getSupabaseConfigurationError();
     if (configurationError) {
       setStatusMessage(configurationError);
@@ -837,16 +843,13 @@ export default function App() {
 
       setUserId(user.id);
       await ensureUserProfile(user.id, user.email ?? 'Reseplanerare');
-      const trip = await ensureFirstTrip(user.id);
-      const [nodes, exploreItems] = await Promise.all([
-        listItineraryNodes(trip.id),
-        listTripExploreItems(trip.id),
-      ]);
-      const cleanedNodes = await cleanLoadedNodesOnline(nodes);
-      const cloudNoteItem = exploreItems.find((item) => item.itemType === 'note') ?? null;
-      const cloudExplorePlaces = exploreItems
-        .map(explorePlaceFromItem)
-        .filter((place): place is ExplorePlace => Boolean(place));
+      const invitedTrip = options.inviteCode ? await joinTripByShareCode(options.inviteCode) : null;
+      const trip = invitedTrip ?? await ensureFirstTrip(user.id);
+      const cloudState = await loadCloudTrip(trip, user.id);
+      const cleanedNodes = cloudState.nodes;
+      const exploreItems = cloudState.exploreItems;
+      const cloudNoteItem = cloudState.noteItem;
+      const cloudExplorePlaces = cloudState.explorePlaces;
       const importOffer = buildLocalTripImportOffer({
         tripId: trip.id,
         userId: user.id,
@@ -858,8 +861,15 @@ export default function App() {
       });
       const canAutoSyncLocalTrip = Boolean(options.syncLocalWhenCloudEmpty && importOffer && cleanedNodes.length === 0 && exploreItems.length === 0);
 
-      upsertTrip(trip);
-      setActiveTrip(trip.id);
+      if (invitedTrip) {
+        setPendingInviteCode('');
+        setShareCode('');
+        setLocalTripImportOffer(null);
+        markOnlineSaveSuccess();
+        setStatusMessage(`Gick med i delad resa: ${trip.name}`);
+        return;
+      }
+
       if (canAutoSyncLocalTrip && importOffer) {
         markOnlineSaveStart();
         const syncResult = await syncLocalTripOfferToSupabase(importOffer, {
@@ -879,8 +889,6 @@ export default function App() {
         return;
       }
 
-      setItineraryNodes(cleanedNodes);
-      applyLoadedExploreItems(exploreItems);
       setLocalTripImportOffer(importOffer);
       markOnlineSaveSuccess();
       if (importOffer) {
@@ -899,6 +907,34 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
+  }
+
+  async function loadCloudTrip(trip: Trip, currentUserId: string) {
+    const [nodes, exploreItems, members] = await Promise.all([
+      listItineraryNodes(trip.id),
+      listTripExploreItems(trip.id),
+      listTripMembers(trip.id),
+    ]);
+    const cleanedNodes = await cleanLoadedNodesOnline(nodes);
+    const cloudNoteItem = exploreItems.find((item) => item.itemType === 'note') ?? null;
+    const cloudExplorePlaces = exploreItems
+      .map(explorePlaceFromItem)
+      .filter((place): place is ExplorePlace => Boolean(place));
+
+    setUserId(currentUserId);
+    upsertTrip(trip);
+    setActiveTrip(trip.id);
+    setItineraryNodes(cleanedNodes);
+    applyLoadedExploreItems(exploreItems);
+    setTripMembers(members);
+
+    return {
+      nodes: cleanedNodes,
+      exploreItems,
+      noteItem: cloudNoteItem,
+      explorePlaces: cloudExplorePlaces,
+      members,
+    };
   }
 
   async function syncCurrentTripToCloud() {
@@ -1062,6 +1098,8 @@ export default function App() {
       setUserId(null);
       setActiveTrip('');
       setGeneratedShareCode('');
+      setGeneratedShareLink('');
+      setTripMembers([]);
       setStatusMessage('Utloggad.');
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
@@ -1077,12 +1115,14 @@ export default function App() {
     }
 
     setIsLoading(true);
-    setStatusMessage('Skapar delningskod...');
+    setStatusMessage('Skapar inbjudningslänk...');
 
     try {
       const code = await createTripShareCode(activeTripId);
+      const link = buildShareInviteLink(code);
       setGeneratedShareCode(code);
-      setStatusMessage(`Delningskod skapad: ${code}`);
+      setGeneratedShareLink(link);
+      setStatusMessage('Inbjudningslänk skapad. Dela den bara med personer som ska kunna redigera resan.');
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -1091,19 +1131,20 @@ export default function App() {
   }
 
   async function copyShareCode() {
-    if (!generatedShareCode) {
-      setStatusMessage('Skapa en delningskod först.');
+    const shareValue = generatedShareLink || generatedShareCode;
+    if (!shareValue) {
+      setStatusMessage('Skapa en inbjudningslänk först.');
       return;
     }
 
     try {
       if ('navigator' in globalThis && globalThis.navigator?.clipboard?.writeText) {
-        await globalThis.navigator.clipboard.writeText(generatedShareCode);
-        setStatusMessage(`Kopierade delningskod: ${generatedShareCode}`);
+        await globalThis.navigator.clipboard.writeText(shareValue);
+        setStatusMessage('Kopierade inbjudningslänken.');
         return;
       }
 
-      setStatusMessage(`Markera och kopiera koden: ${generatedShareCode}`);
+      setStatusMessage(`Markera och kopiera länken: ${shareValue}`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
     }
@@ -1129,19 +1170,12 @@ export default function App() {
 
       await ensureUserProfile(user.id, user.email ?? 'Reseplanerare');
       const trip = await joinTripByShareCode(normalizedShareCode);
-      const [nodes, exploreItems] = await Promise.all([
-        listItineraryNodes(trip.id),
-        listTripExploreItems(trip.id),
-      ]);
-      const cleanedNodes = await cleanLoadedNodesOnline(nodes);
-      setUserId(user.id);
-      upsertTrip(trip);
-      setActiveTrip(trip.id);
-      setItineraryNodes(cleanedNodes);
-      applyLoadedExploreItems(exploreItems);
+      await loadCloudTrip(trip, user.id);
       setShareCode('');
+      setPendingInviteCode('');
+      setLocalTripImportOffer(null);
       markOnlineSaveSuccess();
-      setStatusMessage(`Gick med i: ${trip.name}`);
+      setStatusMessage(`Gick med i delad resa: ${trip.name}`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -2930,30 +2964,47 @@ export default function App() {
               </View>
 
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
-                <SectionTitle title="Dela" dark={isDark} styles={styles} />
+                <SectionTitle title="Dela resa" dark={isDark} styles={styles} />
+                <Text style={[styles.itemMeta, isDark && styles.textMutedDark]}>
+                  Skapa en privat inbjudningslänk. Den som öppnar länken och är identifierad i Supabase blir editor på samma resa.
+                </Text>
                 <View style={styles.actionRow}>
-                  <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={createShareCode} disabled={isLoading}>
-                    <Text style={styles.commandButtonText}>Skapa kod</Text>
+                  <Pressable testID="create-share-link" style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={createShareCode} disabled={isLoading}>
+                    <Text style={styles.commandButtonText}>Skapa inbjudningslänk</Text>
                   </Pressable>
                   <View style={[styles.shareCodeBox, isDark && styles.shareCodeBoxDark]}>
                     <Text style={[styles.codeText, isDark && styles.textDark]} selectable>{generatedShareCode || 'Ingen kod än'}</Text>
                   </View>
-                  <Pressable style={[styles.secondaryButton, (!generatedShareCode || isLoading) && styles.disabledButton]} onPress={copyShareCode} disabled={!generatedShareCode || isLoading}>
-                    <Text style={styles.secondaryButtonText}>Kopiera</Text>
+                  <Pressable testID="copy-share-link" style={[styles.secondaryButton, ((!generatedShareLink && !generatedShareCode) || isLoading) && styles.disabledButton]} onPress={copyShareCode} disabled={(!generatedShareLink && !generatedShareCode) || isLoading}>
+                    <Text style={styles.secondaryButtonText}>Kopiera länk</Text>
                   </Pressable>
                 </View>
+                {generatedShareLink ? (
+                  <Text testID="share-invite-link" style={[styles.shareLinkText, isDark && styles.textMutedDark]} selectable numberOfLines={2}>
+                    {generatedShareLink}
+                  </Text>
+                ) : null}
                 <TextInput
                   value={shareCode}
                   onChangeText={(value) => setShareCode(normalizeShareCode(value))}
-                  placeholder="Klistra in kod"
+                  placeholder="Klistra in kod eller inbjudningslänk"
                   placeholderTextColor={isDark ? '#737373' : '#78716c'}
                   style={[styles.singleLineInput, isDark && styles.inputDark]}
                   autoCapitalize="characters"
-                  maxLength={12}
+                  testID="share-code-input"
                 />
-                <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={joinSharedTrip} disabled={isLoading}>
-                  <Text style={styles.commandButtonText}>Gå med</Text>
+                <Pressable testID="join-shared-trip" style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={joinSharedTrip} disabled={isLoading}>
+                  <Text style={styles.commandButtonText}>Gå med i delad resa</Text>
                 </Pressable>
+                <View style={styles.memberList}>
+                  <Text style={[styles.itemMetaStrong, isDark && styles.textDark]}>Medlemmar</Text>
+                  {(tripMembers.length > 0 ? tripMembers : activeTripId && userId ? [{ tripId: activeTripId, userId, role: 'owner' as const, joinedAt: '' }] : []).map((member) => (
+                    <View key={`${member.tripId}:${member.userId}`} style={styles.memberRow}>
+                      <Text style={[styles.memberName, isDark && styles.textDark]} numberOfLines={1}>{member.userId === userId ? 'Du' : member.userId}</Text>
+                      <Text style={styles.memberRole}>{member.role === 'owner' ? 'Ägare' : member.role === 'editor' ? 'Kan redigera' : 'Kan visa'}</Text>
+                    </View>
+                  ))}
+                </View>
               </View>
 
               <View style={[styles.panelSection, isDark && styles.panelDark]}>
@@ -3416,10 +3467,6 @@ function normalizeSearchText(value: string): string {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .trim();
-}
-
-function normalizeShareCode(value: string): string {
-  return value.replace(/\s+/g, '').toUpperCase();
 }
 
 function buildLocalTripSnapshot(nodes: ItineraryNode[], exploreNotes: string, explorePlaces: ExplorePlace[]) {
@@ -6598,6 +6645,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 4,
   },
+  itemMetaStrong: {
+    color: '#0a2540',
+    fontSize: 12,
+    fontWeight: '900',
+    marginTop: 4,
+  },
   nodeInfoPills: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -6754,11 +6807,45 @@ const styles = StyleSheet.create({
     borderColor: '#334155',
     backgroundColor: '#111827',
   },
+  shareLinkText: {
+    color: '#425466',
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 17,
+  },
   codeText: {
     color: '#0a2540',
     fontSize: 18,
     fontWeight: '900',
     letterSpacing: 0,
+  },
+  memberList: {
+    gap: 8,
+  },
+  memberRow: {
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e3ebf2',
+    backgroundColor: '#fbfdff',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  memberName: {
+    flex: 1,
+    color: '#0a2540',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  memberRole: {
+    color: '#0f766e',
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
   },
   commandButtonText: {
     color: '#ffffff',

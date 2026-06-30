@@ -84,6 +84,7 @@ async function installQaBackend(page: Parameters<Parameters<typeof test>[1]>[0][
       nodes: Array<Record<string, unknown>>;
       pois: Array<Record<string, unknown>>;
       exploreItems: Array<Record<string, unknown>>;
+      inviteCode?: string;
     } : {
       calls: { places: 0, nearby: 0, routes: 0 },
       trip: {
@@ -104,6 +105,7 @@ async function installQaBackend(page: Parameters<Parameters<typeof test>[1]>[0][
       nodes: [] as Array<Record<string, unknown>>,
       pois: [] as Array<Record<string, unknown>>,
       exploreItems: [] as Array<Record<string, unknown>>,
+      inviteCode: 'QA123456',
     };
 
     Object.defineProperty(window, '__roadtripQaBackend', { configurable: true, value: state });
@@ -211,7 +213,9 @@ async function installQaBackend(page: Parameters<Parameters<typeof test>[1]>[0][
       }
 
       if (path.includes('/rest/v1/trip_members')) {
-        return json({ trip_id: tripId, user_id: userId, role: 'owner' });
+        const ownerMember = { trip_id: tripId, user_id: userId, role: 'owner', joined_at: now };
+        const editorMember = { trip_id: tripId, user_id: 'partner-qa-e2e', role: 'editor', joined_at: now };
+        return method === 'GET' ? json([ownerMember, editorMember]) : json(ownerMember);
       }
 
       if (path.includes('/rest/v1/itinerary_nodes')) {
@@ -274,6 +278,19 @@ async function installQaBackend(page: Parameters<Parameters<typeof test>[1]>[0][
           persistState();
         }
         return json(ordered);
+      }
+
+      if (path.includes('/rest/v1/rpc/create_trip_invite')) {
+        state.inviteCode = 'QA123456';
+        persistState();
+        return json(state.inviteCode);
+      }
+
+      if (path.includes('/rest/v1/rpc/join_trip_by_code')) {
+        if (String(body.input_code ?? '').toUpperCase() !== 'QA123456') {
+          return json({ message: 'Invite code is invalid or expired.' }, 404);
+        }
+        return json(state.trip);
       }
 
       if (path.includes('/rest/v1/trip_explore_items')) {
@@ -570,6 +587,56 @@ test('local persisted trip can sync into empty Supabase trip and reload from clo
   await page.getByTestId('day-shortcut-2026-07-12').click();
   await expect(page.getByTestId('day-stop-card').filter({ hasText: 'Malmö' })).toBeVisible();
   await expect(page.getByTestId('day-stop-card').filter({ hasText: 'Eventhotel Ö-Cappuccino' })).toBeVisible();
+});
+
+test('sharing creates an invite link and invite URL loads the shared cloud trip', async ({ page }) => {
+  await installQaBackend(page);
+  await page.goto('/');
+  await expect(page.getByText('Alp-roadtrip')).toBeVisible();
+  await waitForQaConnection(page);
+  await ensureEditMode(page);
+
+  await page.getByTestId('sidebar-nav-tools').click();
+  await page.getByTestId('create-share-link').click();
+  await expect(page.getByTestId('share-invite-link')).toContainText('invite=QA123456');
+  await expect(page.getByText('Medlemmar')).toBeVisible();
+  await expect(page.getByText('Kan redigera')).toBeVisible();
+
+  await page.evaluate(() => {
+    const backend = (window as unknown as { __roadtripQaBackend: { nodes: Array<Record<string, unknown>> } }).__roadtripQaBackend;
+    backend.nodes.push({
+      id: 'shared-node-1',
+      trip_id: 'trip-qa-e2e',
+      poi_id: null,
+      created_by: 'user-qa-e2e',
+      updated_by: null,
+      type: 'custom',
+      title: 'QA TEST Shared stop',
+      notes: null,
+      starts_at: '2026-07-14T09:00:00.000+02:00',
+      ends_at: null,
+      timezone: 'Europe/Stockholm',
+      location: { type: 'Point', coordinates: [13.003822, 55.604981] },
+      sort_order: 10,
+      transport_mode: 'driving',
+      route_to_next: null,
+      reservation: {},
+      equipment: [],
+      facilities: {},
+      metadata: { place: 'Malmo, Sweden' },
+      version: 1,
+      created_at: '2026-06-29T10:00:00.000Z',
+      updated_at: '2026-06-29T10:00:00.000Z',
+      deleted_at: null,
+    });
+    window.sessionStorage.setItem('__roadtripQaBackendState', JSON.stringify(backend));
+  });
+
+  await page.goto('/?invite=QA123456');
+  await expect(page.getByText('Gick med i delad resa: QA TEST Trip').first()).toBeVisible({ timeout: 15_000 });
+  await page.getByTestId('day-shortcut-2026-07-14').click();
+  await expect(page.getByTestId('day-stop-card').filter({ hasText: 'QA TEST Shared stop' })).toBeVisible();
+  await expect(page.getByTestId('local-cloud-import-card')).toHaveCount(0);
 });
 
 test('connected planner can add, edit, persist, move menu, and delete QA stops', async ({ page }) => {
