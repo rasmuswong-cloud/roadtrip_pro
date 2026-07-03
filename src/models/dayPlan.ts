@@ -26,6 +26,7 @@ export type BudgetCategories = {
   activity: number;
   transport: number;
   food: number;
+  parking: number;
   other: number;
 };
 

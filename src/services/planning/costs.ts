@@ -2,6 +2,7 @@ import type { ItineraryNode } from '@/models';
 
 const rawCostKeys = ['costSek', 'cost', 'price'] as const;
 const detailedCostKeys = ['lodgingCostSek', 'activityCostSek'] as const;
+const parkingCostKeys = ['parkingCostSek', 'parkingCost'] as const;
 
 export function parseCostValue(value: unknown): number {
   if (typeof value === 'number') {
@@ -39,7 +40,7 @@ export function hasKnownCostValue(value: unknown): boolean {
 }
 
 export function hasKnownNodeCost(node: ItineraryNode): boolean {
-  return [...rawCostKeys, ...detailedCostKeys].some((key) => hasKnownCostValue(node.metadata[key]));
+  return [...rawCostKeys, ...detailedCostKeys, ...parkingCostKeys].some((key) => hasKnownCostValue(node.metadata[key]));
 }
 
 export function hasKnownDetailedNodeCost(node: ItineraryNode): boolean {
@@ -50,8 +51,29 @@ export function hasKnownRawNodeCost(node: ItineraryNode): boolean {
   return rawCostKeys.some((key) => hasKnownCostValue(node.metadata[key]));
 }
 
+export function hasKnownParkingCost(node: ItineraryNode): boolean {
+  return parkingCostKeys.some((key) => hasKnownCostValue(node.metadata[key]));
+}
+
+export function parkingCostValue(node: ItineraryNode): unknown {
+  return node.metadata.parkingCostSek ?? node.metadata.parkingCost;
+}
+
 export function formatKnownCostLabel(value: string): string {
   return parseCostValue(value) === 0 ? 'Gratis' : value;
+}
+
+export function formatParkingCostLabel(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || parseCostValue(trimmed) === 0) {
+    return 'Gratis';
+  }
+
+  return hasCurrencyText(trimmed) ? trimmed : `${trimmed} SEK`;
+}
+
+function hasCurrencyText(value: string): boolean {
+  return /[A-Za-z\u00c0-\u024f]/.test(value);
 }
 
 function parseCostPart(value: string): number {

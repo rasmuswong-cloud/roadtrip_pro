@@ -90,6 +90,23 @@ export function StopDetailsGrid({
         onSave={onSaveInlineField}
         inactiveStyle={dayCardStyles.inlineDetailField}
       />
+      <InlineEditableField
+        node={node}
+        field="parkingCost"
+        activeInlineEdit={activeInlineEdit}
+        label="Parkering"
+        placeholder="Parkeringspris"
+        isDark={isDark}
+        loading={isLoading}
+        disabled={isDemoMode || isLoading}
+        styles={styles}
+        onStart={onStartInlineEdit}
+        onCancel={onClearInlineEdit}
+        onDraftChange={onInlineDraftChange}
+        onSave={onSaveInlineField}
+        inputStyle={styles.quickCellSmall}
+        inactiveStyle={dayCardStyles.inlineDetailField}
+      />
       <InlineEditableSelect
         node={node}
         field="bookingStatus"

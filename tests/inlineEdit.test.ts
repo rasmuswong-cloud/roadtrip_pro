@@ -150,6 +150,26 @@ test('inline cost accepts zero as a saved known free cost', () => {
   assert.equal(calculateDayCost([updated]), 0);
 });
 
+test('inline parking cost accepts zero, positive values and empty clears', () => {
+  const paidParking = applyInlineFieldUpdate(node(), 'parkingCost', '120');
+
+  assert.equal(validateInlineFieldValue(node(), 'parkingCost', '0').valid, true);
+  assert.equal(paidParking.metadata.parkingCostSek, '120');
+  assert.equal(paidParking.metadata.parkingCost, undefined);
+  assert.equal(inlineFieldValue(paidParking, 'parkingCost'), '120');
+  assert.equal(displayInlineFieldValue(paidParking, 'parkingCost'), '120 SEK');
+  assert.equal(calculateDayCost([paidParking]), 220);
+
+  const freeParking = applyInlineFieldUpdate(paidParking, 'parkingCost', '0');
+  assert.equal(freeParking.metadata.parkingCostSek, '0');
+  assert.equal(displayInlineFieldValue(freeParking, 'parkingCost'), 'Gratis');
+
+  const cleared = applyInlineFieldUpdate(freeParking, 'parkingCost', '');
+  assert.equal(cleared.metadata.parkingCostSek, undefined);
+  assert.equal(cleared.metadata.parkingCost, undefined);
+  assert.equal(displayInlineFieldValue(cleared, 'parkingCost'), 'Lägg till parkeringspris');
+});
+
 test('empty inline cost still clears the cost field', () => {
   const updated = applyInlineFieldUpdate(node({ metadata: { costSek: '250' } }), 'cost', '');
 
@@ -172,6 +192,8 @@ test('invalid values are rejected before save', () => {
   assert.equal(validateInlineFieldValue(node(), 'startTime', '9').valid, false);
   assert.equal(validateInlineFieldValue(node(), 'cost', 'NaN').valid, false);
   assert.equal(validateInlineFieldValue(node(), 'cost', '-1').valid, false);
+  assert.equal(validateInlineFieldValue(node(), 'parkingCost', 'NaN').valid, false);
+  assert.equal(validateInlineFieldValue(node(), 'parkingCost', '-1').valid, false);
 });
 
 test('unchanged value does not need a server call and cancel can restore original draft', () => {

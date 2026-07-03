@@ -66,7 +66,9 @@ import {
   formatKnownCostLabel,
   hasKnownDetailedNodeCost,
   hasKnownNodeCost,
+  hasKnownParkingCost,
   hasKnownRawNodeCost,
+  parkingCostValue,
   parseCostValue,
 } from '@/services/planning/costs';
 import { dayKeyForNode as itineraryDayKeyForNode, mergeManualDayKeys, normalizeDayKey, suggestNewDayKey } from '@/services/planning/dayManagement';
@@ -468,6 +470,7 @@ export default function App() {
   const [plannerLatitude, setPlannerLatitude] = useState('');
   const [plannerLongitude, setPlannerLongitude] = useState('');
   const [plannerCost, setPlannerCost] = useState('');
+  const [plannerParkingCost, setPlannerParkingCost] = useState('');
   const [plannerHotelNote, setPlannerHotelNote] = useState('');
   const [plannerNotes, setPlannerNotes] = useState('');
   const [plannerSearchText, setPlannerSearchText] = useState('');
@@ -2042,6 +2045,7 @@ export default function App() {
     setPlannerLatitude(node.location ? String(node.location.latitude) : '');
     setPlannerLongitude(node.location ? String(node.location.longitude) : '');
     setPlannerCost(formatRawNodeCost(node));
+    setPlannerParkingCost(inlineFieldValue(node, 'parkingCost'));
     setPlannerHotelNote(formatReservation(node));
     setPlannerNotes(cleanImportedNoteLines(node.notes) ?? '');
     setStatusMessage(`Redigerar: ${node.title}`);
@@ -2059,6 +2063,7 @@ export default function App() {
     setPlannerLatitude('');
     setPlannerLongitude('');
     setPlannerCost('');
+    setPlannerParkingCost('');
     setPlannerHotelNote('');
     setPlannerNotes('');
   }
@@ -2581,6 +2586,7 @@ export default function App() {
       date: plannerDate,
       startTime: plannerTime,
       cost: plannerCost,
+      parkingCost: plannerParkingCost,
       latitude: plannerLatitude,
       longitude: plannerLongitude,
     });
@@ -2612,6 +2618,14 @@ export default function App() {
         delete nextMetadata.cost;
         delete nextMetadata.costSek;
         delete nextMetadata.price;
+      }
+
+      if (plannerParkingCost.trim()) {
+        nextMetadata.parkingCostSek = plannerParkingCost.trim().replace(',', '.');
+        delete nextMetadata.parkingCost;
+      } else {
+        delete nextMetadata.parkingCostSek;
+        delete nextMetadata.parkingCost;
       }
 
       if (plannerPlace.trim()) {
@@ -2651,6 +2665,7 @@ export default function App() {
       date: plannerDate,
       startTime: plannerTime,
       cost: plannerCost,
+      parkingCost: plannerParkingCost,
       latitude: plannerLatitude,
       longitude: plannerLongitude,
     });
@@ -2689,6 +2704,7 @@ export default function App() {
           source: 'planner',
           place: plannerPlace.trim() || null,
           cost: plannerCost.trim() ? plannerCost.trim() : null,
+          parkingCostSek: plannerParkingCost.trim() ? plannerParkingCost.trim().replace(',', '.') : null,
         },
         createdAt: now,
         updatedAt: now,
@@ -2739,6 +2755,7 @@ export default function App() {
         <View style={styles.actionRow}>
           <TextInput value={plannerPlace} onChangeText={setPlannerPlace} placeholder="Plats eller adress" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
           <TextInput value={plannerCost} onChangeText={setPlannerCost} placeholder="Kostnad" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} />
+          <TextInput value={plannerParkingCost} onChangeText={setPlannerParkingCost} placeholder="Parkeringspris" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.coordinateInput, isDark && styles.inputDark]} inputMode="decimal" />
         </View>
         <TextInput value={plannerHotelNote} onChangeText={setPlannerHotelNote} placeholder="Bokningsstatus eller referens" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.singleLineInput, isDark && styles.inputDark]} />
         <TextInput value={plannerNotes} onChangeText={setPlannerNotes} placeholder="Anteckningar" placeholderTextColor={isDark ? '#737373' : '#78716c'} style={[styles.commandInput, isDark && styles.inputDark]} multiline />
@@ -3858,6 +3875,7 @@ function buildBudgetSummary(nodes: ItineraryNode[]): BudgetSummary {
     activity: 0,
     transport: 0,
     food: 0,
+    parking: 0,
     other: 0,
   };
   let missingCostCount = 0;
@@ -3874,6 +3892,7 @@ function buildBudgetSummary(nodes: ItineraryNode[]): BudgetSummary {
     categories.activity += breakdown.activity;
     categories.transport += breakdown.transport;
     categories.food += breakdown.food;
+    categories.parking += breakdown.parking;
     categories.other += breakdown.other;
   });
 
@@ -3926,6 +3945,7 @@ function nodeCostBreakdown(node: ItineraryNode): BudgetCategories {
       activity: activityCost,
       transport: 0,
       food: 0,
+      parking: hasKnownParkingCost(node) ? parseCostValue(parkingCostValue(node)) : 0,
       other: 0,
     };
   }
@@ -3936,6 +3956,7 @@ function nodeCostBreakdown(node: ItineraryNode): BudgetCategories {
     activity: 0,
     transport: 0,
     food: 0,
+    parking: hasKnownParkingCost(node) ? parseCostValue(parkingCostValue(node)) : 0,
     other: 0,
   };
 
@@ -3947,6 +3968,7 @@ function nodeCostBreakdown(node: ItineraryNode): BudgetCategories {
   return {
     ...empty,
     [category]: rawCost,
+    parking: empty.parking,
   };
 }
 

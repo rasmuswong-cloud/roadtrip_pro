@@ -61,8 +61,28 @@ test('buildTravelBudgetCenter groups category totals and percentages', () => {
   assert.equal(categories.food?.total, 500);
   assert.equal(categories.fuel?.total, 250);
   assert.equal(categories.transport?.total, 750);
+  assert.equal(categories.parking?.total, 0);
   assert.equal(categories.other?.total, 100);
   assert.equal(categories.lodging?.percentage, 1200 / 3100);
+});
+
+test('parking cost is included in totals, per-person budget, days and category breakdown', () => {
+  const budget = buildTravelBudgetCenter([
+    node({
+      type: 'activity',
+      startsAt: '2026-06-11T12:00:00.000Z',
+      metadata: { cost: '500', parkingCostSek: '120' },
+    }),
+  ], 2);
+  const categories = Object.fromEntries(budget.categories.map((category) => [category.key, category]));
+
+  assert.equal(budget.total, 620);
+  assert.equal(budget.perPerson, 310);
+  assert.equal(budget.costItemCount, 2);
+  assert.equal(budget.days[0]?.total, 620);
+  assert.equal(categories.activity?.total, 500);
+  assert.equal(categories.parking?.total, 120);
+  assert.equal(categories.parking?.itemCount, 1);
 });
 
 test('buildTravelBudgetCenter groups per-day totals and missing counts', () => {
@@ -114,6 +134,20 @@ test('zero cost is known, counted, and not treated as missing', () => {
   assert.equal(budget.costItemCount, 2);
   assert.equal(budget.missingCostCount, 1);
   assert.equal(budget.hasRegisteredCosts, true);
+});
+
+test('zero parking cost is known free parking and empty parking does not create missing warnings', () => {
+  const freeParking = node({ type: 'activity', metadata: { cost: '250', parkingCostSek: '0' } });
+  const emptyParking = node({ type: 'activity', metadata: { cost: '100', parkingCostSek: '' } });
+  const budget = buildTravelBudgetCenter([freeParking, emptyParking], 2);
+  const categories = Object.fromEntries(budget.categories.map((category) => [category.key, category]));
+
+  assert.equal(nodeCostTotal(freeParking), 250);
+  assert.equal(shouldTrackMissingCost(freeParking), false);
+  assert.equal(shouldTrackMissingCost(emptyParking), false);
+  assert.equal(categories.parking?.total, 0);
+  assert.equal(categories.parking?.itemCount, 1);
+  assert.equal(budget.missingCostCount, 0);
 });
 
 test('invalid and missing cost values are treated as zero', () => {

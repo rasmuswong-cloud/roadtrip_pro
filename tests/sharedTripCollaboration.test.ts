@@ -87,7 +87,7 @@ test('shared trip remains active until explicitly cleared', () => {
 
 test('save operations are normalized to the active shared trip id', () => {
   const savedNode = prepareItineraryNodeForActiveTripSave(
-    node({ tripId: 'stale-personal-trip', updatedBy: 'someone-else' }),
+    node({ tripId: 'stale-personal-trip', updatedBy: 'someone-else', metadata: { parkingCostSek: '120' } }),
     'shared-trip-123',
     'editor-user',
     '2026-07-03T12:00:00.000Z',
@@ -96,6 +96,7 @@ test('save operations are normalized to the active shared trip id', () => {
   assert.equal(savedNode.tripId, 'shared-trip-123');
   assert.equal(savedNode.createdBy, 'owner-user');
   assert.equal(savedNode.updatedBy, 'editor-user');
+  assert.equal(savedNode.metadata.parkingCostSek, '120');
 });
 
 test('member and owner debug labels expose only short non-secret trip status', () => {

@@ -1,5 +1,5 @@
 import type { CurrencyCode, ItineraryNode, ItineraryNodeType } from '@/models';
-import { formatKnownCostLabel } from '@/services/planning/costs';
+import { formatKnownCostLabel, formatParkingCostLabel } from '@/services/planning/costs';
 
 export type InlineFieldKey =
   | 'title'
@@ -9,6 +9,7 @@ export type InlineFieldKey =
   | 'endTime'
   | 'type'
   | 'cost'
+  | 'parkingCost'
   | 'currency'
   | 'bookingStatus'
   | 'bookingReference'
@@ -51,6 +52,8 @@ export function inlineFieldLabel(field: InlineFieldKey): string {
       return 'typ';
     case 'cost':
       return 'kostnad';
+    case 'parkingCost':
+      return 'parkeringspris';
     case 'currency':
       return 'valuta';
     case 'bookingStatus':
@@ -80,6 +83,8 @@ export function inlineFieldValue(node: ItineraryNode, field: InlineFieldKey): st
       return node.type;
     case 'cost':
       return formatRawNodeCost(node);
+    case 'parkingCost':
+      return formatParkingNodeCost(node);
     case 'currency':
       return typeof node.metadata.currency === 'string' ? node.metadata.currency : 'SEK';
     case 'bookingStatus':
@@ -103,6 +108,8 @@ export function displayInlineFieldValue(node: ItineraryNode, field: InlineFieldK
       return value || '--:--';
     case 'cost':
       return value ? formatKnownCostLabel(value) : 'Kostnad saknas';
+    case 'parkingCost':
+      return value ? formatParkingCostLabel(value) : 'Lägg till parkeringspris';
     case 'currency':
       return value || 'SEK';
     case 'bookingStatus':
@@ -155,10 +162,10 @@ export function validateInlineFieldValue(node: ItineraryNode, field: InlineField
     return { valid: false, value, error: 'Välj en giltig bokningsstatus.' };
   }
 
-  if (field === 'cost' && value) {
+  if ((field === 'cost' || field === 'parkingCost') && value) {
     const parsed = Number(value.replace(',', '.'));
     if (!Number.isFinite(parsed) || parsed < 0) {
-      return { valid: false, value, error: 'Kostnad behöver vara 0 eller ett positivt tal.' };
+      return { valid: false, value, error: `${inlineFieldLabel(field)} behöver vara 0 eller ett positivt tal.` };
     }
   }
 
@@ -240,6 +247,16 @@ export function applyInlineFieldUpdate(node: ItineraryNode, field: InlineFieldKe
     }
   }
 
+  if (field === 'parkingCost') {
+    if (value) {
+      nextMetadata.parkingCostSek = value.replace(',', '.');
+      delete nextMetadata.parkingCost;
+    } else {
+      delete nextMetadata.parkingCostSek;
+      delete nextMetadata.parkingCost;
+    }
+  }
+
   if (field === 'currency') {
     // Currency and booking status are metadata-only fields in the current data model.
     nextMetadata.currency = value || 'SEK';
@@ -315,6 +332,19 @@ export function formatBookingStatus(value: string): string {
 
 function formatRawNodeCost(node: ItineraryNode): string {
   const cost = node.metadata.costSek ?? node.metadata.cost ?? node.metadata.price;
+  if (typeof cost === 'number') {
+    return String(cost);
+  }
+
+  if (typeof cost === 'string') {
+    return cost;
+  }
+
+  return '';
+}
+
+function formatParkingNodeCost(node: ItineraryNode): string {
+  const cost = node.metadata.parkingCostSek ?? node.metadata.parkingCost;
   if (typeof cost === 'number') {
     return String(cost);
   }

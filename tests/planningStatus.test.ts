@@ -86,7 +86,7 @@ function buildDayPlan(key: string, shortTitle: string, nodes: ItineraryNode[]): 
     shortTitle,
     nodes,
     route,
-    budget: { total: 0, categories: { lodging: 0, activity: 0, transport: 0, food: 0, other: 0 }, missingCostCount: 0, warnings: [] },
+    budget: { total: 0, categories: { lodging: 0, activity: 0, transport: 0, food: 0, parking: 0, other: 0 }, missingCostCount: 0, warnings: [] },
     summary: { dayKey: key, dayNumber: 1, startPlace: 'Start', endPlace: 'Mål', stopCount: nodes.length, lodging: 'Saknas', activityCount: 0, costSek: 0 },
     smartFlags: [],
     insight: {

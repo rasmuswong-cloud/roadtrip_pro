@@ -10,6 +10,7 @@ import {
   formatDistance,
   formatDuration,
   formatItineraryTime,
+  formatParkingCost,
   formatRawNodeCost,
   formatSek,
   nodeColor,
@@ -130,6 +131,13 @@ test('day card raw cost formatter reads imported cost metadata', () => {
   assert.equal(formatRawNodeCost(makeNode({ metadata: { price: '99' } })), '99');
   assert.equal(formatRawNodeCost(makeNode({ metadata: { cost: '0 SEK' } })), 'Gratis');
   assert.equal(formatRawNodeCost(makeNode({ metadata: {} })), '');
+});
+
+test('day card parking cost formatter shows free, SEK amounts and missing values', () => {
+  assert.equal(formatParkingCost(makeNode({ metadata: { parkingCostSek: 0 } })), 'Gratis');
+  assert.equal(formatParkingCost(makeNode({ metadata: { parkingCostSek: '120' } })), '120 SEK');
+  assert.equal(formatParkingCost(makeNode({ metadata: { parkingCost: '120 SEK' } })), '120 SEK');
+  assert.equal(formatParkingCost(makeNode({ metadata: {} })), '');
 });
 
 test('day card note helpers remove imported bookkeeping lines and compact long notes', () => {

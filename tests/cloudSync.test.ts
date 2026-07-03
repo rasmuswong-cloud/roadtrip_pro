@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import type { ItineraryNode } from '../src/models';
+import { itineraryNodeFromRow, itineraryNodeToRow } from '../src/services/database/mappers';
+import type { ItineraryNodeRow } from '../src/services/database/rows';
 import {
   buildExplorePlaceDuplicateKey,
   buildItineraryNodeDuplicateKey,
@@ -64,6 +66,40 @@ test('local imported stops convert into Supabase upsertable nodes without losing
   assert.equal(cloudNode.metadata.placeholderType, 'unknown');
   assert.equal(cloudNode.metadata.preferredDriveTimeRange, '4-6h');
   assert.equal(cloudNode.notes, 'Placeholder: Välj exakt område eller övernattning runt Como, Lugano eller Maggiore.');
+});
+
+test('itinerary node row mapping preserves parking cost metadata', () => {
+  const source = localNode({ metadata: { costSek: '500', parkingCostSek: '120' } });
+  const savedRow = itineraryNodeToRow(source);
+  const loadedRow: ItineraryNodeRow = {
+    id: source.id,
+    trip_id: source.tripId,
+    poi_id: source.poiId ?? null,
+    created_by: source.createdBy,
+    updated_by: source.updatedBy ?? null,
+    type: source.type,
+    title: source.title,
+    notes: source.notes ?? null,
+    starts_at: source.startsAt,
+    ends_at: source.endsAt,
+    timezone: source.timezone,
+    location: null,
+    sort_order: source.sortOrder,
+    transport_mode: source.transportMode,
+    route_to_next: source.routeToNext ? source.routeToNext as Record<string, unknown> : null,
+    reservation: source.reservation,
+    equipment: source.equipment,
+    facilities: source.facilities,
+    metadata: { costSek: '500', parkingCostSek: '0' },
+    version: source.version,
+    created_at: source.createdAt,
+    updated_at: source.updatedAt,
+    deleted_at: source.deletedAt,
+  };
+  const loadedNode = itineraryNodeFromRow(loadedRow);
+
+  assert.equal(savedRow.metadata?.parkingCostSek, '120');
+  assert.equal(loadedNode.metadata.parkingCostSek, '0');
 });
 
 test('local cloud sync duplicate keys match imported stops with equivalent saved cloud rows', () => {

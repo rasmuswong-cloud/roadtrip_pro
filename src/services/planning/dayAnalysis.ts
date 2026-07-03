@@ -32,6 +32,7 @@ export type PlannerDraft = {
   startTime?: string;
   endTime?: string;
   cost?: string;
+  parkingCost?: string;
   latitude?: string;
   longitude?: string;
 };
@@ -134,6 +135,10 @@ export function validatePlannerDraft(draft: PlannerDraft): PlannerValidationResu
     errors.push('Kostnad behöver vara 0 eller ett positivt tal.');
   }
 
+  if (draft.parkingCost?.trim() && !hasValidCostInput(draft.parkingCost)) {
+    errors.push('Parkeringspris behöver vara 0 eller ett positivt tal.');
+  }
+
   if (hasLatitude !== hasLongitude) {
     errors.push('Ange både latitud och longitud, eller lämna båda tomma.');
   }
@@ -216,7 +221,8 @@ export function analyzeDayWarnings(
 function nodeCostTotal(node: ItineraryNode): number {
   return parseCostValue(node.metadata.costSek ?? node.metadata.cost ?? node.metadata.price)
     + parseCostValue(node.metadata.lodgingCostSek)
-    + parseCostValue(node.metadata.activityCostSek);
+    + parseCostValue(node.metadata.activityCostSek)
+    + parseCostValue(node.metadata.parkingCostSek ?? node.metadata.parkingCost);
 }
 
 function hasIncompleteCoordinates(node: ItineraryNode): boolean {

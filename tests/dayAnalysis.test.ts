@@ -46,10 +46,10 @@ function node(overrides: Partial<ItineraryNode>): ItineraryNode {
 test('calculateDayCost sums known node costs', () => {
   const total = calculateDayCost([
     node({ metadata: { cost: '100 SEK' } }),
-    node({ metadata: { lodgingCostSek: 1200, activityCostSek: '300' } }),
+    node({ metadata: { lodgingCostSek: 1200, activityCostSek: '300', parkingCostSek: '120' } }),
   ]);
 
-  assert.equal(total, 1600);
+  assert.equal(total, 1720);
 });
 
 test('validatePlannerDraft rejects impossible calendar dates and invalid coordinates', () => {
@@ -123,6 +123,7 @@ test('zero cost validates and is not a missing-cost warning', () => {
     title: 'Free activity',
     type: 'activity',
     cost: '0',
+    parkingCost: '0',
   });
   const warnings = analyzeDayWarnings([
     node({ id: 'free-stop', title: 'Gratis aktivitet', metadata: { cost: '0' } }),
@@ -131,6 +132,23 @@ test('zero cost validates and is not a missing-cost warning', () => {
   assert.equal(validation.valid, true);
   assert.equal(calculateDayCost([node({ metadata: { cost: '0' } })]), 0);
   assert.equal(warnings.some((warning) => warning.code === 'missing_cost'), false);
+});
+
+test('empty parking cost is optional and invalid parking cost is rejected', () => {
+  const optional = validatePlannerDraft({
+    title: 'Activity',
+    type: 'activity',
+    parkingCost: '',
+  });
+  const invalid = validatePlannerDraft({
+    title: 'Activity',
+    type: 'activity',
+    parkingCost: '-1',
+  });
+
+  assert.equal(optional.valid, true);
+  assert.equal(invalid.valid, false);
+  assert.ok(invalid.errors.includes('Parkeringspris behöver vara 0 eller ett positivt tal.'));
 });
 
 test('moveNodeToDay changes date and keeps stable ordering', () => {

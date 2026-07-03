@@ -1,8 +1,11 @@
 import type { ItineraryNode, ItineraryNodeType } from '@/models';
 import {
   hasKnownDetailedNodeCost,
+  hasKnownCostValue,
   hasKnownNodeCost,
+  hasKnownParkingCost,
   hasKnownRawNodeCost,
+  parkingCostValue,
   parseCostValue,
 } from '@/services/planning/costs';
 
@@ -14,6 +17,7 @@ export type BudgetCategoryKey =
   | 'food'
   | 'fuel'
   | 'transport'
+  | 'parking'
   | 'other';
 
 export type BudgetCategorySummary = {
@@ -64,10 +68,11 @@ const categoryLabels: Record<BudgetCategoryKey, string> = {
   food: 'Mat',
   fuel: 'Bränsle',
   transport: 'Transport',
+  parking: 'Parkering',
   other: 'Övrigt',
 };
 
-const categoryOrder: BudgetCategoryKey[] = ['lodging', 'activity', 'food', 'fuel', 'transport', 'other'];
+const categoryOrder: BudgetCategoryKey[] = ['lodging', 'activity', 'food', 'fuel', 'transport', 'parking', 'other'];
 const likelyCostTypes = new Set<ItineraryNodeType>(['lodging', 'camping', 'activity', 'gastronomy', 'fuel', 'transport']);
 
 export function buildTravelBudgetCenter(nodes: ItineraryNode[], travelerCount = 2): TravelBudgetCenter {
@@ -84,18 +89,20 @@ export function buildTravelBudgetCenter(nodes: ItineraryNode[], travelerCount = 
   const missingItems: MissingCostItem[] = [];
 
   nodes.forEach((node) => {
-    const cost = nodeCostTotal(node);
-    const category = budgetCategoryForNode(node);
-    const categoryBucket = categoryTotals.get(category)!;
+    const costEntries = nodeCostEntries(node);
+    const cost = costEntries.reduce((sum, entry) => sum + entry.total, 0);
     const dayKey = dayKeyForNode(node);
     const dayBucket = dayMap.get(dayKey) ?? { nodes: [], total: 0, itemCount: 0, missingCostCount: 0 };
 
     dayBucket.nodes.push(node);
-    if (hasKnownNodeCost(node)) {
-      categoryBucket.total += cost;
-      categoryBucket.itemCount += 1;
+    if (costEntries.length > 0) {
+      costEntries.forEach((entry) => {
+        const categoryBucket = categoryTotals.get(entry.category)!;
+        categoryBucket.total += entry.total;
+        categoryBucket.itemCount += 1;
+      });
       dayBucket.total += cost;
-      dayBucket.itemCount += 1;
+      dayBucket.itemCount += costEntries.length;
     } else if (shouldTrackMissingCost(node)) {
       dayBucket.missingCostCount += 1;
       missingItems.push({
@@ -163,28 +170,41 @@ export function nodeCostBreakdown(node: ItineraryNode): Record<BudgetCategoryKey
     food: 0,
     fuel: 0,
     transport: 0,
+    parking: 0,
     other: 0,
   };
+  const entries = nodeCostEntries(node);
+
+  return entries.reduce((breakdown, entry) => ({
+    ...breakdown,
+    [entry.category]: breakdown[entry.category] + entry.total,
+  }), empty);
+}
+
+function nodeCostEntries(node: ItineraryNode): Array<{ category: BudgetCategoryKey; total: number }> {
+  const entries: Array<{ category: BudgetCategoryKey; total: number }> = [];
   const lodgingCost = parseCostValue(node.metadata.lodgingCostSek);
   const activityCost = parseCostValue(node.metadata.activityCostSek);
 
   if (hasKnownDetailedNodeCost(node)) {
-    return {
-      ...empty,
-      lodging: lodgingCost,
-      activity: activityCost,
-    };
+    if (hasKnownCostValue(node.metadata.lodgingCostSek)) {
+      entries.push({ category: 'lodging', total: lodgingCost });
+    }
+    if (hasKnownCostValue(node.metadata.activityCostSek)) {
+      entries.push({ category: 'activity', total: activityCost });
+    }
+  } else if (hasKnownRawNodeCost(node)) {
+    entries.push({
+      category: budgetCategoryForNode(node),
+      total: parseCostValue(node.metadata.costSek ?? node.metadata.cost ?? node.metadata.price),
+    });
   }
 
-  const rawCost = parseCostValue(node.metadata.costSek ?? node.metadata.cost ?? node.metadata.price);
-  if (!hasKnownRawNodeCost(node)) {
-    return empty;
+  if (hasKnownParkingCost(node)) {
+    entries.push({ category: 'parking', total: parseCostValue(parkingCostValue(node)) });
   }
 
-  return {
-    ...empty,
-    [budgetCategoryForNode(node)]: rawCost,
-  };
+  return entries;
 }
 
 export function budgetCategoryForNode(node: ItineraryNode): BudgetCategoryKey {

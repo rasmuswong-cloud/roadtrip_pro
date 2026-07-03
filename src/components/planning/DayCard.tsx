@@ -8,6 +8,7 @@ import {
   compactNote,
   coordinateStatusLabel,
   formatItineraryTime,
+  formatParkingCost,
   formatRawNodeCost,
   nodeColor,
   shouldShowStaleCoordinateWarning,
@@ -479,6 +480,28 @@ export default function DayCard(props: DayCardProps) {
                     />
                   ) : (
                     <Text style={dayCardStyles.inlineCostText}>{formatRawNodeCost(node) || 'Fyll i kostnad'}</Text>
+                  )}
+                  {canEdit ? (
+                    <InlineEditableField
+                      node={node}
+                      field="parkingCost"
+                      activeInlineEdit={activeInlineEdit}
+                      label="Parkering"
+                      placeholder="Parkeringspris"
+                      isDark={isDark}
+                      loading={isLoading}
+                      disabled={isDemoMode || isLoading}
+                      styles={styles}
+                      onStart={onStartInlineEdit}
+                      onCancel={onClearInlineEdit}
+                      onDraftChange={onInlineDraftChange}
+                      onSave={onSaveInlineField}
+                      inputStyle={styles.quickCellSmall}
+                      inactiveStyle={dayCardStyles.inlineCostField}
+                      inactiveValueStyle={dayCardStyles.inlineCostText}
+                    />
+                  ) : (
+                    <Text style={dayCardStyles.inlineCostText}>{formatParkingCost(node) || 'Lägg till parkeringspris'}</Text>
                   )}
                   {canEdit && dayPlan.nodes.length > 1 ? (
                     <View style={dayCardStyles.stopMoveControls}>

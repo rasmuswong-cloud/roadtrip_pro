@@ -1,5 +1,5 @@
 import type { ItineraryNode } from '@/models';
-import { formatKnownCostLabel, hasKnownNodeCost } from '@/services/planning/costs';
+import { formatKnownCostLabel, formatParkingCostLabel, hasKnownNodeCost } from '@/services/planning/costs';
 import { isPlaceholderStop } from '@/services/planning/placeholderStops';
 
 export function formatDistance(value: number): string {
@@ -46,6 +46,19 @@ export function formatRawNodeCost(node: ItineraryNode): string {
 
   if (typeof cost === 'string') {
     return cost.trim() ? formatKnownCostLabel(cost) : '';
+  }
+
+  return '';
+}
+
+export function formatParkingCost(node: ItineraryNode): string {
+  const cost = node.metadata.parkingCostSek ?? node.metadata.parkingCost;
+  if (typeof cost === 'number') {
+    return formatParkingCostLabel(String(cost));
+  }
+
+  if (typeof cost === 'string') {
+    return cost.trim() ? formatParkingCostLabel(cost) : '';
   }
 
   return '';
