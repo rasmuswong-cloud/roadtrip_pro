@@ -121,10 +121,31 @@ export function NavigationMap({
         {routeFeature ? (
           <Mapbox.ShapeSource id="active-route-source" shape={routeFeature}>
             <Mapbox.LineLayer
+              id="active-route-shadow"
+              style={{
+                lineColor: '#0a2540',
+                lineWidth: 13,
+                lineOpacity: 0.24,
+                lineCap: 'round',
+                lineJoin: 'round',
+              }}
+            />
+            <Mapbox.LineLayer
+              id="active-route-casing"
+              style={{
+                lineColor: '#ffffff',
+                lineWidth: 10,
+                lineOpacity: 0.96,
+                lineCap: 'round',
+                lineJoin: 'round',
+              }}
+            />
+            <Mapbox.LineLayer
               id="active-route-line"
               style={{
-                lineColor: '#0f766e',
-                lineWidth: 5,
+                lineColor: '#1d4ed8',
+                lineWidth: 6,
+                lineOpacity: 0.98,
                 lineCap: 'round',
                 lineJoin: 'round',
               }}

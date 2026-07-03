@@ -2421,8 +2421,8 @@ export default function App() {
         skippedStopCount: result.skippedStopCount,
       });
       const geometryMessage = result.route.geometry
-        ? 'Rutt beräknad med Google Routes'
-        : 'Rutt saknar vägdata – beräkna rutt igen';
+        ? 'Körväg visas på kartan'
+        : 'Google gav ingen vägdata - prova att uppdatera rutten';
       setRouteCalculationMessage(
         `${geometryMessage}: ${result.includedStopCount} stopp ingår${result.skippedStopCount > 0 ? `, ${result.skippedStopCount} hoppades över` : ''}.`,
       );
@@ -3475,6 +3475,9 @@ export default function App() {
                 missingCoordinateCount={missingCoordinateCount}
                 mapExpanded={mapExpanded}
                 pendingAddLocation={pendingMapAddLocation}
+                routeIsCalculated={Boolean(activeCalculatedRoute)}
+                routeSkippedStopCount={activeCalculatedRoute?.skippedStopCount ?? routeSkippedStopCount}
+                routableStopCount={activeCalculatedRoute?.includedStopCount ?? routableStopCount}
                 selectedDayPlan={selectedDayPlan}
                 styles={styles}
                 onCancelPendingAddLocation={cancelPendingMapAddLocation}

@@ -1,6 +1,7 @@
 import { Pressable, Text, View } from 'react-native';
 
 import { NavigationMap } from '@/components/map/NavigationMap';
+import { routeMapStatusText } from '@/components/map/mapData';
 import type { AppView } from '@/components/layout/workspaceTypes';
 import type { Coordinates, ItineraryNode, RouteSummary } from '@/models';
 import type { TripReadiness } from '@/services/planning/tripReadiness';
@@ -54,6 +55,12 @@ export function OverviewWorkspace({
   onMapPress,
 }: OverviewWorkspaceProps) {
   const routeForMap = activeRoute.provider === 'google_routes' && activeRoute.geometry ? activeRoute : null;
+  const routeStatusText = routeMapStatusText({
+    route: routeForMap,
+    routeIsCalculated: activeRoute.provider === 'google_routes',
+    skippedStopCount: missingCoordinateCount,
+    routableStopCount: displayedNodes.length - missingCoordinateCount,
+  });
   const primaryActions = [
     { label: 'Redigera dagar', target: 'days' as AppView },
     { label: 'Kontrollera rutt', target: 'route' as AppView },
@@ -154,18 +161,21 @@ export function OverviewWorkspace({
           </View>
         </View>
         {isMobile ? (
-          <View testID="center-mobile-map" style={styles.overviewMapShell}>
-            <NavigationMap
-              nodes={displayedNodes}
-              activeRoute={routeForMap}
-              followUser={false}
-              compact
-              pendingAddLocation={pendingAddLocation}
-              onCancelPendingAddLocation={onCancelPendingAddLocation}
-              onConfirmPendingAddLocation={onConfirmPendingAddLocation}
-              onMapPress={onMapPress}
-            />
-          </View>
+          <>
+            <View testID="center-mobile-map" style={styles.overviewMapShell}>
+              <NavigationMap
+                nodes={displayedNodes}
+                activeRoute={routeForMap}
+                followUser={false}
+                compact
+                pendingAddLocation={pendingAddLocation}
+                onCancelPendingAddLocation={onCancelPendingAddLocation}
+                onConfirmPendingAddLocation={onConfirmPendingAddLocation}
+                onMapPress={onMapPress}
+              />
+            </View>
+            <Text style={styles.routeStageMeta}>{routeStatusText}</Text>
+          </>
         ) : (
           <View testID="overview-center-summary" style={styles.overviewRouteSummaryGrid}>
             <DayInsight label="Stopp" value={`${displayedNodes.length}`} tone="neutral" styles={styles} />
@@ -174,6 +184,7 @@ export function OverviewWorkspace({
             <DayInsight label="Positioner" value={missingCoordinateCount > 0 ? `${missingCoordinateCount} kvar` : 'Klara'} tone={missingCoordinateCount > 0 ? 'warn' : 'good'} styles={styles} />
           </View>
         )}
+        {!isMobile ? <Text style={styles.routeStageMeta}>{routeStatusText}</Text> : null}
       </View>
     </View>
   );

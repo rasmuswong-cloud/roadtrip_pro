@@ -6,6 +6,7 @@ import {
   calculateRouteAwareMapViewport,
   extractRoutePathCoordinates,
   extractValidMapMarkers,
+  hasRoadRouteGeometry,
   mapInitialCenter,
   type MapMarkerData,
 } from './mapData';
@@ -80,7 +81,7 @@ export function NavigationMap({
   const mapElementRef = useRef<HTMLElement | null>(null);
   const mapRef = useRef<GoogleMapInstance | null>(null);
   const markerRefs = useRef<GoogleMarkerInstance[]>([]);
-  const routePolylineRef = useRef<GooglePolylineInstance | null>(null);
+  const routePolylineRefs = useRef<GooglePolylineInstance[]>([]);
   const routeLabelRefs = useRef<GoogleMarkerInstance[]>([]);
   const pendingMarkerRef = useRef<GoogleMarkerInstance | null>(null);
   const mapClickListenerRef = useRef<GoogleMapsListener | null>(null);
@@ -89,7 +90,9 @@ export function NavigationMap({
   );
   const markers = useMemo(() => extractValidMapMarkers(nodes), [nodes]);
   const routePath = useMemo(() => extractRoutePathCoordinates(activeRoute), [activeRoute]);
+  const hasRoutePath = useMemo(() => hasRoadRouteGeometry(activeRoute), [activeRoute]);
   const routeLabels = useMemo(() => buildRouteDrivingLabels(activeRoute, nodes), [activeRoute, nodes]);
+  const visibleRouteLabels = useMemo(() => routeLabels.slice(0, compact ? 3 : 5), [compact, routeLabels]);
   const viewport = useMemo(() => calculateRouteAwareMapViewport(markers, routePath), [markers, routePath]);
 
   useEffect(() => {
@@ -129,25 +132,20 @@ export function NavigationMap({
               }
             })
           : null;
-        routePolylineRef.current?.setMap(null);
-        routePolylineRef.current = routePath.length > 1
-          ? new maps.Polyline({
-              path: routePath.map(toLatLng),
-              map: mapRef.current,
-              strokeColor: '#0f766e',
-              strokeOpacity: 0.88,
-              strokeWeight: compact ? 4 : 5,
-            })
-          : null;
+        routePolylineRefs.current.forEach((polyline) => polyline.setMap(null));
+        routePolylineRefs.current = hasRoutePath
+          ? buildRoutePolylines(maps, mapRef.current, routePath, compact)
+          : [];
         markerRefs.current.forEach((marker) => marker.setMap(null));
         markerRefs.current = markers.map((marker) => new maps.Marker({
           position: toLatLng(marker.coordinates),
           map: mapRef.current,
           label: marker.label,
           title: marker.title,
+          zIndex: 30,
         }));
         routeLabelRefs.current.forEach((marker) => marker.setMap(null));
-        routeLabelRefs.current = routeLabels.map((label) => new maps.Marker({
+        routeLabelRefs.current = visibleRouteLabels.map((label) => new maps.Marker({
           position: toLatLng(label.coordinates),
           map: mapRef.current,
           title: label.label,
@@ -159,7 +157,7 @@ export function NavigationMap({
             className: 'roadtrip-route-label',
           },
           icon: transparentMarkerIcon,
-          zIndex: 20,
+          zIndex: 40,
         }));
         pendingMarkerRef.current?.setMap(null);
         pendingMarkerRef.current = pendingAddLocation
@@ -182,7 +180,7 @@ export function NavigationMap({
     return () => {
       cancelled = true;
     };
-  }, [compact, markers, onMapPress, pendingAddLocation, routeLabels, routePath, viewport]);
+  }, [compact, hasRoutePath, markers, onMapPress, pendingAddLocation, routePath, viewport, visibleRouteLabels]);
 
   useEffect(() => () => {
     markerRefs.current.forEach((marker) => marker.setMap(null));
@@ -193,8 +191,8 @@ export function NavigationMap({
     pendingMarkerRef.current = null;
     mapClickListenerRef.current?.remove();
     mapClickListenerRef.current = null;
-    routePolylineRef.current?.setMap(null);
-    routePolylineRef.current = null;
+    routePolylineRefs.current.forEach((polyline) => polyline.setMap(null));
+    routePolylineRefs.current = [];
   }, []);
 
   if (loadState === 'missing-key') {
@@ -320,6 +318,43 @@ function ensureMapLabelStyles() {
     }
   `;
   document.head.appendChild(style);
+}
+
+function buildRoutePolylines(
+  maps: GoogleMapsNamespace,
+  map: GoogleMapInstance | null,
+  routePath: Coordinates[],
+  compact: boolean,
+): GooglePolylineInstance[] {
+  const path = routePath.map(toLatLng);
+  const baseWeight = compact ? 6 : 7;
+
+  return [
+    new maps.Polyline({
+      path,
+      map,
+      strokeColor: '#0a2540',
+      strokeOpacity: 0.24,
+      strokeWeight: baseWeight + 8,
+      zIndex: 8,
+    }),
+    new maps.Polyline({
+      path,
+      map,
+      strokeColor: '#ffffff',
+      strokeOpacity: 0.96,
+      strokeWeight: baseWeight + 4,
+      zIndex: 9,
+    }),
+    new maps.Polyline({
+      path,
+      map,
+      strokeColor: '#1d4ed8',
+      strokeOpacity: 0.98,
+      strokeWeight: baseWeight,
+      zIndex: 10,
+    }),
+  ];
 }
 
 const transparentMarkerIcon = {

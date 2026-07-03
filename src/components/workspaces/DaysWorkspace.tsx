@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { NavigationMap } from '@/components/map/NavigationMap';
+import { routeMapStatusText } from '@/components/map/mapData';
 import DayCard from '@/components/planning/DayCard';
 import type { Coordinates, DayChecklistItem, DayPlan, ItineraryNode, RouteSummary } from '@/models';
 import type { GooglePlace } from '@/services/google/googlePlaces';
@@ -145,6 +146,12 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
   }, [suggestedNewDayKey]);
 
   const routeForMap = activeRoute.provider === 'google_routes' && activeRoute.geometry ? activeRoute : null;
+  const routeStatusText = routeMapStatusText({
+    route: routeForMap,
+    routeIsCalculated,
+    skippedStopCount: routeSkippedStopCount,
+    routableStopCount: displayedNodesLength - routeSkippedStopCount,
+  });
   const datedVisibleDayPlans = visibleDayPlans.filter((dayPlan) => dayPlan.key !== 'unscheduled');
   const unscheduledDayPlan = visibleDayPlans.find((dayPlan) => dayPlan.key === 'unscheduled') ?? null;
   const planningStatus = buildPlanningStatus({
@@ -417,6 +424,7 @@ export function DaysWorkspace(props: DaysWorkspaceProps) {
               onMapPress={onMapPress}
             />
           </View>
+          <Text style={styles.routeStageMeta}>{routeStatusText}</Text>
         </View>
       ) : null}
     </View>

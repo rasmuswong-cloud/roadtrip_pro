@@ -401,6 +401,12 @@ async function installQaBackend(page: Parameters<Parameters<typeof test>[1]>[0][
 
 async function installMockGoogleMaps(page: Parameters<Parameters<typeof test>[1]>[0]['page']) {
   await page.addInitScript(() => {
+    const mockState = {
+      polylines: [] as Array<Record<string, unknown>>,
+      fitBounds: [] as Array<Array<{ lat: number; lng: number }>>,
+    };
+    Object.defineProperty(window, '__roadtripMapMock', { configurable: true, value: mockState });
+
     class MockMap {
       private element: HTMLElement;
 
@@ -425,7 +431,9 @@ async function installMockGoogleMaps(page: Parameters<Parameters<typeof test>[1]
 
       setCenter() {}
       setZoom() {}
-      fitBounds() {}
+      fitBounds(bounds: MockLatLngBounds) {
+        mockState.fitBounds.push([...bounds.points]);
+      }
     }
 
     class MockMarker {
@@ -433,11 +441,24 @@ async function installMockGoogleMaps(page: Parameters<Parameters<typeof test>[1]
     }
 
     class MockPolyline {
-      setMap() {}
+      private options: Record<string, unknown>;
+
+      constructor(options: Record<string, unknown>) {
+        this.options = options;
+        mockState.polylines.push(options);
+      }
+
+      setMap(map: unknown) {
+        this.options.map = map;
+      }
     }
 
     class MockLatLngBounds {
-      extend() {}
+      points: Array<{ lat: number; lng: number }> = [];
+
+      extend(coordinates: { lat: number; lng: number }) {
+        this.points.push(coordinates);
+      }
     }
 
     Object.defineProperty(window, 'google', {
@@ -880,6 +901,7 @@ test('connected planner can add, edit, persist, move menu, and delete QA stops',
 
 test('Google places, placeholder, route, fuel, and nearby flows are explicit and usable', async ({ page }) => {
   await installQaBackend(page);
+  await installMockGoogleMaps(page);
   await page.goto('/');
   await expect(page.getByText('Alp-roadtrip')).toBeVisible();
   await waitForQaConnection(page);
@@ -925,12 +947,34 @@ test('Google places, placeholder, route, fuel, and nearby flows are explicit and
   await expect(page.getByText('Hitta smart mellanstopp').first()).toBeVisible();
 
   await page.getByTestId('sidebar-nav-route').click();
+  await expect(page.getByTestId('route-map-status')).toContainText('Beräkna rutt för att visa körvägen');
+  const routePolylinesBefore = await page.evaluate(() => (
+    (window as unknown as { __roadtripMapMock: { polylines: Array<Record<string, unknown>> } }).__roadtripMapMock.polylines.length
+  ));
+  expect(routePolylinesBefore).toBe(0);
   const routeCallsBefore = await page.evaluate(() => (window as unknown as { __roadtripQaBackend: { calls: { routes: number } } }).__roadtripQaBackend.calls.routes);
   expect(routeCallsBefore).toBe(0);
   await page.getByText('Beräkna rutt', { exact: true }).click();
-  await expect(page.getByText(/Rutt beräknad med Google Routes/)).toBeVisible();
+  await expect(page.getByText(/Körväg visas på kartan/).first()).toBeVisible();
   await expect(page.getByText('Delsträckor', { exact: true })).toBeVisible();
   await expect(page.getByText(/placeholder saknar exakt plats/)).toBeVisible();
+  const routeMapState = await page.evaluate(() => {
+    const mock = (window as unknown as {
+      __roadtripMapMock: {
+        polylines: Array<{ path?: unknown[]; strokeColor?: string; strokeWeight?: number }>;
+        fitBounds: Array<Array<{ lat: number; lng: number }>>;
+      };
+    }).__roadtripMapMock;
+    return {
+      polylineCount: mock.polylines.length,
+      primaryRoute: mock.polylines.find((polyline) => polyline.strokeColor === '#1d4ed8') ?? null,
+      fittedPointCount: mock.fitBounds.at(-1)?.length ?? 0,
+    };
+  });
+  expect(routeMapState.polylineCount).toBeGreaterThanOrEqual(3);
+  expect(routeMapState.primaryRoute?.path?.length).toBeGreaterThan(1);
+  expect(routeMapState.primaryRoute?.strokeWeight).toBeGreaterThanOrEqual(6);
+  expect(routeMapState.fittedPointCount).toBeGreaterThan(1);
   const routeCallsAfter = await page.evaluate(() => (window as unknown as { __roadtripQaBackend: { calls: { routes: number } } }).__roadtripQaBackend.calls.routes);
   expect(routeCallsAfter).toBe(1);
 

@@ -13,7 +13,6 @@ export type RouteLabelData = {
   id: string;
   label: string;
   coordinates: Coordinates;
-  approximate: boolean;
 };
 
 export type MapViewport =
@@ -22,6 +21,35 @@ export type MapViewport =
   | { state: 'bounds'; center: Coordinates; bounds: { north: number; south: number; east: number; west: number } };
 
 export const DEFAULT_MAP_CENTER: Coordinates = { latitude: 55.604981, longitude: 13.003822 };
+
+export function hasRoadRouteGeometry(route?: RouteSummary | null): boolean {
+  return extractRoutePathCoordinates(route).length > 1;
+}
+
+export function routeMapStatusText(input: {
+  route?: RouteSummary | null;
+  routeIsCalculated: boolean;
+  skippedStopCount?: number;
+  routableStopCount?: number;
+}): string {
+  const skippedText = input.skippedStopCount && input.skippedStopCount > 0
+    ? ` ${input.skippedStopCount} stopp saknar position och hoppades över.`
+    : '';
+
+  if (hasRoadRouteGeometry(input.route)) {
+    return `Körväg visas på kartan.${skippedText}`;
+  }
+
+  if (input.routeIsCalculated) {
+    return `Google gav ingen vägdata - prova att uppdatera rutten.${skippedText}`;
+  }
+
+  if (input.routableStopCount !== undefined && input.routableStopCount < 2) {
+    return 'Minst två stopp behöver kartposition för att visa körvägen.';
+  }
+
+  return `Beräkna rutt för att visa körvägen på kartan.${skippedText}`;
+}
 
 export function extractValidMapMarkers(nodes: ItineraryNode[]): MapMarkerData[] {
   return nodes
@@ -89,13 +117,16 @@ export function buildRouteDrivingLabels(route: RouteSummary | null | undefined, 
     return [];
   }
 
+  const routePath = extractRoutePathCoordinates(route);
+  if (routePath.length <= 1) {
+    return [];
+  }
+
   const markers = extractValidMapMarkers(nodes);
   if (markers.length !== legs.length + 1) {
     return [];
   }
 
-  const routePath = extractRoutePathCoordinates(route);
-  const useRouteGeometry = routePath.length > 1;
   let consumedDistanceMeters = 0;
 
   return legs.reduce<RouteLabelData[]>((labels, leg, index) => {
@@ -105,9 +136,7 @@ export function buildRouteDrivingLabels(route: RouteSummary | null | undefined, 
       return labels;
     }
 
-    const midpoint = useRouteGeometry
-      ? coordinateAtRouteDistance(routePath, consumedDistanceMeters + (leg.distanceMeters / 2))
-      : midpointBetween(from.coordinates, to.coordinates);
+    const midpoint = coordinateAtRouteDistance(routePath, consumedDistanceMeters + (leg.distanceMeters / 2));
     consumedDistanceMeters += leg.distanceMeters;
 
     if (!midpoint) {
@@ -116,9 +145,8 @@ export function buildRouteDrivingLabels(route: RouteSummary | null | undefined, 
 
     labels.push({
       id: `${from.id}:${to.id}`,
-      label: `${useRouteGeometry ? 'Körning' : 'Ungefärlig körning'} · ${formatDuration(leg.durationSeconds)} · ${formatDistance(leg.distanceMeters)}`,
+      label: `Körning · ${formatDuration(leg.durationSeconds)} · ${formatDistance(leg.distanceMeters)}`,
       coordinates: midpoint,
-      approximate: !useRouteGeometry,
     });
 
     return labels;
@@ -167,13 +195,6 @@ function coordinateAtRouteDistance(path: Coordinates[], targetDistanceMeters: nu
   }
 
   return path[path.length - 1] ?? null;
-}
-
-function midpointBetween(start: Coordinates, end: Coordinates): Coordinates {
-  return {
-    latitude: (start.latitude + end.latitude) / 2,
-    longitude: (start.longitude + end.longitude) / 2,
-  };
 }
 
 function distanceBetween(start: Coordinates, end: Coordinates): number {

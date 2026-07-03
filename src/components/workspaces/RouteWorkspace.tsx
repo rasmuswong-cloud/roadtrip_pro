@@ -1,6 +1,7 @@
 import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { NavigationMap } from '@/components/map/NavigationMap';
+import { routeMapStatusText } from '@/components/map/mapData';
 import type { Coordinates, ItineraryNode, RouteSummary } from '@/models';
 import type { FuelEstimate } from '@/services/routing/fuelEstimate';
 import { Metric, SectionTitle, type WorkspaceStyles } from './WorkspaceBits';
@@ -70,7 +71,13 @@ export function RouteWorkspace({
 }: RouteWorkspaceProps) {
   const routeForMap = activeRoute.provider === 'google_routes' && activeRoute.geometry ? activeRoute : null;
   const routeSourceLabel = routeIsCalculated ? 'Google Routes' : 'Offline uppskattning';
-  const mapRouteLabel = routeForMap ? 'Rutt beräknad med Google' : routeIsCalculated ? 'Rutt saknar vägdata – beräkna rutt igen' : 'Ingen beräknad vägrutt ännu';
+  const routeStatusText = routeMapStatusText({
+    route: routeForMap,
+    routeIsCalculated,
+    skippedStopCount: routeSkippedStopCount,
+    routableStopCount: routeIncludedStopCount,
+  });
+  const mapRouteLabel = routeForMap ? 'Körväg visas på kartan' : routeIsCalculated ? 'Google gav ingen vägdata' : 'Beräkna rutt för körväg';
   const routeActionLabel = routeIsCalculated ? 'Uppdatera rutt' : 'Beräkna rutt';
   const tooFewStopsWithPosition = routeIncludedStopCount < 2;
   const routeLegs = routeIsCalculated ? (activeRoute.legs ?? []) : [];
@@ -116,6 +123,7 @@ export function RouteWorkspace({
           </Text>
           {routeSkippedStopCount > placeholderSkippedCount ? <Text style={styles.routeStageMeta}>{routeSkippedStopCount - placeholderSkippedCount} stopp saknar position och hoppas över.</Text> : null}
           {placeholderSkippedCount > 0 ? <Text style={styles.routeStageMeta}>{placeholderSkippedCount} placeholder saknar exakt plats och hoppas över i ruttberäkningen.</Text> : null}
+          <Text testID="route-map-status" style={styles.routeStageMeta}>{routeStatusText}</Text>
           {routeCalculationMessage ? <Text style={styles.routeStageMeta}>{routeCalculationMessage}</Text> : null}
         </View>
         {isMobile ? (
@@ -132,6 +140,7 @@ export function RouteWorkspace({
             <View style={styles.mapOverlayPanelMobile}>
               <Text style={styles.mapOverlayKicker}>Aktuell plan</Text>
               <Text style={styles.mapOverlayTitle}>{tripName}</Text>
+              <Text style={styles.mapOverlayMeta}>{routeStatusText}</Text>
               <Text style={styles.mapOverlayMeta}>{formatDistance(activeRoute.distanceMeters)} / {formatDuration(activeRoute.durationSeconds)}</Text>
             </View>
             <View style={styles.mapLegendMobile}>

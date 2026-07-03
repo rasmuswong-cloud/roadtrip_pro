@@ -8,7 +8,9 @@ import {
   calculateRouteAwareMapViewport,
   extractRoutePathCoordinates,
   extractValidMapMarkers,
+  hasRoadRouteGeometry,
   mapInitialCenter,
+  routeMapStatusText,
 } from '../src/components/map/mapData';
 
 function node(overrides: Partial<ItineraryNode> = {}): ItineraryNode {
@@ -140,6 +142,7 @@ test('calculateRouteAwareMapViewport fits route geometry before marker-only boun
 
 test('extractRoutePathCoordinates converts route geometry to map coordinates only when geometry exists', () => {
   assert.deepEqual(extractRoutePathCoordinates(route()), []);
+  assert.equal(hasRoadRouteGeometry(route()), false);
 
   assert.deepEqual(extractRoutePathCoordinates(route({
     geometry: {
@@ -153,6 +156,15 @@ test('extractRoutePathCoordinates converts route geometry to map coordinates onl
     { latitude: 55.605, longitude: 13.0038 },
     { latitude: 56.0, longitude: 14.0 },
   ]);
+  assert.equal(hasRoadRouteGeometry(route({
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [13.0038, 55.605],
+        [14.0, 56.0],
+      ],
+    },
+  })), true);
 });
 
 test('buildRouteDrivingLabels positions known route labels on route geometry', () => {
@@ -170,23 +182,45 @@ test('buildRouteDrivingLabels positions known route labels on route geometry', (
   ]);
 
   assert.equal(labels.length, 1);
-  assert.equal(labels[0]?.approximate, false);
   assert.match(labels[0]?.label ?? '', /^Körning · 20 min · 3\.0 km$/);
   assert.ok((labels[0]?.coordinates.latitude ?? 0) > 55);
   assert.ok((labels[0]?.coordinates.latitude ?? 0) < 55.03);
   assert.equal(labels[0]?.coordinates.longitude, 13);
 });
 
-test('buildRouteDrivingLabels uses clearly approximate labels when geometry is missing', () => {
+test('buildRouteDrivingLabels skips labels when geometry is missing', () => {
   const labels = buildRouteDrivingLabels(route(), [
     node({ id: 'a', location: { latitude: 55, longitude: 13 } }),
     node({ id: 'b', location: { latitude: 57, longitude: 15 } }),
   ]);
 
-  assert.equal(labels.length, 1);
-  assert.equal(labels[0]?.approximate, true);
-  assert.equal(labels[0]?.label, 'Ungefärlig körning · 20 min · 3.0 km');
-  assert.deepEqual(labels[0]?.coordinates, { latitude: 56, longitude: 14 });
+  assert.deepEqual(labels, []);
+});
+
+test('route map status explains route geometry and marker-only states', () => {
+  const routeWithGeometry = route({
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [13, 55],
+        [13.1, 55.1],
+      ],
+    },
+  });
+
+  assert.equal(routeMapStatusText({ route: routeWithGeometry, routeIsCalculated: true }), 'Körväg visas på kartan.');
+  assert.equal(
+    routeMapStatusText({ route: route(), routeIsCalculated: true, skippedStopCount: 1 }),
+    'Google gav ingen vägdata - prova att uppdatera rutten. 1 stopp saknar position och hoppades över.',
+  );
+  assert.equal(
+    routeMapStatusText({ route: null, routeIsCalculated: false, routableStopCount: 1 }),
+    'Minst två stopp behöver kartposition för att visa körvägen.',
+  );
+  assert.equal(
+    routeMapStatusText({ route: null, routeIsCalculated: false, routableStopCount: 2 }),
+    'Beräkna rutt för att visa körvägen på kartan.',
+  );
 });
 
 test('buildRouteDrivingLabels skips labels when route legs do not safely match visible stops', () => {

@@ -1,6 +1,7 @@
 import { Pressable, Text, View } from 'react-native';
 
 import { NavigationMap } from '@/components/map/NavigationMap';
+import { routeMapStatusText } from '@/components/map/mapData';
 import type { Coordinates, DayPlan, ItineraryNode, RouteSummary } from '@/models';
 import type { AppView } from './workspaceTypes';
 
@@ -13,6 +14,9 @@ type MapRailProps = {
   missingCoordinateCount: number;
   mapExpanded: boolean;
   pendingAddLocation: Coordinates | null;
+  routeIsCalculated: boolean;
+  routeSkippedStopCount: number;
+  routableStopCount: number;
   selectedDayPlan: DayPlan | null;
   styles: any;
   onCancelPendingAddLocation: () => void;
@@ -31,6 +35,9 @@ export function MapRail({
   missingCoordinateCount,
   mapExpanded,
   pendingAddLocation,
+  routeIsCalculated,
+  routeSkippedStopCount,
+  routableStopCount,
   selectedDayPlan,
   styles,
   onCancelPendingAddLocation,
@@ -39,9 +46,15 @@ export function MapRail({
   onMapPress,
   onToggleMapExpanded,
 }: MapRailProps) {
-  const mapNodes = activeView === 'days' && selectedDayPlan ? selectedDayPlan.nodes : displayedNodes;
-  const mapTitle = activeView === 'days' && selectedDayPlan ? selectedDayPlan.shortTitle : 'Hela resan';
+  const mapNodes = activeRoute ? displayedNodes : activeView === 'days' && selectedDayPlan ? selectedDayPlan.nodes : displayedNodes;
+  const mapTitle = activeRoute ? 'Hela körvägen' : activeView === 'days' && selectedDayPlan ? selectedDayPlan.shortTitle : 'Hela resan';
   const hasGoogleRouteGeometry = Boolean(activeRoute?.provider === 'google_routes' && activeRoute.geometry);
+  const statusText = routeMapStatusText({
+    route: activeRoute,
+    routeIsCalculated,
+    skippedStopCount: routeSkippedStopCount,
+    routableStopCount,
+  });
 
   return (
     <View
@@ -86,6 +99,7 @@ export function MapRail({
         <Text style={styles.contextPanelText}>
           {hasGoogleRouteGeometry ? `${formatDuration(activeRoute!.durationSeconds)} / ${displayedNodes.length} stopp` : 'Beräkna rutt för att visa Google-vägdata.'}
         </Text>
+        <Text testID="map-rail-route-status" style={styles.contextPanelText}>{statusText}</Text>
         {missingCoordinateCount > 0 ? (
           <>
             <Text style={styles.warningText}>Positioner behöver fixas i Dagar.</Text>
