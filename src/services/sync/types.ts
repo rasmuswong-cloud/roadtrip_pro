@@ -1,4 +1,4 @@
-export type SyncTable = 'trips' | 'pois' | 'itinerary_nodes' | 'expenses' | 'budgets';
+export type SyncTable = 'trips' | 'pois' | 'itinerary_nodes' | 'trip_explore_items' | 'expenses' | 'budgets';
 
 export type PendingMutation = {
   id: string;

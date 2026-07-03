@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 const persistedAppStateKey = 'roadtrip:persisted-app-state:v1';
+const activeCloudTripIdKey = 'roadtrip:active-cloud-trip-id:v1';
 
 type MockStopInput = {
   title: string;
@@ -209,6 +210,11 @@ async function installQaBackend(page: Parameters<Parameters<typeof test>[1]>[0][
       }
 
       if (path.includes('/rest/v1/trips')) {
+        const requestedId = parsed.searchParams.get('id')?.replace('eq.', '');
+        if (method === 'GET' && requestedId) {
+          return json(requestedId === tripId ? state.trip : null, requestedId === tripId ? 200 : 404);
+        }
+
         return method === 'GET' ? json([state.trip]) : json({ ...state.trip, ...body, updated_at: now });
       }
 
@@ -771,9 +777,18 @@ test('sharing creates an invite link and invite URL loads the shared cloud trip'
 
   await page.goto('/?invite=QA123456');
   await expect(page.getByText('Gick med i delad resa: QA TEST Trip').first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('shared-trip-status')).toContainText('Delad resa aktiv');
+  await expect(page.getByTestId('shared-trip-status')).toContainText('Trip ID: trip-qa-...');
+  const activeCloudTripId = await page.evaluate((storageKey) => window.localStorage.getItem(storageKey), activeCloudTripIdKey);
+  expect(activeCloudTripId).toBe('trip-qa-e2e');
   await page.getByTestId('day-shortcut-2026-07-14').click();
   await expect(page.getByTestId('day-stop-card').filter({ hasText: 'QA TEST Shared stop' })).toBeVisible();
   await expect(page.getByTestId('local-cloud-import-card')).toHaveCount(0);
+
+  await page.reload();
+  await waitForQaConnection(page);
+  await page.getByTestId('day-shortcut-2026-07-14').click();
+  await expect(page.getByTestId('day-stop-card').filter({ hasText: 'QA TEST Shared stop' })).toBeVisible();
 });
 
 test('connected planner can add, edit, persist, move menu, and delete QA stops', async ({ page }) => {

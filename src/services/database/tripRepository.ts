@@ -24,6 +24,21 @@ export async function listTrips(): Promise<Trip[]> {
   return ((data ?? []) as TripRow[]).map(tripFromRow);
 }
 
+export async function getTripById(tripId: string): Promise<Trip> {
+  const { data, error } = await supabase
+    .from('trips')
+    .select('*')
+    .eq('id', tripId)
+    .is('deleted_at', null)
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return tripFromRow(data as TripRow);
+}
+
 export async function upsertTrip(trip: Trip): Promise<Trip> {
   const { data, error } = await supabase.from('trips').upsert(tripToRow(trip)).select('*').single();
 
@@ -179,11 +194,17 @@ export async function moveItineraryNode(nodeId: string, direction: -1 | 1): Prom
   return ((data ?? []) as ItineraryNodeRow[]).map(itineraryNodeFromRow);
 }
 
-export async function deleteItineraryNode(nodeId: string): Promise<void> {
-  const { error } = await supabase
+export async function deleteItineraryNode(nodeId: string, tripId?: string): Promise<void> {
+  let query = supabase
     .from('itinerary_nodes')
     .update({ deleted_at: new Date().toISOString() })
     .eq('id', nodeId);
+
+  if (tripId) {
+    query = query.eq('trip_id', tripId);
+  }
+
+  const { error } = await query;
 
   if (error) {
     throw error;

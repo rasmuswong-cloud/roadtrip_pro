@@ -9,12 +9,16 @@ export type RealtimeChangeHandler = (event: {
   oldRecord: Record<string, unknown> | null;
 }) => void;
 
-const TABLES: SyncTable[] = ['trips', 'pois', 'itinerary_nodes', 'expenses', 'budgets'];
+const DEFAULT_TABLES: SyncTable[] = ['itinerary_nodes'];
 
-export function subscribeToTripChanges(tripId: string, onChange: RealtimeChangeHandler): RealtimeChannel {
+export function subscribeToTripChanges(
+  tripId: string,
+  onChange: RealtimeChangeHandler,
+  tables: SyncTable[] = DEFAULT_TABLES,
+): RealtimeChannel {
   const channel = supabase.channel(`trip:${tripId}`);
 
-  for (const table of TABLES) {
+  for (const table of tables) {
     channel.on(
       'postgres_changes',
       {

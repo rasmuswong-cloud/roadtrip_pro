@@ -13,6 +13,7 @@ type ToolsWorkspaceProps = {
   onlineSaveLabel: string;
   styles: WorkspaceStyles;
   onImportCurrentTrip: () => void;
+  onRefreshFromCloud: () => void;
   onSyncCurrentTripToCloud: () => void;
 };
 
@@ -27,6 +28,7 @@ export function ToolsWorkspace({
   onlineSaveLabel,
   styles,
   onImportCurrentTrip,
+  onRefreshFromCloud,
   onSyncCurrentTripToCloud,
 }: ToolsWorkspaceProps) {
   return (
@@ -59,6 +61,11 @@ export function ToolsWorkspace({
         {!activeTripId && hasLocalTripData ? (
           <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={onSyncCurrentTripToCloud} disabled={isLoading}>
             <Text style={styles.commandButtonText}>Synka till molnet</Text>
+          </Pressable>
+        ) : null}
+        {activeTripId ? (
+          <Pressable style={[styles.secondaryButton, isLoading && styles.disabledButton]} onPress={onRefreshFromCloud} disabled={isLoading}>
+            <Text style={styles.secondaryButtonText}>Uppdatera frÃ¥n molnet</Text>
           </Pressable>
         ) : null}
         <Pressable style={[styles.commandButton, isLoading && styles.disabledButton]} onPress={onImportCurrentTrip} disabled={isLoading}>

@@ -44,6 +44,7 @@ import {
   createTripShareCode,
   deleteItineraryNode,
   ensureFirstTrip,
+  getTripById,
   joinTripByShareCode,
   listItineraryNodes,
   listTripMembers,
@@ -60,7 +61,7 @@ import {
 import { calculateGoogleRoute, getRoutableStops, routeStopSignature } from '@/services/google/googleRoutes';
 import { analyzeDayWarnings, moveNodeToDay, summarizeDay, validatePlannerDraft, type DaySummary } from '@/services/planning/dayAnalysis';
 import { buildTravelBudgetCenter } from '@/services/planning/budgetAnalysis';
-import { buildExplorePlaceDuplicateKey, buildItineraryNodeDuplicateKey, prepareLocalNodeForCloud } from '@/services/planning/cloudSync';
+import { buildExplorePlaceDuplicateKey, buildItineraryNodeDuplicateKey, prepareItineraryNodeForActiveTripSave, prepareLocalNodeForCloud } from '@/services/planning/cloudSync';
 import {
   formatKnownCostLabel,
   hasKnownDetailedNodeCost,
@@ -121,6 +122,8 @@ import { buildTripReadiness } from '@/services/planning/tripReadiness';
 import { buildTripQualityCounts } from '@/services/planning/tripQuality';
 import { estimateRouteSummary } from '@/services/routing/routeEstimate';
 import { getSupabaseConfigurationError } from '@/services/supabaseClient';
+import { subscribeToTripChanges } from '@/services/sync/realtime';
+import { clearPersistedActiveCloudTripId, persistActiveCloudTripId, readPersistedActiveCloudTripId, shortenTripId, tripRoleLabel } from '@/services/sharing/activeCloudTrip';
 import { buildShareInviteLink, normalizeShareCode, readShareCodeFromLocation } from '@/services/sharing/tripSharing';
 import { useTripStore } from '@/store/tripStore';
 import { formatDateLabel as formatSafeDateLabel, formatTimeLabel } from '@/utils/dateTimeLabels';
@@ -309,6 +312,24 @@ function getLocalStorage(): Storage | null {
   }
 }
 
+function removeInviteCodeFromUrl(): void {
+  try {
+    if (!globalThis.location?.href || !globalThis.history?.replaceState) {
+      return;
+    }
+
+    const url = new URL(globalThis.location.href);
+    if (!url.searchParams.has('invite')) {
+      return;
+    }
+
+    url.searchParams.delete('invite');
+    globalThis.history.replaceState(globalThis.history.state, '', url.toString());
+  } catch {
+    // URL cleanup is only cosmetic; the persisted cloud trip id drives reloads.
+  }
+}
+
 function isPersistedAppState(value: unknown): value is PersistedAppState {
   if (
     !isRecord(value)
@@ -462,6 +483,9 @@ export default function App() {
   const [lastOnlineSavedAt, setLastOnlineSavedAt] = useState<string | null>(null);
   const [undoSnapshot, setUndoSnapshot] = useState<UndoSnapshot | null>(null);
   const contentScrollRef = useRef<ScrollView | null>(null);
+  const realtimeRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isRefreshingFromCloudRef = useRef(false);
+  const lastLocalCloudSaveAtRef = useRef(0);
   const movingStopIdsRef = useRef<Set<string>>(new Set());
   const inlineSaveInFlightRef = useRef(false);
   const [activeInlineEdit, setActiveInlineEdit] = useState<ActiveInlineEdit>(null);
@@ -552,6 +576,13 @@ export default function App() {
   const costPerTraveler = travelerCount > 0 ? totalSpend / travelerCount : totalSpend;
   const onlineSaveLabel = formatOnlineSaveLabel(onlineSaveState, lastOnlineSavedAt, Boolean(activeTripId));
   const visibleStatusMessage = formatStatusMessage(statusMessage, onlineSaveLabel);
+  const activeTripMember = activeTripId && userId
+    ? tripMembers.find((member) => member.tripId === activeTripId && member.userId === userId) ?? null
+    : null;
+  const activeTripRole = activeTripMember?.role ?? (activeTripId && userId ? 'owner' : null);
+  const sharedTripStatusText = activeTripId
+    ? `Delad resa aktiv · Trip ID: ${shortenTripId(activeTripId)} · Roll: ${tripRoleLabel(activeTripRole)}`
+    : null;
 
   useEffect(() => {
     setHasLoadedPersistentState(true);
@@ -582,6 +613,24 @@ export default function App() {
   useEffect(() => {
     void connectSupabaseTrip(pendingInviteCode ? { inviteCode: pendingInviteCode } : {});
   }, []);
+
+  useEffect(() => {
+    if (!activeTripId || !userId) {
+      return undefined;
+    }
+
+    const channel = subscribeToTripChanges(activeTripId, () => {
+      scheduleCloudRefresh('realtime');
+    });
+
+    return () => {
+      if (realtimeRefreshTimerRef.current) {
+        clearTimeout(realtimeRefreshTimerRef.current);
+        realtimeRefreshTimerRef.current = null;
+      }
+      void channel.unsubscribe();
+    };
+  }, [activeTripId, userId]);
 
   useEffect(() => {
     const nextSelectedDayKey = resolveSelectedDayKey(visibleDayPlans.map((dayPlan) => dayPlan.key), selectedDayKey);
@@ -639,6 +688,7 @@ export default function App() {
 
     rememberUndo('Starta om resa');
     setActiveTrip('');
+    clearPersistedActiveCloudTripId();
     setUserId(null);
     setOnlineSaveState('idle');
     setLastOnlineSavedAt(null);
@@ -692,6 +742,7 @@ export default function App() {
   function markOnlineSaveSuccess() {
     setOnlineSaveState('saved');
     setLastOnlineSavedAt(new Date().toISOString());
+    lastLocalCloudSaveAtRef.current = Date.now();
   }
 
   function markOnlineSaveError() {
@@ -699,10 +750,14 @@ export default function App() {
   }
 
   async function saveItineraryNodeOnline(node: ItineraryNode): Promise<ItineraryNode> {
+    if (!activeTripId || !userId) {
+      throw new Error('Ingen aktiv molnresa att spara till.');
+    }
+
     markOnlineSaveStart();
 
     try {
-      const savedNode = await upsertItineraryNode(node);
+      const savedNode = await upsertItineraryNode(prepareItineraryNodeForActiveTripSave(node, activeTripId, userId));
       markOnlineSaveSuccess();
       return savedNode;
     } catch (error) {
@@ -712,10 +767,14 @@ export default function App() {
   }
 
   async function deleteItineraryNodeOnline(nodeId: string): Promise<void> {
+    if (!activeTripId) {
+      throw new Error('Ingen aktiv molnresa att ta bort frÃ¥n.');
+    }
+
     markOnlineSaveStart();
 
     try {
-      await deleteItineraryNode(nodeId);
+      await deleteItineraryNode(nodeId, activeTripId);
       markOnlineSaveSuccess();
     } catch (error) {
       markOnlineSaveError();
@@ -778,7 +837,7 @@ export default function App() {
   }
 
   async function restoreUndoSnapshotOnline(previousNodes: ItineraryNode[]): Promise<void> {
-    if (!activeTripId) {
+    if (!activeTripId || !userId) {
       return;
     }
 
@@ -806,7 +865,10 @@ export default function App() {
     });
 
     try {
-      await Promise.all([...changedRestoredNodes, ...nodesToDelete].map(upsertItineraryNode));
+      await Promise.all(
+        [...changedRestoredNodes, ...nodesToDelete]
+          .map((node) => upsertItineraryNode(prepareItineraryNodeForActiveTripSave(node, activeTripId, userId, now))),
+      );
       markOnlineSaveSuccess();
     } catch (error) {
       markOnlineSaveError();
@@ -833,7 +895,18 @@ export default function App() {
       setUserId(user.id);
       await ensureUserProfile(user.id, user.email ?? 'Reseplanerare');
       const invitedTrip = options.inviteCode ? await joinTripByShareCode(options.inviteCode) : null;
-      const trip = invitedTrip ?? await ensureFirstTrip(user.id);
+      let trip = invitedTrip;
+      if (!trip) {
+        const persistedTripId = readPersistedActiveCloudTripId();
+        if (persistedTripId) {
+          try {
+            trip = await getTripById(persistedTripId);
+          } catch {
+            clearPersistedActiveCloudTripId();
+          }
+        }
+      }
+      trip = trip ?? await ensureFirstTrip(user.id);
       const cloudState = await loadCloudTrip(trip, user.id);
       const cleanedNodes = cloudState.nodes;
       const exploreItems = cloudState.exploreItems;
@@ -855,6 +928,7 @@ export default function App() {
         setShareCode('');
         setLocalTripImportOffer(null);
         markOnlineSaveSuccess();
+        removeInviteCodeFromUrl();
         setStatusMessage(`Gick med i delad resa: ${trip.name}`);
         return;
       }
@@ -913,6 +987,7 @@ export default function App() {
     setUserId(currentUserId);
     upsertTrip(trip);
     setActiveTrip(trip.id);
+    persistActiveCloudTripId(trip.id);
     setItineraryNodes(cleanedNodes);
     applyLoadedExploreItems(exploreItems);
     setTripMembers(members);
@@ -924,6 +999,45 @@ export default function App() {
       explorePlaces: cloudExplorePlaces,
       members,
     };
+  }
+
+  function scheduleCloudRefresh(source: 'realtime' | 'manual' = 'realtime') {
+    if (realtimeRefreshTimerRef.current) {
+      clearTimeout(realtimeRefreshTimerRef.current);
+    }
+
+    const delayMs = Date.now() - lastLocalCloudSaveAtRef.current < 1000 ? 1200 : 700;
+    realtimeRefreshTimerRef.current = setTimeout(() => {
+      realtimeRefreshTimerRef.current = null;
+      void refreshActiveCloudTrip(source);
+    }, source === 'manual' ? 0 : delayMs);
+  }
+
+  async function refreshActiveCloudTrip(source: 'realtime' | 'manual' = 'manual') {
+    if (!activeTripId || !userId || isRefreshingFromCloudRef.current) {
+      return;
+    }
+
+    isRefreshingFromCloudRef.current = true;
+    if (source === 'manual') {
+      setIsLoading(true);
+      setStatusMessage('Uppdaterar frÃ¥n molnet...');
+    }
+
+    try {
+      const trip = await getTripById(activeTripId);
+      await loadCloudTrip(trip, userId);
+      markOnlineSaveSuccess();
+      setStatusMessage(source === 'realtime' ? 'Ã„ndringar frÃ¥n annan anvÃ¤ndare hÃ¤mtades.' : 'Synkad frÃ¥n molnet.');
+    } catch (error) {
+      markOnlineSaveError();
+      setStatusMessage(`Kunde inte uppdatera frÃ¥n molnet. ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      isRefreshingFromCloudRef.current = false;
+      if (source === 'manual') {
+        setIsLoading(false);
+      }
+    }
   }
 
   async function syncCurrentTripToCloud() {
@@ -1051,6 +1165,7 @@ export default function App() {
     }
 
     setActiveTrip('');
+    clearPersistedActiveCloudTripId();
     setUserId(null);
     setOnlineSaveState('idle');
     setItineraryNodes(localTripImportOffer.nodes.map(cloneItineraryNode));
@@ -1087,6 +1202,7 @@ export default function App() {
       await signOut();
       setUserId(null);
       setActiveTrip('');
+      clearPersistedActiveCloudTripId();
       setGeneratedShareCode('');
       setGeneratedShareLink('');
       setTripMembers([]);
@@ -1166,6 +1282,7 @@ export default function App() {
       setPendingInviteCode('');
       setLocalTripImportOffer(null);
       markOnlineSaveSuccess();
+      removeInviteCodeFromUrl();
       setStatusMessage(`Gick med i delad resa: ${trip.name}`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : String(error));
@@ -1653,7 +1770,7 @@ export default function App() {
       return;
     }
 
-    if (!userId) {
+    if (!activeTripId || !userId) {
       setStatusMessage('Anslut innan du bekräftar en AI-plan.');
       return;
     }
@@ -1669,7 +1786,14 @@ export default function App() {
 
     try {
       markOnlineSaveStart();
-      const result = await applyConfirmedMutationPlan(latestAiPlan, userId, {
+      const activeTripPlan: ItineraryMutationPlan = {
+        ...latestAiPlan,
+        mutations: latestAiPlan.mutations.map((mutation) => ({
+          ...mutation,
+          tripId: activeTripId,
+        })),
+      };
+      const result = await applyConfirmedMutationPlan(activeTripPlan, userId, {
         confirmed: true,
         existingNodes: itineraryNodes,
       });
@@ -2911,6 +3035,11 @@ export default function App() {
                 {activeTripId ? 'Molnresa aktiv' : hasLocalTripData ? 'Lokal resa ej synkad' : 'Anslut för molnsparning'}
               </Text>
               <Text style={[styles.headerStatusMeta, isDark && styles.textMutedDark]} numberOfLines={1}>{visibleStatusMessage}</Text>
+              {sharedTripStatusText ? (
+                <Text testID="shared-trip-status" style={[styles.headerStatusMeta, isDark && styles.textMutedDark]} numberOfLines={1}>
+                  {sharedTripStatusText}
+                </Text>
+              ) : null}
             </View>
             <Pressable testID="edit-mode-toggle" style={[styles.modeButton, isEditMode && styles.modeButtonActive]} onPress={toggleEditMode}>
               <Text style={[styles.modeButtonText, isEditMode && styles.modeButtonTextActive]}>{isEditMode ? 'Redigerar' : 'Redigera'}</Text>
@@ -2925,7 +3054,7 @@ export default function App() {
             </Pressable>
             <Pressable
               style={[styles.syncButton, isLoading && styles.disabledButton]}
-              onPress={hasLocalTripData ? syncCurrentTripToCloud : () => void connectSupabaseTrip()}
+              onPress={activeTripId ? () => void refreshActiveCloudTrip('manual') : hasLocalTripData ? syncCurrentTripToCloud : () => void connectSupabaseTrip()}
               disabled={isLoading}
             >
               <Text style={styles.syncButtonText}>{isLoading ? 'Vänta' : activeTripId ? 'Uppdatera' : hasLocalTripData ? 'Synka' : 'Anslut'}</Text>
@@ -3029,6 +3158,11 @@ export default function App() {
                 </Pressable>
                 <View style={styles.memberList}>
                   <Text style={[styles.itemMetaStrong, isDark && styles.textDark]}>Medlemmar</Text>
+                  {sharedTripStatusText ? (
+                    <Text testID="shared-trip-debug" style={[styles.itemMeta, isDark && styles.textMutedDark]}>
+                      {sharedTripStatusText}
+                    </Text>
+                  ) : null}
                   {(tripMembers.length > 0 ? tripMembers : activeTripId && userId ? [{ tripId: activeTripId, userId, role: 'owner' as const, joinedAt: '' }] : []).map((member) => (
                     <View key={`${member.tripId}:${member.userId}`} style={styles.memberRow}>
                       <Text style={[styles.memberName, isDark && styles.textDark]} numberOfLines={1}>{member.userId === userId ? 'Du' : member.userId}</Text>
@@ -3153,6 +3287,7 @@ export default function App() {
                   styles={styles}
                   hasLocalTripData={hasLocalTripData}
                   onImportCurrentTrip={() => void importReseplanrarePlan()}
+                  onRefreshFromCloud={() => void refreshActiveCloudTrip('manual')}
                   onSyncCurrentTripToCloud={() => void syncCurrentTripToCloud()}
                 />
               ) : null}

@@ -1,6 +1,21 @@
 import type { ItineraryNode } from '@/models';
 import type { ExplorePlace } from './exploreBoard';
 
+export function prepareItineraryNodeForActiveTripSave(
+  node: ItineraryNode,
+  tripId: string,
+  userId: string,
+  now = new Date().toISOString(),
+): ItineraryNode {
+  return {
+    ...node,
+    tripId,
+    createdBy: node.createdBy || userId,
+    updatedBy: userId,
+    updatedAt: node.updatedAt || now,
+  };
+}
+
 export function prepareLocalNodeForCloud(node: ItineraryNode, tripId: string, userId: string, index: number, now = new Date().toISOString()): ItineraryNode {
   return {
     ...cloneItineraryNode(node),
